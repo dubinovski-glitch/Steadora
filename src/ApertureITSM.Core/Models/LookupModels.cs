@@ -8,11 +8,7 @@ public record ChangeType(byte ChangeTypeId, string Code, string DisplayName, byt
 public record Risk(byte RiskId, string Code, string DisplayName, byte SortOrder);
 public record Impact(byte ImpactId, string Code, string DisplayName, byte SortOrder);
 public record Urgency(byte UrgencyId, string Code, string DisplayName, byte SortOrder);
-public record Role(byte RoleId, string Code, string DisplayName)
-{
-    public string? Description { get; init; }
-    public int UserCount { get; init; }
-}
+public record Role(byte RoleId, string Code, string DisplayName, string? Description, int UserCount);
 public record Category(int CategoryId, string Code, string DisplayName, int SortOrder);
 public record ServiceHealth(byte HealthId, string Code, string DisplayName);
 public record ApprovalVote(byte VoteId, string Code, string DisplayName);
