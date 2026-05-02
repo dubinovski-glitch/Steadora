@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Feature Services — Aperture ITSM Docs</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="hdr">
+  <a href="index.html" class="logo">Aperture ITSM</a>
+  <span class="badge">v1.0 · Docs</span>
+  <span class="bc"><a href="index.html">Home</a><span class="sep">›</span>Feature Services</span>
+</header>
+<nav id="nav">
+  <div class="ns"><div class="ns-title">Overview</div>
+    <a href="index.html" class="nl">Architecture</a>
+  </div>
+  <div class="ns"><div class="ns-title">Core Layer</div>
+    <a href="core-models.html" class="nl">Domain Models</a>
+    <a href="core-interfaces.html" class="nl">Interfaces</a>
+  </div>
+  <div class="ns"><div class="ns-title">Infrastructure</div>
+    <a href="repositories.html" class="nl">Repositories</a>
+  </div>
+  <div class="ns"><div class="ns-title">Feature Services</div>
+    <a href="services.html" class="nl">Services</a>
+  </div>
+  <div class="ns"><div class="ns-title">API Layer</div>
+    <a href="api-reference.html" class="nl">REST Endpoints</a>
+  </div>
+  <div class="ns"><div class="ns-title">Frontend</div>
+    <a href="frontend.html" class="nl">React Application</a>
+  </div>
+  <div class="ns"><div class="ns-title">Database</div>
+    <a href="database.html" class="nl">Schema Reference</a>
+  </div>
+</nav>
+<main id="main">
+
+<h1>Feature Services</h1>
+<p class="subtitle">
+  The Feature layer sits between the API controllers and the Infrastructure repositories.
+  Each feature is a self-contained project that can be toggled on or off via
+  <code>appsettings.json</code> without breaking the rest of the solution.
+</p>
+
+<div class="note"><div class="note-title">Feature flag pattern</div>
+  <p>In <code>Program.cs</code>, each feature's service is only registered when its flag is <code>true</code>.
+  When disabled, a no-op stub is registered instead, so controllers never receive a null injection.</p>
+  <pre><code><span class="cs-kw">if</span> (config[<span class="cs-str">"Features:Incidents"</span>] == <span class="cs-str">"true"</span>)
+    builder.Services.<span class="cs-met">AddScoped</span>&lt;<span class="cs-type">IIncidentService</span>, <span class="cs-type">IncidentService</span>&gt;();
+<span class="cs-kw">else</span>
+    builder.Services.<span class="cs-met">AddScoped</span>&lt;<span class="cs-type">IIncidentService</span>, <span class="cs-type">NoOpIncidentService</span>&gt;();</code></pre>
+</div>
+
+<!-- Feature layout overview -->
+<h2>Project Layout</h2>
+<div class="tbl-wrap"><table>
+  <tr><th>Project</th><th>Interface</th><th>Implementation</th><th>Flag Key</th></tr>
+  <tr>
+    <td><code>Features.Incidents</code></td>
+    <td><a href="core-interfaces.html#i-incident-svc">IIncidentService</a></td>
+    <td><code>IncidentService</code></td>
+    <td><code>Features:Incidents</code></td>
+  </tr>
+  <tr>
+    <td><code>Features.Problems</code></td>
+    <td><a href="core-interfaces.html#i-problem-svc">IProblemService</a></td>
+    <td><code>ProblemService</code></td>
+    <td><code>Features:Problems</code></td>
+  </tr>
+  <tr>
+    <td><code>Features.Changes</code></td>
+    <td><a href="core-interfaces.html#i-change-svc">IChangeService</a></td>
+    <td><code>ChangeService</code></td>
+    <td><code>Features:Changes</code></td>
+  </tr>
+  <tr>
+    <td><code>Features.KnowledgeBase</code></td>
+    <td><a href="core-interfaces.html#i-kb-svc">IKnowledgeService</a></td>
+    <td><code>KnowledgeService</code></td>
+    <td><code>Features:KnowledgeBase</code></td>
+  </tr>
+  <tr>
+    <td><code>Features.Notifications</code></td>
+    <td><a href="core-interfaces.html#i-notification-svc">INotificationService</a></td>
+    <td><code>NotificationService</code></td>
+    <td><code>Features:Notifications</code></td>
+  </tr>
+  <tr>
+    <td><code>Features.Sla</code></td>
+    <td><a href="core-interfaces.html#i-sla-svc">ISlaService</a></td>
+    <td><code>SlaService</code> + <code>SlaBackgroundService</code></td>
+    <td><code>Features:Sla</code></td>
+  </tr>
+</table></div>
+
+<!-- IncidentService -->
+<section id="incident-svc" class="section-anchor">
+<h2>IncidentService <span class="since">· Features.Incidents/IncidentService.cs</span></h2>
+<p>The busiest feature service.  Provides the full lifecycle of an incident —
+   creation, status transitions, assignment, priority escalation, problem linking,
+   and bulk close.  Delegates all data access to
+   <a href="repositories.html#incident-repo">IncidentRepository</a>.</p>
+
+<div class="note green"><div class="note-title">Logging</div>
+  Logs to <code>logs/Incidents.log</code> via a dedicated log4net appender.
+  Meaningful events logged at INFO: incident created (with title + ID), bulk close (with count).
+  Errors logged at ERROR with full exception stack trace.
+</div>
+
+<h3>Dependency</h3>
+<p>Constructor-injected: <code>IIncidentRepository repo</code>, <code>ILog log</code></p>
+
+<h3>Notable behaviour</h3>
+<ul>
+  <li><strong>GetQueueAsync</strong> — passes the <code>IncidentFilter</code> directly to the repo; the service layer adds no extra filtering logic.</li>
+  <li><strong>BulkCloseAsync</strong> — iterates the ID list and calls <code>repo.SoftDeleteAsync</code> per item; logs <code>"Bulk-closed N incidents"</code> at INFO when done.</li>
+  <li><strong>CreateAsync</strong> — logs <code>"Created incident #{id}: {title}"</code> at INFO after the repo returns the new ID.</li>
+</ul>
+</section>
+
+<!-- ProblemService -->
+<section id="problem-svc" class="section-anchor">
+<h2>ProblemService <span class="since">· Features.Problems/ProblemService.cs</span></h2>
+<p>Thin orchestration layer over <a href="repositories.html#problem-repo">ProblemRepository</a>.
+   No additional business rules beyond logging and error re-throw.</p>
+<p>Logs to <code>logs/Problems.log</code>.</p>
+</section>
+
+<!-- ChangeService -->
+<section id="change-svc" class="section-anchor">
+<h2>ChangeService <span class="since">· Features.Changes/ChangeService.cs</span></h2>
+<p>Delegates to <a href="repositories.html#change-repo">ChangeRepository</a>.
+   The <strong>VoteAsync</strong> method logs <code>"User {extId} voted {voteCode} on change #{id}"</code>
+   at INFO — useful for change approval auditing in log files.
+   Logs to <code>logs/Changes.log</code>.</p>
+</section>
+
+<!-- KnowledgeService -->
+<section id="kb-svc" class="section-anchor">
+<h2>KnowledgeService <span class="since">· Features.KnowledgeBase/KnowledgeService.cs</span></h2>
+<p>Wraps <a href="repositories.html#kb-repo">KbRepository</a> with one notable behaviour:
+   <strong>GetArticleAsync</strong> fetches the article and then calls
+   <code>TrackViewAsync</code> in the same request.  This is fire-and-continue
+   (the view increment does not affect the returned article data).
+   Logs to <code>logs/KnowledgeBase.log</code>.</p>
+</section>
+
+<!-- NotificationService -->
+<section id="notification-svc" class="section-anchor">
+<h2>NotificationService <span class="since">· Features.Notifications/NotificationService.cs</span></h2>
+<p>Delegates to <a href="repositories.html#activity-repo">ActivityRepository</a>.
+   <strong>PostCommentAsync</strong> is the most important method: it calls the
+   <code>itil.usp_AddComment</code> stored procedure which in turn fans out
+   Notification rows to all watchers.  The service logs each new comment at INFO.
+   Logs to <code>logs/Notifications.log</code>.</p>
+<div class="note orange"><div class="note-title">SignalR integration point</div>
+  After posting a comment, the <strong>NotificationsController</strong> can push a real-time
+  signal via <a href="api-reference.html#notification-hub">NotificationHub</a>.  The current
+  implementation leaves this as a direct call site; a future refactor could move the
+  hub push into the service.
+</div>
+</section>
+
+<!-- SlaService -->
+<section id="sla-svc" class="section-anchor">
+<h2>SlaService <span class="since">· Features.Sla/SlaService.cs</span></h2>
+<p>Wraps <a href="repositories.html#sla-repo">SlaRepository</a> with error handling.
+   All four analytics methods delegate directly to the repo.
+   Logs to <code>logs/Sla.log</code>.</p>
+</section>
+
+<!-- SlaBackgroundService -->
+<section id="sla-bg" class="section-anchor">
+<h2>SlaBackgroundService <span class="since">· Features.Sla/SlaBackgroundService.cs</span></h2>
+<p>An ASP.NET Core <code>IHostedService</code> registered in <code>Program.cs</code>.
+   Runs continuously in the background and evaluates SLA breaches on a fixed interval.</p>
+
+<h3>Lifecycle</h3>
+<pre><code><span class="cs-com">// Simplified</span>
+<span class="cs-kw">protected override async</span> <span class="cs-type">Task</span> <span class="cs-met">ExecuteAsync</span>(<span class="cs-type">CancellationToken</span> stopping)
+{
+    <span class="cs-kw">while</span> (!stopping.IsCancellationRequested)
+    {
+        <span class="cs-kw">await</span> scope.ServiceProvider
+            .<span class="cs-met">GetRequiredService</span>&lt;<span class="cs-type">ISlaRepository</span>&gt;()
+            .<span class="cs-met">EvaluateBreachesAsync</span>();
+        <span class="cs-kw">await</span> <span class="cs-type">Task</span>.<span class="cs-met">Delay</span>(TimeSpan.<span class="cs-met">FromSeconds</span>(60), stopping);
+    }
+}</code></pre>
+
+<div class="note orange"><div class="note-title">Scoped service in a singleton host</div>
+  <code>IHostedService</code> is registered as Singleton, but <code>ISlaRepository</code> is Scoped.
+  The service creates a new DI scope per iteration via <code>IServiceScopeFactory</code>
+  to avoid capturing a stale DbConnection.
+</div>
+
+<h3>What the stored procedure does</h3>
+<p>The <code>reporting.usp_EvaluateSlaBreaches</code> procedure:</p>
+<ol>
+  <li>Creates <code>#breached</code> and <code>#warned</code> temp tables</li>
+  <li>Calculates elapsed minutes for all open, non-deleted incidents using business-hours logic</li>
+  <li>Updates <code>SlaBreachedAt</code> where elapsed &gt; target</li>
+  <li>Updates <code>SlaWarnedAt</code> where elapsed &gt; 75% of target</li>
+  <li>Recalculates <code>SlaPercent</code> for all open incidents</li>
+</ol>
+<p>Logs to <code>logs/Sla.log</code>.  Any errors are logged at ERROR and swallowed
+   (so the loop continues on the next tick even if one evaluation fails).</p>
+</section>
+
+</main>
+<script src="js/nav.js"></script>
+</body>
+</html>

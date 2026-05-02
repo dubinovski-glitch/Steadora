@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Interfaces — Aperture ITSM Docs</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="hdr">
+  <a href="index.html" class="logo">Aperture ITSM</a>
+  <span class="badge">v1.0 · Docs</span>
+  <span class="bc"><a href="index.html">Home</a><span class="sep">›</span>Interfaces</span>
+</header>
+<nav id="nav">
+  <div class="ns"><div class="ns-title">Overview</div>
+    <a href="index.html" class="nl">Architecture</a>
+  </div>
+  <div class="ns"><div class="ns-title">Core Layer</div>
+    <a href="core-models.html" class="nl">Domain Models</a>
+    <a href="core-interfaces.html" class="nl">Interfaces</a>
+  </div>
+  <div class="ns"><div class="ns-title">Infrastructure</div>
+    <a href="repositories.html" class="nl">Repositories</a>
+  </div>
+  <div class="ns"><div class="ns-title">Feature Services</div>
+    <a href="services.html" class="nl">Services</a>
+  </div>
+  <div class="ns"><div class="ns-title">API Layer</div>
+    <a href="api-reference.html" class="nl">REST Endpoints</a>
+  </div>
+  <div class="ns"><div class="ns-title">Frontend</div>
+    <a href="frontend.html" class="nl">React Application</a>
+  </div>
+  <div class="ns"><div class="ns-title">Database</div>
+    <a href="database.html" class="nl">Schema Reference</a>
+  </div>
+</nav>
+<main id="main">
+
+<h1>Interfaces</h1>
+<p class="subtitle">
+  All interfaces live in <code>ApertureITSM.Core/Interfaces/</code>.
+  They define the contracts between layers — the API and Feature layers depend
+  on these interfaces, never on concrete classes.  Implementations live in
+  Infrastructure (repositories) or Feature projects (services).
+</p>
+
+<div class="note"><div class="note-title">Design rule</div>
+  The Core project has <strong>zero dependencies</strong> on Infrastructure or Features.
+  Any code that imports from Core is safe to test in isolation via mock implementations of these interfaces.
+</div>
+
+<!-- ═══════════════ Repository Interfaces ═══════════════════════ -->
+<h2>Repository Interfaces</h2>
+<p>Implemented by the classes in <a href="repositories.html">ApertureITSM.Infrastructure</a>.
+   Each interface covers one domain area.</p>
+
+<!-- IIncidentRepository -->
+<section id="i-incident" class="section-anchor">
+<h3>IIncidentRepository <span class="since">· Interfaces/IIncidentRepository.cs</span></h3>
+<p>Implemented by <a href="repositories.html#incident-repo">IncidentRepository</a>.
+   Registered as <code>Scoped</code> in DI.</p>
+<ul class="mlist">
+  <li>
+    <span class="m-sig">GetPagedAsync(IncidentFilter, page, pageSize)</span>
+    <span class="m-arrow">→</span>
+    <span class="m-desc">Returns a paged, filtered list of incidents.  <code>IncidentFilter</code> supports search text, status, priority, assignee, SLA-at-risk flag, unassigned flag, and include-resolved flag.</span>
+  </li>
+  <li>
+    <span class="m-sig">GetByIdAsync(incidentId)</span>
+    <span class="m-arrow">→</span>
+    <span class="m-desc">Returns a single incident with all joined data, or null if not found.</span>
+  </li>
+  <li>
+    <span class="m-sig">CreateAsync(CreateIncidentRequest)</span>
+    <span class="m-arrow">→ int</span>
+    <span class="m-desc">Inserts a new incident row and returns the generated IncidentId.  <code>CreateIncidentRequest</code> carries title, description, priorityCode, serviceId, categoryId, ciId, reporterExtId.</span>
+  </li>
+  <li>
+    <span class="m-sig">UpdateStatusAsync(id, statusCode, actorUserId)</span>
+    <span class="m-arrow">→ void</span>
+    <span class="m-desc">Transitions the incident status; writes an ActivityEvent record.</span>
+  </li>
+  <li>
+    <span class="m-sig">UpdateAssigneeAsync(id, assigneeExtId, actorUserId)</span>
+    <span class="m-arrow">→ void</span>
+    <span class="m-desc">Assigns the incident to a user by external ID; writes an ActivityEvent.</span>
+  </li>
+  <li>
+    <span class="m-sig">UpdatePriorityAsync(id, priorityCode, actorUserId)</span>
+    <span class="m-arrow">→ void</span>
+    <span class="m-desc">Changes priority; writes an ActivityEvent.</span>
+  </li>
+  <li>
+    <span class="m-sig">UpdateFieldAsync(id, field, value, actorUserId)</span>
+    <span class="m-arrow">→ void</span>
+    <span class="m-desc">Generic field update (title, description, etc.); writes an ActivityEvent.</span>
+  </li>
+  <li>
+    <span class="m-sig">LinkToProblemAsync(incidentId, problemId)</span>
+    <span class="m-arrow">→ void</span>
+    <span class="m-desc">Sets the <code>ParentProblemId</code> FK on the incident.</span>
+  </li>
+  <li>
+    <span class="m-sig">SoftDeleteAsync(incidentId, actorUserId)</span>
+    <span class="m-arrow">→ void</span>
+    <span class="m-desc">Sets <code>DeletedAt</code> (soft delete / close); writes an ActivityEvent.</span>
+  </li>
+</ul>
+</section>
+
+<!-- IProblemRepository -->
+<section id="i-problem" class="section-anchor">
+<h3>IProblemRepository <span class="since">· Interfaces/IProblemRepository.cs</span></h3>
+<p>Implemented by <a href="repositories.html#problem-repo">ProblemRepository</a>.</p>
+<ul class="mlist">
+  <li><span class="m-sig">GetAllAsync(includeResolved)</span><span class="m-arrow">→</span><span class="m-desc">Returns all problems, optionally filtering out resolved/closed ones.</span></li>
+  <li><span class="m-sig">GetByIdAsync(problemId)</span><span class="m-arrow">→</span><span class="m-desc">Returns a single problem with affected services enriched.</span></li>
+  <li><span class="m-sig">CreateAsync(CreateProblemRequest)</span><span class="m-arrow">→ int</span><span class="m-desc">Inserts a new problem; returns the new ProblemId.</span></li>
+  <li><span class="m-sig">UpdateStateAsync(id, stateCode, actorUserId)</span><span class="m-arrow">→ void</span><span class="m-desc">State transition with ActivityEvent write.</span></li>
+  <li><span class="m-sig">UpdateFieldAsync(id, field, value, actorUserId)</span><span class="m-arrow">→ void</span><span class="m-desc">Generic field update (rootCause, workaround, title, etc.).</span></li>
+</ul>
+</section>
+
+<!-- IChangeRepository -->
+<section id="i-change" class="section-anchor">
+<h3>IChangeRepository <span class="since">· Interfaces/IChangeRepository.cs</span></h3>
+<p>Implemented by <a href="repositories.html#change-repo">ChangeRepository</a>.</p>
+<ul class="mlist">
+  <li><span class="m-sig">GetAllAsync(stateFilter)</span><span class="m-arrow">→</span><span class="m-desc">Returns changes, optionally filtered by state code.  Reviewers are enriched per-item.</span></li>
+  <li><span class="m-sig">GetByIdAsync(changeId)</span><span class="m-arrow">→</span><span class="m-desc">Returns a single change with full reviewers and affected service slugs.</span></li>
+  <li><span class="m-sig">CreateAsync(CreateChangeRequest)</span><span class="m-arrow">→ int</span><span class="m-desc">Inserts a new change.</span></li>
+  <li><span class="m-sig">UpdateStateAsync(id, stateCode, actorUserId)</span><span class="m-arrow">→ void</span><span class="m-desc">State transition.</span></li>
+  <li><span class="m-sig">VoteAsync(id, userExtId, voteCode, comment)</span><span class="m-arrow">→ void</span><span class="m-desc">Records an approval vote from a reviewer.</span></li>
+</ul>
+</section>
+
+<!-- IKbRepository -->
+<section id="i-kb" class="section-anchor">
+<h3>IKbRepository <span class="since">· Interfaces/IKbRepository.cs</span></h3>
+<p>Implemented by <a href="repositories.html#kb-repo">KbRepository</a>.</p>
+<ul class="mlist">
+  <li><span class="m-sig">SearchAsync(query, categoryId)</span><span class="m-arrow">→</span><span class="m-desc">Full-text search over article titles and snippets.  Filters by category if provided.</span></li>
+  <li><span class="m-sig">GetByIdAsync(articleId)</span><span class="m-arrow">→</span><span class="m-desc">Returns a single article with full body and enriched tags.</span></li>
+  <li><span class="m-sig">GetCategoriesAsync()</span><span class="m-arrow">→</span><span class="m-desc">Returns all KB categories with article counts.</span></li>
+  <li><span class="m-sig">IncrementViewsAsync(articleId)</span><span class="m-arrow">→ void</span><span class="m-desc">Atomically increments the view counter.</span></li>
+  <li><span class="m-sig">VoteHelpfulAsync(articleId, helpful)</span><span class="m-arrow">→ void</span><span class="m-desc">Increments HelpfulCount or NotHelpfulCount depending on the <code>helpful</code> boolean.</span></li>
+</ul>
+</section>
+
+<!-- IActivityRepository -->
+<section id="i-activity" class="section-anchor">
+<h3>IActivityRepository <span class="since">· Interfaces/IActivityRepository.cs</span></h3>
+<p>Implemented by <a href="repositories.html#activity-repo">ActivityRepository</a>.
+   Handles audit events, comments, watchers, and notifications.</p>
+<ul class="mlist">
+  <li><span class="m-sig">GetByParentAsync(parentType, parentId)</span><span class="m-arrow">→</span><span class="m-desc">Returns ActivityEvent records for a given ticket (parentType = incident|problem|change).</span></li>
+  <li><span class="m-sig">GetCommentsByParentAsync(parentType, parentId)</span><span class="m-arrow">→</span><span class="m-desc">Returns Comment records for a given ticket.</span></li>
+  <li><span class="m-sig">AddCommentAsync(parentType, parentId, authorExtId, body, isInternal)</span><span class="m-arrow">→ int</span><span class="m-desc">Calls <code>itil.usp_AddComment</code> stored procedure; returns new CommentId.</span></li>
+  <li><span class="m-sig">GetWatchersAsync(parentType, parentId)</span><span class="m-arrow">→</span><span class="m-desc">Returns the list of users watching a ticket.</span></li>
+  <li><span class="m-sig">AddWatcherAsync(parentType, parentId, userExtId)</span><span class="m-arrow">→ void</span><span class="m-desc">Subscribes a user to notifications on this ticket.</span></li>
+  <li><span class="m-sig">RemoveWatcherAsync(parentType, parentId, userExtId)</span><span class="m-arrow">→ void</span><span class="m-desc">Unsubscribes a user from this ticket.</span></li>
+  <li><span class="m-sig">GetUnreadNotificationsAsync(userExtId)</span><span class="m-arrow">→</span><span class="m-desc">Returns unread Notification records for the user.</span></li>
+  <li><span class="m-sig">MarkNotificationsReadAsync(userExtId)</span><span class="m-arrow">→ void</span><span class="m-desc">Marks all notifications read for the user.</span></li>
+</ul>
+</section>
+
+<!-- IUserRepository -->
+<section id="i-user" class="section-anchor">
+<h3>IUserRepository <span class="since">· Interfaces/IUserRepository.cs</span></h3>
+<p>Implemented by <a href="repositories.html#user-repo">UserRepository</a>.
+   Read-only lookups used by controllers and features (write operations go through AdminRepository).</p>
+<ul class="mlist">
+  <li><span class="m-sig">GetAllAsync()</span><span class="m-arrow">→</span><span class="m-desc">Returns all active users with role and group names.</span></li>
+  <li><span class="m-sig">GetByExternalIdAsync(externalId)</span><span class="m-arrow">→</span><span class="m-desc">Looks up a user by their identity-provider ID.</span></li>
+  <li><span class="m-sig">GetGroupsAsync()</span><span class="m-arrow">→</span><span class="m-desc">Returns all active groups.</span></li>
+  <li><span class="m-sig">GetServicesAsync()</span><span class="m-arrow">→</span><span class="m-desc">Returns active services with health status and open incident count.</span></li>
+  <li><span class="m-sig">GetConfigurationItemsAsync()</span><span class="m-arrow">→</span><span class="m-desc">Returns all active CIs for the new-incident form dropdown.</span></li>
+</ul>
+</section>
+
+<!-- ILookupRepository -->
+<section id="i-lookup" class="section-anchor">
+<h3>ILookupRepository <span class="since">· Interfaces/ILookupRepository.cs</span></h3>
+<p>Implemented by <a href="repositories.html#lookup-repo">LookupRepository</a>.
+   Each method returns a simple ordered list for use in dropdowns and forms.</p>
+<ul class="mlist">
+  <li><span class="m-sig">GetPrioritiesAsync()</span><span class="m-arrow">→ IEnumerable&lt;Priority&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetIncidentStatusesAsync()</span><span class="m-arrow">→ IEnumerable&lt;IncidentStatus&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetProblemStatesAsync()</span><span class="m-arrow">→ IEnumerable&lt;ProblemState&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetChangeStatesAsync()</span><span class="m-arrow">→ IEnumerable&lt;ChangeState&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetChangeTypesAsync()</span><span class="m-arrow">→ IEnumerable&lt;ChangeType&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetRisksAsync()</span><span class="m-arrow">→ IEnumerable&lt;Risk&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetImpactsAsync()</span><span class="m-arrow">→ IEnumerable&lt;Impact&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetUrgenciesAsync()</span><span class="m-arrow">→ IEnumerable&lt;Urgency&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetCategoriesAsync()</span><span class="m-arrow">→ IEnumerable&lt;Category&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetServiceHealthsAsync()</span><span class="m-arrow">→ IEnumerable&lt;ServiceHealth&gt;</span><span class="m-desc"></span></li>
+</ul>
+</section>
+
+<!-- ISlaRepository -->
+<section id="i-sla" class="section-anchor">
+<h3>ISlaRepository <span class="since">· Interfaces/ISlaRepository.cs</span></h3>
+<p>Implemented by <a href="repositories.html#sla-repo">SlaRepository</a>.
+   Provides both breach evaluation and analytics read methods.  The DTOs
+   <code>SlaStats</code>, <code>SlaByPriority</code>, <code>TeamLoad</code>, and <code>DailyVolume</code>
+   are defined in this interface file.</p>
+<ul class="mlist">
+  <li><span class="m-sig">EvaluateBreachesAsync()</span><span class="m-arrow">→ void</span><span class="m-desc">Calls <code>reporting.usp_EvaluateSlaBreaches</code> stored procedure.  Called by SlaBackgroundService on a timer.</span></li>
+  <li><span class="m-sig">GetStatsAsync(days)</span><span class="m-arrow">→ SlaStats</span><span class="m-desc">KPI summary: open incidents, SLA risk count, changes this week, avg resolution, met %, breach count.</span></li>
+  <li><span class="m-sig">GetByPriorityAsync(days)</span><span class="m-arrow">→ IEnumerable&lt;SlaByPriority&gt;</span><span class="m-desc">Per-priority SLA target, total incidents, met/breached counts, met %.</span></li>
+  <li><span class="m-sig">GetTeamLoadAsync()</span><span class="m-arrow">→ IEnumerable&lt;TeamLoad&gt;</span><span class="m-desc">Per-team open incident count, SLA met / breach counts.</span></li>
+  <li><span class="m-sig">GetDailyVolumeAsync(days)</span><span class="m-arrow">→ IEnumerable&lt;DailyVolume&gt;</span><span class="m-desc">Daily opened vs same-day-resolved counts for the trend chart.</span></li>
+</ul>
+</section>
+
+<!-- IAdminRepository -->
+<section id="i-admin" class="section-anchor">
+<h3>IAdminRepository <span class="since">· Interfaces/IAdminRepository.cs</span></h3>
+<p>Implemented by <a href="repositories.html#admin-repo">AdminRepository</a>.
+   All CRUD operations for the Administration section of the app.</p>
+
+<h4>Users</h4>
+<ul class="mlist">
+  <li><span class="m-sig">GetUsersAsync()</span><span class="m-arrow">→ IEnumerable&lt;User&gt;</span><span class="m-desc">All users with role and group names.</span></li>
+  <li><span class="m-sig">CreateUserAsync(externalId, email, displayName, title, roleId, primaryGroupId)</span><span class="m-arrow">→ int</span><span class="m-desc">Inserts user; auto-builds initials; returns new UserId.</span></li>
+  <li><span class="m-sig">UpdateUserAsync(userId, email, displayName, title, roleId, primaryGroupId, isActive)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
+</ul>
+<h4>Groups</h4>
+<ul class="mlist">
+  <li><span class="m-sig">GetGroupsAsync()</span><span class="m-arrow">→ IEnumerable&lt;Group&gt;</span><span class="m-desc">All groups with member count.</span></li>
+  <li><span class="m-sig">CreateGroupAsync(name, description)</span><span class="m-arrow">→ int</span><span class="m-desc">Auto-generates slug from name.</span></li>
+  <li><span class="m-sig">UpdateGroupAsync(groupId, name, description, isActive)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
+</ul>
+<h4>Categories &amp; SubCategories</h4>
+<ul class="mlist">
+  <li><span class="m-sig">GetCategoriesAsync()</span><span class="m-arrow">→ IEnumerable&lt;CategoryWithSubs&gt;</span><span class="m-desc">All categories with ticket counts and nested subcategories.</span></li>
+  <li><span class="m-sig">CreateCategoryAsync / UpdateCategoryAsync / DeleteCategoryAsync</span><span class="m-arrow">→ int/void</span><span class="m-desc">DeleteCategory throws <code>InvalidOperationException</code> if open tickets exist.</span></li>
+  <li><span class="m-sig">CreateSubCategoryAsync / UpdateSubCategoryAsync / DeleteSubCategoryAsync</span><span class="m-arrow">→ int/void</span><span class="m-desc"></span></li>
+</ul>
+<h4>Roles</h4>
+<ul class="mlist">
+  <li><span class="m-sig">GetRolesAsync()</span><span class="m-arrow">→ IEnumerable&lt;Role&gt;</span><span class="m-desc">All roles with user count.</span></li>
+  <li><span class="m-sig">UpdateRoleAsync(roleId, displayName, description)</span><span class="m-arrow">→ void</span><span class="m-desc">Only displayName and description are editable (code is immutable).</span></li>
+</ul>
+<h4>Services</h4>
+<ul class="mlist">
+  <li><span class="m-sig">GetAdminServicesAsync()</span><span class="m-arrow">→ IEnumerable&lt;Service&gt;</span><span class="m-desc">All services with owning group, SLA tier, and open incident count.</span></li>
+  <li><span class="m-sig">CreateServiceAsync(slug, name, categoryId, owningGroupId, healthCode, slaTierId)</span><span class="m-arrow">→ int</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">UpdateServiceAsync(serviceId, name, categoryId, owningGroupId, healthCode, slaTierId, isActive)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
+</ul>
+<h4>SLA Tiers</h4>
+<ul class="mlist">
+  <li><span class="m-sig">GetSlaTiersAsync()</span><span class="m-arrow">→ IEnumerable&lt;SlaTier&gt;</span><span class="m-desc">All tiers with nested target rows.</span></li>
+  <li><span class="m-sig">CreateSlaTierAsync / UpdateSlaTierAsync</span><span class="m-arrow">→ int/void</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">SaveSlaTierTargetsAsync(tierId, targets)</span><span class="m-arrow">→ void</span><span class="m-desc">MERGE upsert for each priority target row.</span></li>
+</ul>
+<h4>Priority Matrix, Business Calendars, Automations</h4>
+<ul class="mlist">
+  <li><span class="m-sig">GetPriorityMatrixAsync() / SavePriorityMatrixAsync(rows)</span><span class="m-arrow">→</span><span class="m-desc">Read/save the 3×3 Impact × Urgency → Priority matrix.</span></li>
+  <li><span class="m-sig">GetBusinessCalendarsAsync() / CreateBusinessCalendarAsync / SaveBusinessDaysAsync / AddHolidayAsync / DeleteHolidayAsync</span><span class="m-arrow">→</span><span class="m-desc">Full CRUD for business hours calendars.</span></li>
+  <li><span class="m-sig">GetAutomationsAsync() / CreateAutomationAsync / UpdateAutomationAsync / ToggleAutomationAsync</span><span class="m-arrow">→</span><span class="m-desc">Automation rule CRUD and enable/disable toggle.</span></li>
+</ul>
+</section>
+
+<div class="sep"></div>
+
+<!-- ═══════════════ Service Interfaces ══════════════════════════ -->
+<h2>Service Interfaces</h2>
+<p>Defined in each <code>Features.*</code> project alongside the implementation class.
+   Controllers depend on these, not on repositories directly.</p>
+
+<section id="i-incident-svc" class="section-anchor">
+<h3>IIncidentService <span class="since">· Features.Incidents/IncidentService.cs</span></h3>
+<p>Implemented by <a href="services.html#incident-svc">IncidentService</a>.
+   Thin orchestration layer; most methods delegate directly to IIncidentRepository.</p>
+<ul class="mlist">
+  <li><span class="m-sig">GetQueueAsync(filter, page, pageSize)</span><span class="m-arrow">→</span><span class="m-desc">Paginated incident list for the queue view.</span></li>
+  <li><span class="m-sig">GetDetailAsync(id)</span><span class="m-arrow">→ Incident?</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">CreateAsync(request)</span><span class="m-arrow">→ int</span><span class="m-desc">Logs creation at INFO level.</span></li>
+  <li><span class="m-sig">SetStatusAsync / AssignAsync / SetPriorityAsync / LinkToProblemAsync</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">CloseAsync(id, actorUserId)</span><span class="m-arrow">→ void</span><span class="m-desc">Soft-deletes the incident.</span></li>
+  <li><span class="m-sig">BulkCloseAsync(ids, actorUserId)</span><span class="m-arrow">→ void</span><span class="m-desc">Closes multiple incidents; logs count at INFO.</span></li>
+</ul>
+</section>
+
+<section id="i-problem-svc" class="section-anchor">
+<h3>IProblemService <span class="since">· Features.Problems/ProblemService.cs</span></h3>
+<ul class="mlist">
+  <li><span class="m-sig">GetAllAsync(includeResolved)</span><span class="m-arrow">→</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetDetailAsync(id)</span><span class="m-arrow">→ Problem?</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">CreateAsync(request)</span><span class="m-arrow">→ int</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">SetStateAsync(id, stateCode, actorUserId)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">UpdateFieldAsync(id, field, value, actorUserId)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
+</ul>
+</section>
+
+<section id="i-change-svc" class="section-anchor">
+<h3>IChangeService <span class="since">· Features.Changes/ChangeService.cs</span></h3>
+<ul class="mlist">
+  <li><span class="m-sig">GetAllAsync(stateFilter)</span><span class="m-arrow">→</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetDetailAsync(id)</span><span class="m-arrow">→ Change?</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">CreateAsync(request)</span><span class="m-arrow">→ int</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">SetStateAsync(id, stateCode, actorUserId)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">VoteAsync(id, userExtId, voteCode, comment)</span><span class="m-arrow">→ void</span><span class="m-desc">Logs vote at INFO level.</span></li>
+</ul>
+</section>
+
+<section id="i-kb-svc" class="section-anchor">
+<h3>IKnowledgeService <span class="since">· Features.KnowledgeBase/KnowledgeService.cs</span></h3>
+<ul class="mlist">
+  <li><span class="m-sig">SearchAsync(query, categoryId)</span><span class="m-arrow">→</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetArticleAsync(id)</span><span class="m-arrow">→ KbArticle?</span><span class="m-desc">Auto-increments view count via <code>TrackViewAsync</code>.</span></li>
+  <li><span class="m-sig">GetCategoriesAsync()</span><span class="m-arrow">→</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">TrackViewAsync(id)</span><span class="m-arrow">→ void</span><span class="m-desc">Fires atomically after returning article data.</span></li>
+  <li><span class="m-sig">VoteAsync(id, helpful)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
+</ul>
+</section>
+
+<section id="i-notification-svc" class="section-anchor">
+<h3>INotificationService <span class="since">· Features.Notifications/NotificationService.cs</span></h3>
+<ul class="mlist">
+  <li><span class="m-sig">GetUnreadAsync(userExtId)</span><span class="m-arrow">→</span><span class="m-desc">Unread notification list for the nav badge.</span></li>
+  <li><span class="m-sig">MarkAllReadAsync(userExtId)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetTimelineAsync(parentType, parentId)</span><span class="m-arrow">→</span><span class="m-desc">Activity event log for a ticket's timeline tab.</span></li>
+  <li><span class="m-sig">GetCommentsAsync(parentType, parentId)</span><span class="m-arrow">→</span><span class="m-desc">Comments list for a ticket.</span></li>
+  <li><span class="m-sig">PostCommentAsync(parentType, parentId, authorExtId, body, isInternal)</span><span class="m-arrow">→ int</span><span class="m-desc">Logs post at INFO; calls stored procedure via ActivityRepository.</span></li>
+  <li><span class="m-sig">GetWatchersAsync / WatchAsync / UnwatchAsync</span><span class="m-arrow">→</span><span class="m-desc">Watcher subscription management.</span></li>
+</ul>
+</section>
+
+<section id="i-sla-svc" class="section-anchor">
+<h3>ISlaService <span class="since">· Features.Sla/SlaService.cs</span></h3>
+<ul class="mlist">
+  <li><span class="m-sig">GetDashboardStatsAsync(days)</span><span class="m-arrow">→ SlaStats</span><span class="m-desc">KPI summary for the dashboard and SLA view.</span></li>
+  <li><span class="m-sig">GetByPriorityAsync(days)</span><span class="m-arrow">→ IEnumerable&lt;SlaByPriority&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetTeamLoadAsync()</span><span class="m-arrow">→ IEnumerable&lt;TeamLoad&gt;</span><span class="m-desc"></span></li>
+  <li><span class="m-sig">GetDailyVolumeAsync(days)</span><span class="m-arrow">→ IEnumerable&lt;DailyVolume&gt;</span><span class="m-desc"></span></li>
+</ul>
+</section>
+
+</main>
+<script src="js/nav.js"></script>
+</body>
+</html>

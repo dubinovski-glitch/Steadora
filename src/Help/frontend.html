@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Frontend — Aperture ITSM Docs</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="hdr">
+  <a href="index.html" class="logo">Aperture ITSM</a>
+  <span class="badge">v1.0 · Docs</span>
+  <span class="bc"><a href="index.html">Home</a><span class="sep">›</span>React Application</span>
+</header>
+<nav id="nav">
+  <div class="ns"><div class="ns-title">Overview</div>
+    <a href="index.html" class="nl">Architecture</a>
+  </div>
+  <div class="ns"><div class="ns-title">Core Layer</div>
+    <a href="core-models.html" class="nl">Domain Models</a>
+    <a href="core-interfaces.html" class="nl">Interfaces</a>
+  </div>
+  <div class="ns"><div class="ns-title">Infrastructure</div>
+    <a href="repositories.html" class="nl">Repositories</a>
+  </div>
+  <div class="ns"><div class="ns-title">Feature Services</div>
+    <a href="services.html" class="nl">Services</a>
+  </div>
+  <div class="ns"><div class="ns-title">API Layer</div>
+    <a href="api-reference.html" class="nl">REST Endpoints</a>
+  </div>
+  <div class="ns"><div class="ns-title">Frontend</div>
+    <a href="frontend.html" class="nl">React Application</a>
+  </div>
+  <div class="ns"><div class="ns-title">Database</div>
+    <a href="database.html" class="nl">Schema Reference</a>
+  </div>
+</nav>
+<main id="main">
+
+<h1>React Application</h1>
+<p class="subtitle">
+  The frontend is a single-page app in <code>web/src/</code> built with
+  <strong>React 18 + TypeScript</strong>, <strong>Vite</strong>, <strong>Tailwind CSS</strong>,
+  and <strong>Zustand</strong> for state management.  It talks to the API via a thin typed
+  Fetch wrapper.  Theming and density preferences are applied via
+  <code>data-theme</code> / <code>data-density</code> attributes on the root element.
+</p>
+
+<!-- ──────────────────────── Source tree ──────────────── -->
+<h2>Source Tree</h2>
+<pre><code>web/src/
+├── main.tsx              # React root, StrictMode
+├── App.tsx               # Shell: layout + view routing
+├── types/
+│   └── index.ts          # All TypeScript interfaces
+├── store/
+│   └── appStore.ts       # Zustand global state
+├── api/
+│   ├── client.ts         # Base fetch wrapper
+│   ├── incidents.ts
+│   ├── problems.ts
+│   ├── changes.ts
+│   ├── knowledge.ts
+│   ├── dashboard.ts
+│   └── admin.ts
+├── hooks/
+│   ├── useToast.ts
+│   └── useKeyboard.ts
+├── components/
+│   ├── layout/
+│   │   ├── Sidebar.tsx
+│   │   └── Topbar.tsx
+│   └── primitives/
+│       ├── Avatar.tsx
+│       ├── Badge.tsx
+│       ├── SlaBar.tsx
+│       └── Toast.tsx
+└── features/
+    ├── dashboard/        DashboardView.tsx
+    ├── incidents/        IncidentsView.tsx · IncidentDetailView.tsx · NewIncidentModal.tsx
+    ├── problems/         ProblemsView.tsx
+    ├── changes/          ChangesView.tsx
+    ├── knowledge/        KnowledgeView.tsx
+    ├── sla/              SlaView.tsx
+    └── admin/            AdminView.tsx + 10 tab components</code></pre>
+
+<!-- ──────────────────────── App.tsx ──────────────────── -->
+<section id="app" class="section-anchor">
+<h2>App.tsx — Shell</h2>
+<p>The application shell. It:</p>
+<ul>
+  <li>Renders the <strong>Sidebar</strong> and <strong>Topbar</strong> layout components</li>
+  <li>Reads <code>view</code> from <code>useAppStore</code> and conditionally renders the matching feature view</li>
+  <li>Manages the <code>openIncidentId</code> state that shows/hides <code>IncidentDetailView</code></li>
+  <li>Shows the <code>NewIncidentModal</code> when <code>showNewIncident</code> is true</li>
+  <li>Provides <code>addToast</code> from <code>useToast()</code> down to all feature views</li>
+  <li>Activates <code>useKeyboard()</code> for global keyboard shortcuts</li>
+</ul>
+<pre><code><span class="cs-com">// View routing (simplified)</span>
+{view === <span class="cs-str">'dashboard'</span>  &amp;&amp; &lt;DashboardView  addToast={addToast} /&gt;}
+{view === <span class="cs-str">'incidents'</span>  &amp;&amp; &lt;IncidentsView  addToast={addToast} /&gt;}
+{view === <span class="cs-str">'problems'</span>   &amp;&amp; &lt;ProblemsView   addToast={addToast} /&gt;}
+{view === <span class="cs-str">'changes'</span>    &amp;&amp; &lt;ChangesView    addToast={addToast} /&gt;}
+{view === <span class="cs-str">'knowledge'</span>  &amp;&amp; &lt;KnowledgeView  addToast={addToast} /&gt;}
+{view === <span class="cs-str">'sla'</span>        &amp;&amp; &lt;SlaView        addToast={addToast} /&gt;}
+{view === <span class="cs-str">'admin'</span>      &amp;&amp; &lt;AdminView      addToast={addToast} /&gt;}
+{openIncidentId &amp;&amp; &lt;IncidentDetailView id={openIncidentId} ... /&gt;}</code></pre>
+</section>
+
+<!-- ──────────────────────── Types ──────────────────────────── -->
+<section id="types" class="section-anchor">
+<h2>types/index.ts — Type Definitions</h2>
+<p>Single source of truth for all TypeScript types.  The interfaces mirror the
+   <a href="core-models.html">C# domain models</a> — if a C# model changes,
+   the corresponding TypeScript interface must also be updated.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Export</th><th>Purpose</th></tr>
+  <tr><td><code>Incident</code></td><td>Full incident with SLA fields</td></tr>
+  <tr><td><code>Problem</code></td><td>Problem with linked incident count</td></tr>
+  <tr><td><code>Change</code>, <code>ChangeReviewer</code></td><td>Change with reviewer votes</td></tr>
+  <tr><td><code>KbArticle</code>, <code>KbCategory</code></td><td>Knowledge Base types</td></tr>
+  <tr><td><code>SlaStats</code>, <code>SlaByPriority</code>, <code>TeamLoad</code>, <code>DailyVolume</code></td><td>SLA analytics DTOs</td></tr>
+  <tr><td><code>User</code>, <code>Group</code></td><td>People types</td></tr>
+  <tr><td><code>AdminCategory</code>, <code>AdminSubCategory</code></td><td>Admin category tree</td></tr>
+  <tr><td><code>Service</code>, <code>AdminService</code></td><td>Service catalogue</td></tr>
+  <tr><td><code>SlaTier</code>, <code>SlaTierTarget</code></td><td>SLA policy config</td></tr>
+  <tr><td><code>BusinessCalendar</code>, <code>BusinessDay</code>, <code>BusinessHoliday</code></td><td>Business hours</td></tr>
+  <tr><td><code>Automation</code>, <code>PriorityMatrixRow</code></td><td>Admin config types</td></tr>
+  <tr><td><code>Comment</code>, <code>ActivityEvent</code></td><td>Activity trail types</td></tr>
+  <tr><td><code>View</code></td><td>Union type for main navigation views</td></tr>
+  <tr><td><code>AdminSection</code></td><td>Union type for admin sub-nav sections</td></tr>
+  <tr><td><code>PriorityCode</code>, <code>StatusCode</code></td><td>String literal union types</td></tr>
+</table></div>
+</section>
+
+<!-- ──────────────────────── State ──────────────────────────── -->
+<section id="state" class="section-anchor">
+<h2>store/appStore.ts — Zustand Global State</h2>
+<p>A single Zustand store manages all global UI state.  Component-local state
+   (loading flags, form values) lives in component-level <code>useState</code> hooks.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>State field</th><th>Type</th><th>Default</th><th>Purpose</th></tr>
+  <tr><td><code>view</code></td><td><code>View</code></td><td><code>'dashboard'</code></td><td>Currently displayed main view</td></tr>
+  <tr><td><code>openIncidentId</code></td><td><code>number | null</code></td><td><code>null</code></td><td>ID of incident shown in slide-over detail panel; null = closed</td></tr>
+  <tr><td><code>theme</code></td><td><code>'light' | 'dark'</code></td><td><code>'dark'</code></td><td>Color theme — applied as <code>data-theme</code> attribute</td></tr>
+  <tr><td><code>density</code></td><td><code>'compact' | 'default' | 'comfortable'</code></td><td><code>'default'</code></td><td>UI density — applied as <code>data-density</code> attribute</td></tr>
+  <tr><td><code>showNewIncident</code></td><td><code>boolean</code></td><td><code>false</code></td><td>Show/hide the new incident creation modal</td></tr>
+  <tr><td><code>showCommandPalette</code></td><td><code>boolean</code></td><td><code>false</code></td><td>Show/hide the command palette overlay</td></tr>
+</table></div>
+<h4>Actions</h4>
+<div class="tbl-wrap"><table>
+  <tr><th>Action</th><th>Effect</th></tr>
+  <tr><td><code>setView(v: View)</code></td><td>Navigate to a main view</td></tr>
+  <tr><td><code>openIncident(id: number)</code></td><td>Open the incident detail panel</td></tr>
+  <tr><td><code>closeIncident()</code></td><td>Close the detail panel</td></tr>
+  <tr><td><code>setTheme(t)</code></td><td>Toggle light/dark; persists via <code>localStorage</code></td></tr>
+  <tr><td><code>setDensity(d)</code></td><td>Change UI density</td></tr>
+  <tr><td><code>setShowNewIncident(b)</code></td><td>Open/close new incident modal</td></tr>
+  <tr><td><code>setShowCommandPalette(b)</code></td><td>Open/close command palette</td></tr>
+</table></div>
+</section>
+
+<!-- ──────────────────────── API Client ──────────────────────────── -->
+<section id="api-client" class="section-anchor">
+<h2>api/ — API Client Layer</h2>
+<p>A thin typed wrapper over the browser's native Fetch API.  All calls are
+   relative to <code>/api</code> (proxied by Vite in development to
+   <code>http://localhost:5000</code>).</p>
+
+<h3>client.ts — Base client</h3>
+<pre><code><span class="cs-kw">const</span> api = {
+  get:    &lt;T&gt;(path: string)               =&gt; request&lt;T&gt;(path),
+  post:   &lt;T&gt;(path: string, body: unknown) =&gt; request&lt;T&gt;(path, { method: 'POST', ... }),
+  put:    &lt;T&gt;(path: string, body: unknown) =&gt; request&lt;T&gt;(path, { method: 'PUT',  ... }),
+  patch:  &lt;T&gt;(path: string, body: unknown) =&gt; request&lt;T&gt;(path, { method: 'PATCH', ... }),
+  delete: &lt;T&gt;(path: string)               =&gt; request&lt;T&gt;(path, { method: 'DELETE' }),
+}</code></pre>
+<p>The <code>request&lt;T&gt;</code> helper sets <code>Content-Type: application/json</code>,
+   throws an <code>Error</code> for non-2xx responses, and returns <code>undefined</code>
+   (typed as <code>T</code>) for 204 No Content responses.</p>
+
+<h3>Domain API modules</h3>
+<div class="tbl-wrap"><table>
+  <tr><th>Module</th><th>Exported object</th><th>Key methods</th></tr>
+  <tr>
+    <td><code>incidents.ts</code></td><td><code>incidentApi</code></td>
+    <td><code>getQueue(filter)</code>, <code>getById(id)</code>, <code>create(body)</code>, <code>setStatus</code>, <code>assign</code>, <code>setPriority</code>, <code>linkProblem</code>, <code>close</code>, <code>bulkClose</code>, <code>getComments</code>, <code>postComment</code>, <code>getTimeline</code>, <code>getWatchers</code></td>
+  </tr>
+  <tr>
+    <td><code>problems.ts</code></td><td><code>problemApi</code></td>
+    <td><code>getAll(includeResolved)</code>, <code>getById</code>, <code>create</code>, <code>setState</code>, <code>getComments</code>, <code>postComment</code>, <code>getTimeline</code></td>
+  </tr>
+  <tr>
+    <td><code>changes.ts</code></td><td><code>changeApi</code></td>
+    <td><code>getAll(state?)</code>, <code>getById</code>, <code>create</code>, <code>setState</code>, <code>vote</code>, <code>getComments</code>, <code>postComment</code></td>
+  </tr>
+  <tr>
+    <td><code>knowledge.ts</code></td><td><code>kbApi</code></td>
+    <td><code>search(q?, categoryId?)</code>, <code>getById</code>, <code>getCategories</code>, <code>vote(id, helpful)</code></td>
+  </tr>
+  <tr>
+    <td><code>dashboard.ts</code></td><td><code>dashboardApi</code></td>
+    <td><code>getKpis(days)</code>, <code>getSlaAtRisk()</code>, <code>getServices()</code>, <code>getSlaByPriority(days)</code>, <code>getTeamLoad()</code>, <code>getDailyVolume(days)</code></td>
+  </tr>
+  <tr>
+    <td><code>admin.ts</code></td><td><code>adminApi</code></td>
+    <td>Full CRUD for users, groups, categories, subcategories, roles, services, SLA tiers + targets, priority matrix, business calendars + days + holidays, automations + toggle</td>
+  </tr>
+</table></div>
+</section>
+
+<!-- ──────────────────────── Hooks ──────────────────────────── -->
+<section id="hooks" class="section-anchor">
+<h2>hooks/ — Custom Hooks</h2>
+
+<h3>useToast</h3>
+<p>Manages a list of transient toast notifications.  Each toast auto-dismisses after
+   2.4 seconds.  Returns <code>{ toasts, addToast, removeToast }</code>.
+   Used in <code>App.tsx</code>; <code>addToast</code> is passed down as a prop to all
+   feature views so they can show success/error messages.</p>
+
+<h3>useKeyboard</h3>
+<p>Registers a global <code>keydown</code> listener on mount and removes it on unmount.
+   Provides the following shortcuts:</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Key(s)</th><th>Action</th></tr>
+  <tr><td><code>Cmd/Ctrl + K</code></td><td>Toggle command palette</td></tr>
+  <tr><td><code>/</code></td><td>Toggle command palette</td></tr>
+  <tr><td><code>c</code></td><td>Open new incident modal</td></tr>
+  <tr><td><code>Escape</code></td><td>Close open incident detail</td></tr>
+  <tr><td><code>g</code> then <code>d</code></td><td>Navigate to Dashboard</td></tr>
+  <tr><td><code>g</code> then <code>i</code></td><td>Navigate to Incidents</td></tr>
+  <tr><td><code>g</code> then <code>p</code></td><td>Navigate to Problems</td></tr>
+  <tr><td><code>g</code> then <code>c</code></td><td>Navigate to Changes</td></tr>
+  <tr><td><code>g</code> then <code>k</code></td><td>Navigate to Knowledge Base</td></tr>
+  <tr><td><code>g</code> then <code>s</code></td><td>Navigate to SLA &amp; Reporting</td></tr>
+</table></div>
+</section>
+
+<!-- ──────────────────────── Components ──────────────────────────── -->
+<section id="components" class="section-anchor">
+<h2>components/ — Reusable Components</h2>
+
+<h3>layout/Sidebar.tsx</h3>
+<p>Fixed left navigation bar.  Renders the branded logo ("A" + "Aperture ITSM"),
+   a search/command-palette trigger, and five navigation groups:</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Group</th><th>Links</th></tr>
+  <tr><td>Overview</td><td>Dashboard</td></tr>
+  <tr><td>ITIL</td><td>Incidents (with badge count), Problems, Changes</td></tr>
+  <tr><td>Knowledge</td><td>Knowledge Base</td></tr>
+  <tr><td>Operations</td><td>SLA &amp; Reporting</td></tr>
+  <tr><td>System</td><td>Administration</td></tr>
+</table></div>
+<p>Active link styling applied based on current <code>useAppStore().view</code>.</p>
+
+<h3>layout/Topbar.tsx</h3>
+<p>Top header bar.  Shows system status indicator, notifications bell (uses
+   <code>unreadCount</code>), user avatar, and a settings menu with theme and density toggles.</p>
+
+<h3>primitives/Badge.tsx</h3>
+<p>Color-coded badge for priority and status codes.
+   Two helper functions exported alongside the component:</p>
+<ul>
+  <li><code>priorityVariant(code: PriorityCode)</code> — maps <code>critical|high|medium|low</code>
+      to variant names (<code>critical|high|medium|low</code>)</li>
+  <li><code>statusVariant(code: StatusCode)</code> — maps status codes to
+      <code>default|info|pending|success|default</code></li>
+</ul>
+<p>Variants: <code>critical</code> (red), <code>high</code> (orange), <code>medium</code> (yellow),
+   <code>low</code> (blue), <code>success</code> (green), <code>pending</code> (gray),
+   <code>info</code> (blue), <code>default</code> (neutral).</p>
+
+<h3>primitives/Avatar.tsx</h3>
+<p>Circular avatar displaying user initials on a coloured background.
+   Props: <code>initials</code>, <code>color</code> (hex), <code>size</code> (sm/md/lg).</p>
+
+<h3 id="slabar">primitives/SlaBar.tsx</h3>
+<p>Horizontal progress bar showing SLA elapsed percentage.  Colour shifts from
+   green → yellow (50%) → orange (75%) → red (100%+ = breached).
+   Also renders a human-readable "Xh Ym remaining" label.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Prop</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>percent</code></td><td>number</td><td>0–100+ SLA elapsed percentage</td></tr>
+  <tr><td><code>breachedAt</code></td><td>string?</td><td>ISO-8601 breach timestamp</td></tr>
+  <tr><td><code>targetMinutes</code></td><td>number?</td><td>Resolution target in minutes</td></tr>
+  <tr><td><code>startedAt</code></td><td>string?</td><td>ISO-8601 when SLA clock started</td></tr>
+  <tr><td><code>pausedSeconds</code></td><td>number</td><td>Total paused time to subtract</td></tr>
+  <tr><td><code>compact</code></td><td>boolean</td><td>Compact (14px) vs full mode</td></tr>
+</table></div>
+
+<h3>primitives/Toast.tsx</h3>
+<p>Toast notification stack.  Renders <code>toasts</code> from <code>useToast</code>
+   in a fixed bottom-right stack.  Each toast slides in and auto-fades.</p>
+</section>
+
+<!-- ──────────────────────── Feature Views ──────────────────────────── -->
+<section id="feature-views" class="section-anchor">
+<h2>features/ — Feature Views</h2>
+
+<h3>DashboardView</h3>
+<p>Homepage.  Fetches from <a href="api-reference.html#dashboard-controller">DashboardController</a>.
+   Displays:</p>
+<ul>
+  <li>4 KPI cards: open incidents, SLA at risk, changes this week, avg resolution</li>
+  <li>Incidents needing attention table (SLA at-risk queue)</li>
+  <li>Service health grid with coloured status dots</li>
+  <li>SLA summary metrics (met %, breach count)</li>
+</ul>
+
+<h3>IncidentsView</h3>
+<p>Full incident queue with:</p>
+<ul>
+  <li>Tab filter bar: All / Assigned to me / Unassigned / SLA risk / Resolved</li>
+  <li>Free-text search box</li>
+  <li>Bulk selection checkbox + Bulk Close button</li>
+  <li>Sortable incident list rows with priority badge, status, assignee avatar, SLA bar</li>
+  <li>Click row → opens <code>IncidentDetailView</code></li>
+  <li>"+" New Incident button → <code>NewIncidentModal</code></li>
+</ul>
+
+<h3>IncidentDetailView</h3>
+<p>Slide-over panel (or full-page) showing a single incident's complete data.  Sections:</p>
+<ul>
+  <li>Header: number, title, priority badge, status</li>
+  <li>Metadata sidebar: reporter, assignee (reassignable), group, service, category, CI</li>
+  <li>SLA bar (full size)</li>
+  <li>Description / steps to reproduce</li>
+  <li>Linked problem chip</li>
+  <li>Comments tab: thread of public + internal notes</li>
+  <li>Activity tab: full ActivityEvent timeline</li>
+  <li>Watchers section</li>
+</ul>
+
+<h3>NewIncidentModal</h3>
+<p>Modal form triggered by the "+" button or <code>c</code> shortcut.  Fields: title,
+   description, priority (dropdown), service (dropdown), category (dropdown), reporter.
+   On submit calls <code>incidentApi.create()</code> and shows a success toast.</p>
+
+<h3>ProblemsView</h3>
+<p>Problem list with search, state filter (open/resolved), and click-to-detail.
+   Detail view shows root cause, workaround, linked incident count, affected services.</p>
+
+<h3>ChangesView</h3>
+<p>Change management list.  State tabs: Draft / Under Review / Approved / In Progress / Completed.
+   Reviewer vote interface shows per-user vote chips with approve/reject/abstain actions.</p>
+
+<h3>KnowledgeView</h3>
+<p>KB article search with category sidebar.  Article list shows title, snippet, tag chips,
+   view count, and helpful %.  Clicking an article shows the full body and a vote widget.</p>
+
+<h3>SlaView</h3>
+<p>SLA &amp; Reporting dashboard.  Four panels:</p>
+<ol>
+  <li>Overall stats (open, at-risk, met %, breach count)</li>
+  <li>By-priority breakdown table</li>
+  <li>Team load table</li>
+  <li>Daily volume trend (bar chart via CSS or an inline chart library)</li>
+</ol>
+
+<h3>AdminView</h3>
+<p>Two-column admin hub: left sub-nav, right content area.  The sub-nav is grouped into:</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Group</th><th>Tab</th><th>Component</th><th>Status</th></tr>
+  <tr><td rowspan="2">General</td><td>General settings</td><td>—</td><td>Not yet implemented</td></tr>
+  <tr><td>Branding &amp; appearance</td><td>—</td><td>Not yet implemented</td></tr>
+  <tr><td rowspan="3">People</td><td>Users</td><td><code>UsersTab</code></td><td>✓</td></tr>
+  <tr><td>Teams &amp; groups</td><td><code>TeamsTab</code></td><td>✓</td></tr>
+  <tr><td>Roles &amp; permissions</td><td><code>RolesTab</code></td><td>✓</td></tr>
+  <tr><td rowspan="3">Service taxonomy</td><td>Categories</td><td><code>CategoriesTab</code></td><td>✓</td></tr>
+  <tr><td>Services &amp; CIs</td><td><code>ServicesTab</code></td><td>✓</td></tr>
+  <tr><td>Priority matrix</td><td><code>PriorityMatrixTab</code></td><td>✓</td></tr>
+  <tr><td rowspan="4">Policies</td><td>SLA policies</td><td><code>SlaPoliciesTab</code></td><td>✓</td></tr>
+  <tr><td>Business hours</td><td><code>BusinessHoursTab</code></td><td>✓</td></tr>
+  <tr><td>Workflow &amp; states</td><td><code>WorkflowTab</code></td><td>✓ (read-only)</td></tr>
+  <tr><td>Automations</td><td><code>AutomationsTab</code></td><td>✓</td></tr>
+  <tr><td rowspan="2">Integration</td><td>Integrations</td><td>—</td><td>Not yet implemented</td></tr>
+  <tr><td>Audit log</td><td>—</td><td>Not yet implemented</td></tr>
+</table></div>
+
+<h4>UsersTab</h4>
+<p>Table of all users with role badge and active/inactive status.  Invite modal creates a new user; edit modal updates role, group, and active status.</p>
+
+<h4>TeamsTab</h4>
+<p>Card grid of groups with member counts.  Create/edit modal for name and description.</p>
+
+<h4>CategoriesTab</h4>
+<p>Tree view: expandable category rows revealing subcategory items.  Each category shows
+   ticket count badge.  Inline delete button (protected by conflict check on the API).</p>
+
+<h4>RolesTab</h4>
+<p>Role cards + static permission matrix table (7 capability areas × 4 roles).
+   Edit modal lets admins update role display name and description.</p>
+
+<h4>ServicesTab</h4>
+<p>Table with health dot indicator, SLA tier badge, owning group, open incident count.
+   Create/edit modal includes health code and SLA tier dropdowns.</p>
+
+<h4>PriorityMatrixTab</h4>
+<p>3×3 grid (Impact rows × Urgency columns) where each cell has a &lt;select&gt; for the
+   resulting priority.  Save button POSTs all 9 cells via <code>adminApi.savePriorityMatrix</code>.</p>
+
+<h4>SlaPoliciesTab</h4>
+<p>Two-column layout: tier list on the left, detail panel on the right showing per-priority
+   response/resolution minute fields.  Save writes to <code>/api/admin/sla-tiers/{id}/targets</code>.</p>
+
+<h4>BusinessHoursTab</h4>
+<p>Weekly schedule table (Mon–Sun) with start/end time inputs.  Holiday list below with
+   date chips and a delete button per holiday, plus an add holiday form.</p>
+
+<h4>WorkflowTab</h4>
+<p>Read-only incident state flow diagram showing the five statuses
+   (New → In Progress → Pending → Resolved → Closed) with transition arrows.
+   Rendered as CSS/SVG boxes.</p>
+
+<h4>AutomationsTab</h4>
+<p>List of automation rules with enable/disable toggle.  CRUD modal for name,
+   when-description, and then-description text fields.
+   Run count badge shows executions in the last 30 days.</p>
+</section>
+
+</main>
+<script src="js/nav.js"></script>
+</body>
+</html>

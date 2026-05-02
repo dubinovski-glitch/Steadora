@@ -1,0 +1,6 @@
+@ApertureITSM.Api_HostAddress = http://localhost:5215
+
+GET {{ApertureITSM.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

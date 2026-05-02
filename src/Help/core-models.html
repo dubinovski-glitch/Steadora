@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Domain Models — Aperture ITSM Docs</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="hdr">
+  <a href="index.html" class="logo">Aperture ITSM</a>
+  <span class="badge">v1.0 · Docs</span>
+  <span class="bc"><a href="index.html">Home</a><span class="sep">›</span>Domain Models</span>
+</header>
+<nav id="nav">
+  <div class="ns"><div class="ns-title">Overview</div>
+    <a href="index.html" class="nl">Architecture</a>
+  </div>
+  <div class="ns"><div class="ns-title">Core Layer</div>
+    <a href="core-models.html" class="nl">Domain Models</a>
+    <a href="core-interfaces.html" class="nl">Interfaces</a>
+  </div>
+  <div class="ns"><div class="ns-title">Infrastructure</div>
+    <a href="repositories.html" class="nl">Repositories</a>
+  </div>
+  <div class="ns"><div class="ns-title">Feature Services</div>
+    <a href="services.html" class="nl">Services</a>
+  </div>
+  <div class="ns"><div class="ns-title">API Layer</div>
+    <a href="api-reference.html" class="nl">REST Endpoints</a>
+  </div>
+  <div class="ns"><div class="ns-title">Frontend</div>
+    <a href="frontend.html" class="nl">React Application</a>
+  </div>
+  <div class="ns"><div class="ns-title">Database</div>
+    <a href="database.html" class="nl">Schema Reference</a>
+  </div>
+</nav>
+<main id="main">
+
+<h1>Domain Models</h1>
+<p class="subtitle">
+  All C# model classes live in <code>ApertureITSM.Core/Models/</code>.
+  They are plain C# classes and records — no ORM attributes, no business logic.
+  Dapper maps SQL result columns directly to their properties by name.
+</p>
+
+<!-- ═══════════════════════════════════════════════════════════════ ITIL Entities -->
+<h2 id="itil">ITIL Entities</h2>
+<p>The three primary ITIL ticket types.  All live in the <code>itil</code> database schema
+   and share common concepts (priority, assignment, linked services).</p>
+
+<section id="incident" class="section-anchor">
+<h3>Incident <span class="since">· src/ApertureITSM.Core/Models/Incident.cs</span></h3>
+<p>The central ticket type.  Tracks a disruption to a service from creation through
+   resolution, with full SLA tracking fields.  Returned by
+   <a href="repositories.html#incident-repo">IncidentRepository</a> and surfaced through
+   <a href="api-reference.html#incidents-controller">IncidentsController</a>.</p>
+<div class="note green"><div class="note-title">SLA Fields</div>
+  <code>slaTargetMinutes</code>, <code>slaStartedAt</code>, <code>slaPausedSeconds</code>,
+  <code>slaBreachedAt</code>, <code>slaWarnedAt</code>, and <code>slaPercent</code> are
+  populated by the <a href="services.html#sla-bg">SlaBackgroundService</a> and the SLA
+  stored procedure. They drive the <a href="frontend.html#slabar">SlaBar</a> UI component.
+</div>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
+  <tr><td><code>IncidentId</code></td><td>int</td><td></td><td>Primary key</td></tr>
+  <tr><td><code>Number</code></td><td>string</td><td></td><td>Human-readable ID, e.g. <code>INC0001</code></td></tr>
+  <tr><td><code>Title</code></td><td>string</td><td></td><td>One-line summary</td></tr>
+  <tr><td><code>Description</code></td><td>string</td><td>✓</td><td>Full description / body</td></tr>
+  <tr><td><code>StepsToReproduce</code></td><td>string</td><td>✓</td><td>Reproduction steps</td></tr>
+  <tr><td><code>PriorityId</code></td><td>int</td><td></td><td>FK → <a href="#priority">Priority</a></td></tr>
+  <tr><td><code>PriorityCode</code></td><td>string</td><td></td><td><code>critical|high|medium|low</code></td></tr>
+  <tr><td><code>StatusId</code></td><td>int</td><td></td><td>FK → <a href="#incident-status">IncidentStatus</a></td></tr>
+  <tr><td><code>StatusCode</code></td><td>string</td><td></td><td><code>new|progress|pending|resolved|closed</code></td></tr>
+  <tr><td><code>ImpactCode</code></td><td>string</td><td>✓</td><td><code>low|medium|high|critical</code></td></tr>
+  <tr><td><code>UrgencyCode</code></td><td>string</td><td>✓</td><td><code>low|medium|high|critical</code></td></tr>
+  <tr><td><code>CategoryName</code></td><td>string</td><td>✓</td><td>Denormalised from lookup.Category</td></tr>
+  <tr><td><code>ServiceName</code></td><td>string</td><td>✓</td><td>Affected service display name</td></tr>
+  <tr><td><code>CiAssetTag</code></td><td>string</td><td>✓</td><td>Configuration Item asset tag</td></tr>
+  <tr><td><code>ReporterName</code></td><td>string</td><td>✓</td><td>Name of the person who opened the ticket</td></tr>
+  <tr><td><code>ReporterDisplay</code></td><td>string</td><td>✓</td><td>Formatted display name (may differ from ReporterName)</td></tr>
+  <tr><td><code>AssigneeUserId</code></td><td>int</td><td>✓</td><td>FK → core.User</td></tr>
+  <tr><td><code>AssigneeName</code></td><td>string</td><td>✓</td><td>Full name of assignee</td></tr>
+  <tr><td><code>AssigneeInitials</code></td><td>string</td><td>✓</td><td>Avatar initials</td></tr>
+  <tr><td><code>AssigneeColor</code></td><td>string</td><td>✓</td><td>Hex colour for avatar background</td></tr>
+  <tr><td><code>GroupName</code></td><td>string</td><td>✓</td><td>Assigned support group</td></tr>
+  <tr><td><code>SlaTargetMinutes</code></td><td>int</td><td>✓</td><td>Resolution SLA target in minutes</td></tr>
+  <tr><td><code>SlaStartedAt</code></td><td>string</td><td>✓</td><td>ISO-8601 UTC — when the SLA clock started</td></tr>
+  <tr><td><code>SlaPausedSeconds</code></td><td>int</td><td></td><td>Total paused seconds (status = pending)</td></tr>
+  <tr><td><code>SlaBreachedAt</code></td><td>string</td><td>✓</td><td>ISO-8601 UTC — breach timestamp (if breached)</td></tr>
+  <tr><td><code>SlaWarnedAt</code></td><td>string</td><td>✓</td><td>ISO-8601 UTC — warning threshold crossed</td></tr>
+  <tr><td><code>SlaPercent</code></td><td>float</td><td>✓</td><td>0–100 + : percentage of SLA elapsed</td></tr>
+  <tr><td><code>OpenedAt</code></td><td>string</td><td></td><td>ISO-8601 UTC creation timestamp</td></tr>
+  <tr><td><code>ResolvedAt</code></td><td>string</td><td>✓</td><td>ISO-8601 UTC resolution timestamp</td></tr>
+  <tr><td><code>ClosedAt</code></td><td>string</td><td>✓</td><td>ISO-8601 UTC close timestamp</td></tr>
+  <tr><td><code>ParentProblemNumber</code></td><td>string</td><td>✓</td><td>Linked Problem number, e.g. <code>PRB0003</code></td></tr>
+  <tr><td><code>CommentCount</code></td><td>int</td><td></td><td>Total comments (internal + public)</td></tr>
+  <tr><td><code>LinkedCount</code></td><td>int</td><td></td><td>Number of related/linked tickets</td></tr>
+  <tr><td><code>UpdatedAt</code></td><td>string</td><td></td><td>ISO-8601 UTC last modification</td></tr>
+</table></div>
+</section>
+
+<section id="problem" class="section-anchor">
+<h3>Problem <span class="since">· Models/Problem.cs</span></h3>
+<p>A root-cause investigation record.  One Problem can have many linked Incidents.
+   Managed via <a href="api-reference.html#problems-controller">ProblemsController</a>.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
+  <tr><td><code>ProblemId</code></td><td>int</td><td></td><td>Primary key</td></tr>
+  <tr><td><code>Number</code></td><td>string</td><td></td><td>Human-readable ID, e.g. <code>PRB0001</code></td></tr>
+  <tr><td><code>Title</code></td><td>string</td><td></td><td>One-line summary</td></tr>
+  <tr><td><code>RootCause</code></td><td>string</td><td>✓</td><td>Identified root cause description</td></tr>
+  <tr><td><code>Workaround</code></td><td>string</td><td>✓</td><td>Temporary fix while root cause is addressed</td></tr>
+  <tr><td><code>PriorityCode</code></td><td>string</td><td></td><td>Inherited from linked incidents</td></tr>
+  <tr><td><code>StateCode</code></td><td>string</td><td></td><td>e.g. <code>open|in_review|resolved|closed</code></td></tr>
+  <tr><td><code>StateName</code></td><td>string</td><td></td><td>Display label for stateCode</td></tr>
+  <tr><td><code>IsKnownError</code></td><td>bool</td><td></td><td>Promoted to Known Error Database</td></tr>
+  <tr><td><code>AssigneeName</code></td><td>string</td><td>✓</td><td>Full name of assignee</td></tr>
+  <tr><td><code>AssigneeInitials</code></td><td>string</td><td>✓</td><td>Avatar initials</td></tr>
+  <tr><td><code>AssigneeColor</code></td><td>string</td><td>✓</td><td>Hex colour for avatar</td></tr>
+  <tr><td><code>GroupName</code></td><td>string</td><td>✓</td><td>Owning support group</td></tr>
+  <tr><td><code>OpenedAt</code></td><td>string</td><td></td><td>ISO-8601 UTC creation timestamp</td></tr>
+  <tr><td><code>ResolvedAt</code></td><td>string</td><td>✓</td><td>ISO-8601 UTC resolution timestamp</td></tr>
+  <tr><td><code>LinkedIncidentCount</code></td><td>int</td><td></td><td>Count of incidents linked to this problem</td></tr>
+  <tr><td><code>AffectedServiceSlugs</code></td><td>string[]</td><td></td><td>Service slugs of affected services</td></tr>
+  <tr><td><code>UpdatedAt</code></td><td>string</td><td></td><td>ISO-8601 UTC last modification</td></tr>
+</table></div>
+</section>
+
+<section id="change" class="section-anchor">
+<h3>Change &amp; ChangeReviewer <span class="since">· Models/Change.cs</span></h3>
+<p>A planned change to the IT environment.  Includes an approval workflow with
+   <code>ChangeReviewer</code> votes.  Managed via
+   <a href="api-reference.html#changes-controller">ChangesController</a>.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
+  <tr><td><code>ChangeId</code></td><td>int</td><td></td><td>Primary key</td></tr>
+  <tr><td><code>Number</code></td><td>string</td><td></td><td>e.g. <code>CHG0001</code></td></tr>
+  <tr><td><code>Title</code></td><td>string</td><td></td><td>Change title</td></tr>
+  <tr><td><code>Description</code></td><td>string</td><td>✓</td><td>Full change description</td></tr>
+  <tr><td><code>RolloutPlan</code></td><td>string</td><td>✓</td><td>Implementation steps</td></tr>
+  <tr><td><code>RollbackPlan</code></td><td>string</td><td>✓</td><td>Rollback procedure</td></tr>
+  <tr><td><code>ImpactNotes</code></td><td>string</td><td>✓</td><td>Expected user impact</td></tr>
+  <tr><td><code>ChangeTypeCode</code></td><td>string</td><td></td><td><code>normal|standard|emergency</code></td></tr>
+  <tr><td><code>RiskCode</code></td><td>string</td><td></td><td><code>low|medium|high|critical</code></td></tr>
+  <tr><td><code>StateCode</code></td><td>string</td><td></td><td>e.g. <code>draft|review|approved|in_progress|completed|cancelled</code></td></tr>
+  <tr><td><code>StateName</code></td><td>string</td><td></td><td>Display label for stateCode</td></tr>
+  <tr><td><code>OwnerName</code></td><td>string</td><td>✓</td><td>Change owner full name</td></tr>
+  <tr><td><code>OwnerInitials</code></td><td>string</td><td>✓</td><td>Avatar initials</td></tr>
+  <tr><td><code>OwnerColor</code></td><td>string</td><td>✓</td><td>Hex colour for avatar</td></tr>
+  <tr><td><code>ApproverName</code></td><td>string</td><td>✓</td><td>Primary approver name</td></tr>
+  <tr><td><code>GroupName</code></td><td>string</td><td>✓</td><td>Owning support group</td></tr>
+  <tr><td><code>CabName</code></td><td>string</td><td>✓</td><td>Change Advisory Board name</td></tr>
+  <tr><td><code>ScheduledStart</code></td><td>string</td><td>✓</td><td>Planned start (ISO-8601 UTC)</td></tr>
+  <tr><td><code>ScheduledEnd</code></td><td>string</td><td>✓</td><td>Planned end (ISO-8601 UTC)</td></tr>
+  <tr><td><code>DowntimeEstimate</code></td><td>string</td><td>✓</td><td>Expected downtime window</td></tr>
+  <tr><td><code>Reviewers</code></td><td>ChangeReviewer[]</td><td></td><td>List of reviewers and their votes</td></tr>
+  <tr><td><code>AffectedServiceSlugs</code></td><td>string[]</td><td></td><td>Service slugs</td></tr>
+  <tr><td><code>UpdatedAt</code></td><td>string</td><td></td><td>ISO-8601 UTC last modification</td></tr>
+</table></div>
+
+<h4>ChangeReviewer</h4>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
+  <tr><td><code>UserId</code></td><td>int</td><td></td><td>FK → core.User</td></tr>
+  <tr><td><code>UserName</code></td><td>string</td><td></td><td>Reviewer full name</td></tr>
+  <tr><td><code>UserInitials</code></td><td>string</td><td>✓</td><td>Avatar initials</td></tr>
+  <tr><td><code>UserColor</code></td><td>string</td><td>✓</td><td>Avatar hex colour</td></tr>
+  <tr><td><code>VoteCode</code></td><td>string</td><td></td><td><code>pending|approved|rejected|abstain</code></td></tr>
+  <tr><td><code>Comment</code></td><td>string</td><td>✓</td><td>Reviewer comment on vote</td></tr>
+  <tr><td><code>VotedAt</code></td><td>string</td><td>✓</td><td>ISO-8601 UTC timestamp of vote</td></tr>
+</table></div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ Knowledge Base -->
+<h2 id="kb">Knowledge Base</h2>
+
+<section id="kb-article" class="section-anchor">
+<h3>KbArticle &amp; KbCategory <span class="since">· Models/KbArticle.cs</span></h3>
+<p>Knowledge Base articles with rich metadata.  Supports tagging, view tracking, and
+   helpfulness voting.  Stored in the <code>kb</code> schema.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
+  <tr><td><code>ArticleId</code></td><td>int</td><td></td><td>Primary key</td></tr>
+  <tr><td><code>Number</code></td><td>string</td><td></td><td>e.g. <code>KB0001</code></td></tr>
+  <tr><td><code>Title</code></td><td>string</td><td></td><td>Article title</td></tr>
+  <tr><td><code>Snippet</code></td><td>string</td><td>✓</td><td>Short excerpt for search results</td></tr>
+  <tr><td><code>Body</code></td><td>string</td><td>✓</td><td>Full article body (markdown/HTML)</td></tr>
+  <tr><td><code>KbCategorySlug</code></td><td>string</td><td></td><td>Category slug (URL-safe)</td></tr>
+  <tr><td><code>KbCategoryName</code></td><td>string</td><td></td><td>Category display name</td></tr>
+  <tr><td><code>AuthorName</code></td><td>string</td><td>✓</td><td>Author full name</td></tr>
+  <tr><td><code>Status</code></td><td>string</td><td></td><td><code>draft|published|archived</code></td></tr>
+  <tr><td><code>Pinned</code></td><td>bool</td><td></td><td>Pinned articles appear first in category</td></tr>
+  <tr><td><code>Views</code></td><td>int</td><td></td><td>Total view count</td></tr>
+  <tr><td><code>HelpfulCount</code></td><td>int</td><td></td><td>"Yes this helped" votes</td></tr>
+  <tr><td><code>NotHelpfulCount</code></td><td>int</td><td></td><td>"No, didn't help" votes</td></tr>
+  <tr><td><code>HelpfulPercent</code></td><td>float</td><td></td><td>Calculated helpfulness %</td></tr>
+  <tr><td><code>Tags</code></td><td>string[]</td><td></td><td>Tag slugs enriched by repository</td></tr>
+  <tr><td><code>CreatedAt</code> / <code>UpdatedAt</code></td><td>string</td><td></td><td>ISO-8601 UTC timestamps</td></tr>
+</table></div>
+
+<h4>KbCategory</h4>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>KbCategoryId</code></td><td>int</td><td>Primary key</td></tr>
+  <tr><td><code>Slug</code></td><td>string</td><td>URL-safe identifier</td></tr>
+  <tr><td><code>DisplayName</code></td><td>string</td><td>Category label</td></tr>
+  <tr><td><code>Icon</code></td><td>string?</td><td>Emoji or icon identifier</td></tr>
+  <tr><td><code>SortOrder</code></td><td>int</td><td>Display ordering</td></tr>
+  <tr><td><code>ArticleCount</code></td><td>int</td><td>Published articles in this category</td></tr>
+</table></div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ People -->
+<h2 id="people">People &amp; Infrastructure</h2>
+
+<section id="user" class="section-anchor">
+<h3>User <span class="since">· Models/User.cs</span></h3>
+<p>Represents a system user.  The <code>ExternalId</code> maps to an identity provider.
+   Roles control access; PrimaryGroup determines team membership.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
+  <tr><td><code>UserId</code></td><td>int</td><td></td><td>Primary key</td></tr>
+  <tr><td><code>ExternalId</code></td><td>string</td><td></td><td>Identity provider ID (e.g. AAD object ID)</td></tr>
+  <tr><td><code>Email</code></td><td>string</td><td></td><td>Primary email address</td></tr>
+  <tr><td><code>DisplayName</code></td><td>string</td><td></td><td>Full display name</td></tr>
+  <tr><td><code>Title</code></td><td>string</td><td>✓</td><td>Job title</td></tr>
+  <tr><td><code>AvatarInitials</code></td><td>string</td><td>✓</td><td>2-char initials for avatar</td></tr>
+  <tr><td><code>AvatarColor</code></td><td>string</td><td>✓</td><td>Hex colour for avatar background</td></tr>
+  <tr><td><code>RoleId</code></td><td>int</td><td></td><td>FK → lookup.Role</td></tr>
+  <tr><td><code>RoleCode</code></td><td>string</td><td></td><td><code>admin|manager|agent|viewer</code></td></tr>
+  <tr><td><code>PrimaryGroupId</code></td><td>int</td><td>✓</td><td>FK → core.Group (primary team)</td></tr>
+  <tr><td><code>PrimaryGroupName</code></td><td>string</td><td>✓</td><td>Team display name</td></tr>
+  <tr><td><code>IsActive</code></td><td>bool</td><td></td><td>Soft-delete / deactivation flag</td></tr>
+</table></div>
+</section>
+
+<section id="group" class="section-anchor">
+<h3>Group <span class="since">· Models/User.cs</span></h3>
+<p>A support team or group.  Users belong to a group via <code>PrimaryGroupId</code>.
+   Groups are used for incident/problem/change assignment and SLA load tracking.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>GroupId</code></td><td>int</td><td>Primary key</td></tr>
+  <tr><td><code>Slug</code></td><td>string</td><td>URL-safe identifier (auto-generated from Name)</td></tr>
+  <tr><td><code>Name</code></td><td>string</td><td>Team display name</td></tr>
+  <tr><td><code>Description</code></td><td>string?</td><td>Optional description</td></tr>
+  <tr><td><code>IsActive</code></td><td>bool</td><td>Soft-delete flag</td></tr>
+  <tr><td><code>MemberCount</code></td><td>int</td><td>Count of active users in this group</td></tr>
+</table></div>
+</section>
+
+<section id="service" class="section-anchor">
+<h3>Service &amp; ConfigurationItem <span class="since">· Models/Service.cs</span></h3>
+<p><code>Service</code> is a business service in the service catalogue.  Incidents can be
+   linked to a service and/or a specific CI.  <code>ConfigurationItem</code> is an asset
+   (server, application, etc.) that belongs to a service.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
+  <tr><td><code>ServiceId</code></td><td>int</td><td></td><td>Primary key</td></tr>
+  <tr><td><code>Slug</code></td><td>string</td><td></td><td>URL-safe identifier</td></tr>
+  <tr><td><code>Name</code></td><td>string</td><td></td><td>Service display name</td></tr>
+  <tr><td><code>CategoryId</code></td><td>int</td><td>✓</td><td>FK → lookup.Category</td></tr>
+  <tr><td><code>CategoryName</code></td><td>string</td><td>✓</td><td>Denormalised category name</td></tr>
+  <tr><td><code>OwningGroupId</code></td><td>int</td><td>✓</td><td>FK → core.Group</td></tr>
+  <tr><td><code>OwningGroupName</code></td><td>string</td><td>✓</td><td>Owning team name</td></tr>
+  <tr><td><code>HealthCode</code></td><td>string</td><td></td><td><code>operational|degraded|outage|maintenance</code></td></tr>
+  <tr><td><code>SlaTierId</code></td><td>int</td><td>✓</td><td>FK → <a href="#sla-tier">admin.SlaTier</a></td></tr>
+  <tr><td><code>SlaTierName</code></td><td>string</td><td>✓</td><td>Tier display name</td></tr>
+  <tr><td><code>IsActive</code></td><td>bool</td><td></td><td>Active in service catalogue</td></tr>
+  <tr><td><code>OpenIncidentCount</code></td><td>int</td><td></td><td>Live count of open incidents</td></tr>
+</table></div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ Activity -->
+<h2 id="activity">Activity &amp; Notifications</h2>
+<p>Defined in <code>Models/ActivityModels.cs</code>.  These support the audit trail, comments, and
+   real-time notification features.</p>
+
+<section id="comment" class="section-anchor">
+<h3>Comment</h3>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
+  <tr><td><code>CommentId</code></td><td>int</td><td></td><td>Primary key (audit.Comment)</td></tr>
+  <tr><td><code>AuthorName</code></td><td>string</td><td>✓</td><td>Comment author display name</td></tr>
+  <tr><td><code>AuthorInitials</code></td><td>string</td><td>✓</td><td>Avatar initials</td></tr>
+  <tr><td><code>AuthorColor</code></td><td>string</td><td>✓</td><td>Avatar hex colour</td></tr>
+  <tr><td><code>Body</code></td><td>string</td><td></td><td>Comment text (markdown supported)</td></tr>
+  <tr><td><code>Internal</code></td><td>bool</td><td></td><td>If true, only visible to agents (not end-users)</td></tr>
+  <tr><td><code>CreatedAt</code></td><td>string</td><td></td><td>ISO-8601 UTC</td></tr>
+  <tr><td><code>EditedAt</code></td><td>string</td><td>✓</td><td>ISO-8601 UTC (set if comment edited)</td></tr>
+</table></div>
+</section>
+
+<section id="activity-event" class="section-anchor">
+<h3>ActivityEvent</h3>
+<p>Immutable audit log entry.  Written whenever a ticket field changes, a status
+   transitions, or an assignment is made.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
+  <tr><td><code>ActivityId</code></td><td>int</td><td></td><td>Primary key (audit.ActivityEvent)</td></tr>
+  <tr><td><code>ActorName</code></td><td>string</td><td>✓</td><td>User who caused the event</td></tr>
+  <tr><td><code>Kind</code></td><td>string</td><td></td><td>Event type e.g. <code>status_change|assigned|priority_change|field_update</code></td></tr>
+  <tr><td><code>Field</code></td><td>string</td><td>✓</td><td>Which field changed (for field_update events)</td></tr>
+  <tr><td><code>OldValue</code></td><td>string</td><td>✓</td><td>Previous value</td></tr>
+  <tr><td><code>NewValue</code></td><td>string</td><td>✓</td><td>New value</td></tr>
+  <tr><td><code>OccurredAt</code></td><td>string</td><td></td><td>ISO-8601 UTC event timestamp</td></tr>
+</table></div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ Lookups -->
+<h2 id="lookups">Lookup Tables</h2>
+<p>Defined in <code>Models/LookupModels.cs</code>.  All are simple records populated from the
+   <code>lookup</code> database schema and served via
+   <a href="api-reference.html#lookups-controller">LookupsController</a>.</p>
+
+<section id="priority" class="section-anchor">
+<div class="tbl-wrap"><table>
+  <tr><th>Model</th><th>Key Properties</th><th>DB Table</th></tr>
+  <tr>
+    <td><strong>Priority</strong></td>
+    <td><code>PriorityId</code>, <code>Code</code> (<code>critical|high|medium|low</code>), <code>DisplayName</code>, <code>SortOrder</code></td>
+    <td><code>lookup.Priority</code></td>
+  </tr>
+  <tr>
+    <td><strong>IncidentStatus</strong></td>
+    <td><code>StatusId</code>, <code>Code</code>, <code>DisplayName</code>, <code>IsTerminal</code>, <code>PausesSla</code>, <code>SortOrder</code></td>
+    <td><code>lookup.IncidentStatus</code></td>
+  </tr>
+  <tr>
+    <td><strong>ProblemState</strong></td>
+    <td><code>StateId</code>, <code>Code</code>, <code>DisplayName</code>, <code>IsResolved</code></td>
+    <td><code>lookup.ProblemState</code></td>
+  </tr>
+  <tr>
+    <td><strong>ChangeState</strong></td>
+    <td><code>StateId</code>, <code>Code</code>, <code>DisplayName</code>, <code>IsTerminal</code></td>
+    <td><code>lookup.ChangeState</code></td>
+  </tr>
+  <tr>
+    <td><strong>ChangeType</strong></td>
+    <td><code>TypeId</code>, <code>Code</code> (<code>normal|standard|emergency</code>), <code>DisplayName</code></td>
+    <td><code>lookup.ChangeType</code></td>
+  </tr>
+  <tr>
+    <td><strong>Risk</strong></td>
+    <td><code>RiskId</code>, <code>Code</code> (<code>low|medium|high|critical</code>), <code>DisplayName</code></td>
+    <td><code>lookup.Risk</code></td>
+  </tr>
+  <tr>
+    <td><strong>Impact</strong></td>
+    <td><code>ImpactId</code>, <code>Code</code>, <code>DisplayName</code></td>
+    <td><code>lookup.Impact</code></td>
+  </tr>
+  <tr>
+    <td><strong>Urgency</strong></td>
+    <td><code>UrgencyId</code>, <code>Code</code>, <code>DisplayName</code></td>
+    <td><code>lookup.Urgency</code></td>
+  </tr>
+  <tr>
+    <td><strong>Role</strong></td>
+    <td><code>RoleId</code>, <code>Code</code>, <code>DisplayName</code>, <code>Description?</code>, <code>UserCount</code></td>
+    <td><code>lookup.Role</code></td>
+  </tr>
+  <tr>
+    <td><strong>Category</strong></td>
+    <td><code>CategoryId</code>, <code>Code</code>, <code>DisplayName</code>, <code>SortOrder</code></td>
+    <td><code>lookup.Category</code></td>
+  </tr>
+  <tr>
+    <td><strong>ServiceHealth</strong></td>
+    <td><code>HealthId</code>, <code>Code</code> (<code>operational|degraded|outage|maintenance</code>), <code>DisplayName</code></td>
+    <td><code>lookup.ServiceHealth</code></td>
+  </tr>
+  <tr>
+    <td><strong>ApprovalVote</strong></td>
+    <td><code>VoteId</code>, <code>Code</code> (<code>pending|approved|rejected|abstain</code>), <code>DisplayName</code></td>
+    <td><code>lookup.ApprovalVote</code></td>
+  </tr>
+</table></div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ Admin models -->
+<h2 id="admin">Admin Configuration Models</h2>
+<p>Defined in <code>Models/AdminModels.cs</code>.  Used exclusively by the Admin feature.
+   Stored in the <code>admin</code> database schema.</p>
+
+<section id="sla-tier" class="section-anchor">
+<h3>SlaTier &amp; SlaTierTarget</h3>
+<p>Tiered SLA policies.  Each service is assigned one tier.  Each tier has per-priority
+   response and resolution targets.  Used by the SLA evaluation engine.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>SlaTierId</code></td><td>int</td><td>Primary key</td></tr>
+  <tr><td><code>Name</code></td><td>string</td><td>Tier name e.g. "Gold", "Silver"</td></tr>
+  <tr><td><code>Description</code></td><td>string?</td><td>Optional description</td></tr>
+  <tr><td><code>IsActive</code></td><td>bool</td><td>Whether this tier is in use</td></tr>
+  <tr><td><code>Calculate247</code></td><td>bool</td><td>True = ignore business hours (24×7)</td></tr>
+  <tr><td><code>AutoEscalate</code></td><td>bool</td><td>Auto-escalate priority on SLA breach</td></tr>
+  <tr><td><code>SortOrder</code></td><td>int</td><td>Display ordering</td></tr>
+  <tr><td><code>Targets</code></td><td>List&lt;SlaTierTarget&gt;</td><td>Per-priority response / resolution targets</td></tr>
+</table></div>
+<h4>SlaTierTarget</h4>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>TargetId</code></td><td>int</td><td>Primary key</td></tr>
+  <tr><td><code>SlaTierId</code></td><td>int</td><td>FK → admin.SlaTier</td></tr>
+  <tr><td><code>PriorityId</code></td><td>byte</td><td>FK → lookup.Priority</td></tr>
+  <tr><td><code>PriorityCode</code></td><td>string</td><td>Denormalised priority code</td></tr>
+  <tr><td><code>PriorityDisplayName</code></td><td>string</td><td>Display name for UI</td></tr>
+  <tr><td><code>ResponseMinutes</code></td><td>int</td><td>First response target in minutes</td></tr>
+  <tr><td><code>ResolutionMinutes</code></td><td>int</td><td>Resolution target in minutes</td></tr>
+</table></div>
+</section>
+
+<section id="business-calendar" class="section-anchor">
+<h3>BusinessCalendar, BusinessDay, BusinessHoliday</h3>
+<p>Define working hours for SLA calculations when <code>Calculate247 = false</code>.
+   A calendar has 7 potential day entries (Mon–Sun) and a list of holidays.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Model</th><th>Key Properties</th></tr>
+  <tr><td><strong>BusinessCalendar</strong></td>
+      <td><code>CalendarId</code>, <code>Name</code>, <code>Timezone</code> (IANA name), <code>IsDefault</code>, <code>Days[]</code>, <code>Holidays[]</code></td></tr>
+  <tr><td><strong>BusinessDay</strong></td>
+      <td><code>DayId</code>, <code>CalendarId</code>, <code>DayOfWeek</code> (0=Sunday), <code>StartTime</code> (HH:mm), <code>EndTime</code> (HH:mm)</td></tr>
+  <tr><td><strong>BusinessHoliday</strong></td>
+      <td><code>HolidayId</code>, <code>CalendarId</code>, <code>HolidayDate</code> (YYYY-MM-DD), <code>Name</code></td></tr>
+</table></div>
+</section>
+
+<section id="automation" class="section-anchor">
+<h3>Automation</h3>
+<p>Rule-based automation definitions.  Stored in <code>admin.Automation</code>.
+   The engine reads these when evaluating whether to trigger automated actions.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>AutomationId</code></td><td>int</td><td>Primary key</td></tr>
+  <tr><td><code>Name</code></td><td>string</td><td>Rule name</td></tr>
+  <tr><td><code>WhenDescription</code></td><td>string</td><td>Human-readable trigger description</td></tr>
+  <tr><td><code>ThenDescription</code></td><td>string</td><td>Human-readable action description</td></tr>
+  <tr><td><code>IsEnabled</code></td><td>bool</td><td>Toggle without deleting</td></tr>
+  <tr><td><code>RunCount30d</code></td><td>int</td><td>Executions in the last 30 days</td></tr>
+</table></div>
+</section>
+
+<section id="priority-matrix" class="section-anchor">
+<h3>PriorityMatrixRow &amp; Admin Category Models</h3>
+<div class="tbl-wrap"><table>
+  <tr><th>Model</th><th>Key Properties</th><th>Purpose</th></tr>
+  <tr><td><strong>PriorityMatrixRow</strong></td>
+      <td><code>ImpactId</code>, <code>UrgencyId</code>, <code>PriorityId</code></td>
+      <td>One cell in the 3×3 Impact × Urgency → Priority grid</td></tr>
+  <tr><td><strong>SubCategory</strong></td>
+      <td><code>SubCategoryId</code>, <code>CategoryId</code>, <code>Code</code>, <code>DisplayName</code>, <code>SortOrder</code></td>
+      <td>Two-level incident classification (Category → SubCategory)</td></tr>
+  <tr><td><strong>CategoryWithSubs</strong></td>
+      <td><code>CategoryId</code>, <code>Code</code>, <code>DisplayName</code>, <code>TicketCount</code>, <code>SubCategories</code></td>
+      <td>Category enriched with live ticket count and child subcategories</td></tr>
+</table></div>
+</section>
+
+</main>
+<script src="js/nav.js"></script>
+</body>
+</html>

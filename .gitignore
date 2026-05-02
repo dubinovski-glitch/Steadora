@@ -1,0 +1,39 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docobj
+
+# .NET build outputs
+**/bin/
+**/obj/
+
+# Log files produced at runtime
+**/logs/
+*.log
+
+# NuGet packages (restored on build)
+**/packages/
+*.nupkg
+
+# Rider/JetBrains
+.idea/
+*.DotSettings.user
+
+# Claude AI session data
+.claude/
+
+# Node / npm
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Local environment overrides (may contain real credentials)
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/*.Development.json
+
+# OS noise
+.DS_Store
+Thumbs.db

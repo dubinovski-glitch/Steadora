@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>REST API Reference — Aperture ITSM Docs</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="hdr">
+  <a href="index.html" class="logo">Aperture ITSM</a>
+  <span class="badge">v1.0 · Docs</span>
+  <span class="bc"><a href="index.html">Home</a><span class="sep">›</span>REST Endpoints</span>
+</header>
+<nav id="nav">
+  <div class="ns"><div class="ns-title">Overview</div>
+    <a href="index.html" class="nl">Architecture</a>
+  </div>
+  <div class="ns"><div class="ns-title">Core Layer</div>
+    <a href="core-models.html" class="nl">Domain Models</a>
+    <a href="core-interfaces.html" class="nl">Interfaces</a>
+  </div>
+  <div class="ns"><div class="ns-title">Infrastructure</div>
+    <a href="repositories.html" class="nl">Repositories</a>
+  </div>
+  <div class="ns"><div class="ns-title">Feature Services</div>
+    <a href="services.html" class="nl">Services</a>
+  </div>
+  <div class="ns"><div class="ns-title">API Layer</div>
+    <a href="api-reference.html" class="nl">REST Endpoints</a>
+  </div>
+  <div class="ns"><div class="ns-title">Frontend</div>
+    <a href="frontend.html" class="nl">React Application</a>
+  </div>
+  <div class="ns"><div class="ns-title">Database</div>
+    <a href="database.html" class="nl">Schema Reference</a>
+  </div>
+</nav>
+<main id="main">
+
+<h1>REST API Reference</h1>
+<p class="subtitle">
+  All controllers live in <code>ApertureITSM.Api/Controllers/</code> and are
+  hosted at the base path <code>/api/</code>.  The API returns JSON.  204 responses
+  return no body.  Error responses return <code>{ "error": "..." }</code>.
+  Swagger UI is available at <code>/swagger</code> in development.
+</p>
+
+<div class="note"><div class="note-title">Authentication</div>
+  The API currently does not enforce authentication middleware —
+  actor identity is passed as <code>actorUserId</code> / <code>actorExtId</code>
+  in request bodies.  Add authentication middleware in <code>Program.cs</code> before production.
+</div>
+
+<!-- ──────────────────────── Incidents ──────────────────────────── -->
+<section id="incidents-controller" class="section-anchor">
+<h2>IncidentsController <code class="since">[Route("api/incidents")]</code></h2>
+<p>Depends on <a href="core-interfaces.html#i-incident-svc">IIncidentService</a> and
+   <a href="core-interfaces.html#i-notification-svc">INotificationService</a>.</p>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/incidents</span><span class="ep-desc">Paginated incident queue</span></div>
+  <div class="ep-params">
+    <span class="ph">Parameter</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">q</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Free-text search on title + description</span>
+    <span class="ep-pname">status</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Comma-separated status codes e.g. <code>new,progress</code></span>
+    <span class="ep-pname">priority</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Priority code e.g. <code>critical</code></span>
+    <span class="ep-pname">assigneeUserId</span><span class="ep-ptype">int?</span><span class="ep-pdesc">Filter to specific assignee</span>
+    <span class="ep-pname">slaAtRisk</span><span class="ep-ptype">bool?</span><span class="ep-pdesc">Only return incidents at ≥75% SLA elapsed</span>
+    <span class="ep-pname">unassigned</span><span class="ep-ptype">bool?</span><span class="ep-pdesc">Only return unassigned incidents</span>
+    <span class="ep-pname">includeResolved</span><span class="ep-ptype">bool?</span><span class="ep-pdesc">Include resolved/closed statuses</span>
+    <span class="ep-pname">page</span><span class="ep-ptype">int</span><span class="ep-pdesc">Page number (1-based, default 1)</span>
+    <span class="ep-pname">pageSize</span><span class="ep-ptype">int</span><span class="ep-pdesc">Items per page (default 25)</span>
+  </div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/incidents/{id}</span><span class="ep-desc">Single incident detail</span></div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/incidents</span><span class="ep-desc">Create incident — returns <code>{ id }</code></span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">title</span><span class="ep-ptype">string</span><span class="ep-pdesc">Required. Incident title.</span>
+    <span class="ep-pname">description</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Full description</span>
+    <span class="ep-pname">priorityCode</span><span class="ep-ptype">string</span><span class="ep-pdesc"><code>critical|high|medium|low</code></span>
+    <span class="ep-pname">serviceId</span><span class="ep-ptype">int?</span><span class="ep-pdesc">Affected service</span>
+    <span class="ep-pname">categoryId</span><span class="ep-ptype">int?</span><span class="ep-pdesc">Incident category</span>
+    <span class="ep-pname">reporterExtId</span><span class="ep-ptype">string</span><span class="ep-pdesc">Reporter's external ID</span>
+  </div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-patch">PATCH</span><span class="ep-path">/api/incidents/{id}/status</span><span class="ep-desc">Transition status</span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">statusCode</span><span class="ep-ptype">string</span><span class="ep-pdesc">New status code</span>
+    <span class="ep-pname">actorUserId</span><span class="ep-ptype">int</span><span class="ep-pdesc">User performing the action</span>
+  </div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-patch">PATCH</span><span class="ep-path">/api/incidents/{id}/assignee</span><span class="ep-desc">Reassign incident</span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">assigneeExtId</span><span class="ep-ptype">string</span><span class="ep-pdesc">Assignee's external ID</span>
+    <span class="ep-pname">actorUserId</span><span class="ep-ptype">int</span><span class="ep-pdesc">User performing the action</span>
+  </div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-patch">PATCH</span><span class="ep-path">/api/incidents/{id}/priority</span><span class="ep-desc">Change priority</span></div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-patch">PATCH</span><span class="ep-path">/api/incidents/{id}/problem</span><span class="ep-desc">Link to problem</span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">problemId</span><span class="ep-ptype">int</span><span class="ep-pdesc">Problem to link to</span>
+  </div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-delete">DELETE</span><span class="ep-path">/api/incidents/{id}</span><span class="ep-desc">Close / soft-delete incident</span></div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/incidents/bulk/close</span><span class="ep-desc">Close multiple incidents</span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">incidentIds</span><span class="ep-ptype">int[]</span><span class="ep-pdesc">IDs to close</span>
+    <span class="ep-pname">actorUserId</span><span class="ep-ptype">int</span><span class="ep-pdesc"></span>
+  </div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/incidents/{id}/comments</span><span class="ep-desc">Comments on an incident</span></div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/incidents/{id}/comments</span><span class="ep-desc">Post a comment</span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">authorExtId</span><span class="ep-ptype">string</span><span class="ep-pdesc">Author's external ID</span>
+    <span class="ep-pname">body</span><span class="ep-ptype">string</span><span class="ep-pdesc">Comment text</span>
+    <span class="ep-pname">isInternal</span><span class="ep-ptype">bool</span><span class="ep-pdesc">Internal note (agents only)</span>
+  </div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/incidents/{id}/timeline</span><span class="ep-desc">Activity event log</span></div>
+</div>
+
+<div class="ep">
+  <div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/incidents/{id}/watchers</span><span class="ep-desc">Watcher list</span></div>
+</div>
+</section>
+
+<!-- ──────────────────────── Problems ──────────────────────────── -->
+<section id="problems-controller" class="section-anchor">
+<h2>ProblemsController <code class="since">[Route("api/problems")]</code></h2>
+<p>Depends on <a href="core-interfaces.html#i-problem-svc">IProblemService</a> and
+   <a href="core-interfaces.html#i-notification-svc">INotificationService</a>.</p>
+
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/problems</span><span class="ep-desc">All problems; optional <code>?includeResolved=true</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/problems/{id}</span><span class="ep-desc">Single problem detail</span></div></div>
+<div class="ep">
+  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/problems</span><span class="ep-desc">Create problem — returns <code>{ id }</code></span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">title</span><span class="ep-ptype">string</span><span class="ep-pdesc">Required</span>
+    <span class="ep-pname">priorityCode</span><span class="ep-ptype">string</span><span class="ep-pdesc"></span>
+    <span class="ep-pname">reporterExtId</span><span class="ep-ptype">string</span><span class="ep-pdesc"></span>
+  </div>
+</div>
+<div class="ep"><div class="ep-head"><span class="tag t-patch">PATCH</span><span class="ep-path">/api/problems/{id}/state</span><span class="ep-desc">State transition</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/problems/{id}/comments</span><span class="ep-desc">Comments list</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/problems/{id}/comments</span><span class="ep-desc">Post comment</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/problems/{id}/timeline</span><span class="ep-desc">Activity timeline</span></div></div>
+</section>
+
+<!-- ──────────────────────── Changes ──────────────────────────── -->
+<section id="changes-controller" class="section-anchor">
+<h2>ChangesController <code class="since">[Route("api/changes")]</code></h2>
+<p>Depends on <a href="core-interfaces.html#i-change-svc">IChangeService</a> and
+   <a href="core-interfaces.html#i-notification-svc">INotificationService</a>.</p>
+
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/changes</span><span class="ep-desc">All changes; optional <code>?state=approved</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/changes/{id}</span><span class="ep-desc">Single change detail with reviewers</span></div></div>
+<div class="ep">
+  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/changes</span><span class="ep-desc">Create change — returns <code>{ id }</code></span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">title</span><span class="ep-ptype">string</span><span class="ep-pdesc">Required</span>
+    <span class="ep-pname">changeTypeCode</span><span class="ep-ptype">string</span><span class="ep-pdesc"><code>normal|standard|emergency</code></span>
+    <span class="ep-pname">riskCode</span><span class="ep-ptype">string</span><span class="ep-pdesc"><code>low|medium|high|critical</code></span>
+    <span class="ep-pname">ownerExtId</span><span class="ep-ptype">string</span><span class="ep-pdesc"></span>
+  </div>
+</div>
+<div class="ep"><div class="ep-head"><span class="tag t-patch">PATCH</span><span class="ep-path">/api/changes/{id}/state</span><span class="ep-desc">State transition</span></div></div>
+<div class="ep">
+  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/changes/{id}/vote</span><span class="ep-desc">Reviewer vote</span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">userExtId</span><span class="ep-ptype">string</span><span class="ep-pdesc">Reviewer's external ID</span>
+    <span class="ep-pname">voteCode</span><span class="ep-ptype">string</span><span class="ep-pdesc"><code>approved|rejected|abstain</code></span>
+    <span class="ep-pname">comment</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Optional vote rationale</span>
+  </div>
+</div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/changes/{id}/comments</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/changes/{id}/comments</span></div></div>
+</section>
+
+<!-- ──────────────────────── Knowledge ──────────────────────────── -->
+<section id="knowledge-controller" class="section-anchor">
+<h2>KnowledgeController <code class="since">[Route("api/knowledge")]</code></h2>
+<div class="ep">
+  <div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/knowledge/articles</span><span class="ep-desc">Search articles</span></div>
+  <div class="ep-params">
+    <span class="ph">Parameter</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">q</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Search text</span>
+    <span class="ep-pname">categoryId</span><span class="ep-ptype">int?</span><span class="ep-pdesc">Filter by category</span>
+  </div>
+</div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/knowledge/articles/{id}</span><span class="ep-desc">Article detail (auto-increments view count)</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/knowledge/categories</span><span class="ep-desc">All KB categories with article counts</span></div></div>
+<div class="ep">
+  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/knowledge/articles/{id}/vote</span><span class="ep-desc">Helpful / not-helpful vote</span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">helpful</span><span class="ep-ptype">bool</span><span class="ep-pdesc">true = helpful, false = not helpful</span>
+  </div>
+</div>
+</section>
+
+<!-- ──────────────────────── Dashboard ──────────────────────────── -->
+<section id="dashboard-controller" class="section-anchor">
+<h2>DashboardController <code class="since">[Route("api/dashboard")]</code></h2>
+<p>Depends on <a href="core-interfaces.html#i-sla-svc">ISlaService</a> and
+   <a href="core-interfaces.html#i-user">IUserRepository</a>.</p>
+
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/dashboard/kpis</span><span class="ep-desc">KPI summary — returns <a href="core-models.html#sla-stats">SlaStats</a>; <code>?days=7</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/dashboard/sla-at-risk</span><span class="ep-desc">Top 5 incidents at SLA risk</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/dashboard/services</span><span class="ep-desc">All services with health status and open incident count</span></div></div>
+</section>
+
+<!-- ──────────────────────── SLA ──────────────────────────── -->
+<section id="sla-controller" class="section-anchor">
+<h2>SlaController <code class="since">[Route("api/sla")]</code></h2>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/sla/stats</span><span class="ep-desc">Dashboard KPI stats; <code>?days=7</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/sla/by-priority</span><span class="ep-desc">SLA performance per priority; <code>?days=7</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/sla/team-load</span><span class="ep-desc">Open incident + SLA counts per team</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/sla/daily-volume</span><span class="ep-desc">Daily opened vs resolved counts; <code>?days=14</code></span></div></div>
+</section>
+
+<!-- ──────────────────────── Users ──────────────────────────── -->
+<section id="users-controller" class="section-anchor">
+<h2>UsersController <code class="since">[Route("api/users")]</code></h2>
+<p>Read-only user and reference data for dropdowns and forms.
+   Write operations are in <a href="#admin-controller">AdminController</a>.</p>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/users</span><span class="ep-desc">All active users</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/users/groups</span><span class="ep-desc">All active groups</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/users/configuration-items</span><span class="ep-desc">All active CIs for the new-incident form</span></div></div>
+</section>
+
+<!-- ──────────────────────── Lookups ──────────────────────────── -->
+<section id="lookups-controller" class="section-anchor">
+<h2>LookupsController <code class="since">[Route("api/lookups")]</code></h2>
+<p>Serves all static reference data to the frontend.  Data rarely changes;
+   the frontend caches it in Zustand state after the first load.</p>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/lookups/priorities</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/lookups/incident-statuses</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/lookups/problem-states</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/lookups/change-states</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/lookups/change-types</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/lookups/risks</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/lookups/impacts</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/lookups/urgencies</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/lookups/categories</span></div></div>
+</section>
+
+<!-- ──────────────────────── Admin ──────────────────────────── -->
+<section id="admin-controller" class="section-anchor">
+<h2>AdminController <code class="since">[Route("api/admin")]</code></h2>
+<p>Depends directly on
+   <a href="core-interfaces.html#i-admin">IAdminRepository</a> (no service layer — admin
+   operations are purely CRUD with no additional business rules).  Uses a static
+   <code>GenerateSlug</code> helper for new service and group names.</p>
+
+<h3>Users</h3>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/users</span><span class="ep-desc">All users</span></div></div>
+<div class="ep">
+  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/users</span><span class="ep-desc">Create user — returns <code>201 { id }</code></span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">externalId</span><span class="ep-ptype">string</span><span class="ep-pdesc">Identity provider ID</span>
+    <span class="ep-pname">email</span><span class="ep-ptype">string</span><span class="ep-pdesc"></span>
+    <span class="ep-pname">displayName</span><span class="ep-ptype">string</span><span class="ep-pdesc"></span>
+    <span class="ep-pname">title</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Job title</span>
+    <span class="ep-pname">roleId</span><span class="ep-ptype">byte</span><span class="ep-pdesc">FK → lookup.Role</span>
+    <span class="ep-pname">primaryGroupId</span><span class="ep-ptype">int?</span><span class="ep-pdesc">FK → core.Group</span>
+  </div>
+</div>
+<div class="ep">
+  <div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/users/{id}</span><span class="ep-desc">Update user — returns 204</span></div>
+  <div class="ep-params">
+    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">email, displayName, title, roleId, primaryGroupId</span><span class="ep-ptype">…</span><span class="ep-pdesc">Same as create</span>
+    <span class="ep-pname">isActive</span><span class="ep-ptype">bool</span><span class="ep-pdesc">Deactivate without deleting</span>
+  </div>
+</div>
+
+<h3>Groups</h3>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/groups</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/groups</span><span class="ep-desc">Body: <code>{ name, description? }</code> — slug auto-generated</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/groups/{id}</span><span class="ep-desc">Body: <code>{ name, description, isActive }</code></span></div></div>
+
+<h3>Categories &amp; SubCategories</h3>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/categories</span><span class="ep-desc">All categories with subcategories and ticket counts</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/categories</span><span class="ep-desc">Body: <code>{ code, displayName, sortOrder }</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/categories/{id}</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-delete">DELETE</span><span class="ep-path">/api/admin/categories/{id}</span><span class="ep-desc">Returns 409 Conflict if category has open incidents</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/subcategories</span><span class="ep-desc">Body: <code>{ categoryId, code, displayName, sortOrder }</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/subcategories/{id}</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-delete">DELETE</span><span class="ep-path">/api/admin/subcategories/{id}</span></div></div>
+
+<h3>Roles</h3>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/roles</span><span class="ep-desc">All roles with user counts</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/roles/{id}</span><span class="ep-desc">Body: <code>{ displayName, description }</code> (code is immutable)</span></div></div>
+
+<h3>Services</h3>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/services</span><span class="ep-desc">All services with owning group, SLA tier, health</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/services</span><span class="ep-desc">Body: <code>{ name, categoryId, owningGroupId, healthCode, slaTierId }</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/services/{id}</span><span class="ep-desc">Adds <code>isActive</code> flag</span></div></div>
+
+<h3>SLA Tiers</h3>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/sla-tiers</span><span class="ep-desc">All tiers with nested targets</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/sla-tiers</span><span class="ep-desc">Body: <code>{ name, description, calculate247, autoEscalate }</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/sla-tiers/{id}</span><span class="ep-desc">Adds <code>isActive</code></span></div></div>
+<div class="ep">
+  <div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/sla-tiers/{id}/targets</span><span class="ep-desc">Upsert all targets for a tier</span></div>
+  <div class="ep-params">
+    <span class="ph">Body (array)</span><span class="ph">Type</span><span class="ph">Description</span>
+    <span class="ep-pname">priorityId</span><span class="ep-ptype">int</span><span class="ep-pdesc">FK → lookup.Priority</span>
+    <span class="ep-pname">responseMinutes</span><span class="ep-ptype">int</span><span class="ep-pdesc">First-response target</span>
+    <span class="ep-pname">resolutionMinutes</span><span class="ep-ptype">int</span><span class="ep-pdesc">Resolution target</span>
+  </div>
+</div>
+
+<h3>Priority Matrix</h3>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/priority-matrix</span></div></div>
+<div class="ep">
+  <div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/priority-matrix</span><span class="ep-desc">Replace entire matrix (array of <code>{ impactId, urgencyId, priorityId }</code>)</span></div>
+</div>
+
+<h3>Business Calendars</h3>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/business-calendars</span><span class="ep-desc">All calendars with days and holidays</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/business-calendars</span><span class="ep-desc">Body: <code>{ name, timezone }</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/business-calendars/{id}/days</span><span class="ep-desc">Upsert weekly schedule (array of <code>{ dayOfWeek, startTime, endTime }</code>)</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/business-calendars/{id}/holidays</span><span class="ep-desc">Add holiday: <code>{ holidayDate, name }</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-delete">DELETE</span><span class="ep-path">/api/admin/business-holidays/{id}</span><span class="ep-desc">Remove holiday by holiday ID</span></div></div>
+
+<h3>Automations</h3>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/automations</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/automations</span><span class="ep-desc">Body: <code>{ name, whenDescription, thenDescription }</code></span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/automations/{id}</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-patch">PATCH</span><span class="ep-path">/api/admin/automations/{id}/toggle</span><span class="ep-desc">Body: <code>{ enabled: true|false }</code></span></div></div>
+</section>
+
+<!-- ──────────────────────── Notifications ──────────────────────── -->
+<section id="notification-hub" class="section-anchor">
+<h2>NotificationHub (SignalR) <code class="since">· Hubs/NotificationHub.cs</code></h2>
+<p>WebSocket hub mounted at <code>/hubs/notifications</code>.  Clients connect and receive
+   real-time push events when: an incident they watch is updated, an SLA breach occurs,
+   or a comment is posted on a ticket they watch.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Server → Client event</th><th>Payload</th><th>Trigger</th></tr>
+  <tr><td><code>IncidentUpdated</code></td><td><code>{ incidentId, field, newValue }</code></td><td>Any field/status/assignee change</td></tr>
+  <tr><td><code>SlaBreached</code></td><td><code>{ incidentId, number }</code></td><td>SlaBackgroundService detects breach</td></tr>
+  <tr><td><code>NewComment</code></td><td><code>{ parentType, parentId, commentId }</code></td><td>Comment posted via any controller</td></tr>
+  <tr><td><code>NotificationCount</code></td><td><code>{ unreadCount }</code></td><td>After marking notifications read</td></tr>
+</table></div>
+</section>
+
+</main>
+<script src="js/nav.js"></script>
+</body>
+</html>

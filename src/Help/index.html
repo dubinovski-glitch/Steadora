@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Architecture — Aperture ITSM Docs</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="hdr">
+  <a href="index.html" class="logo">Aperture ITSM</a>
+  <span class="badge">v1.0 · Docs</span>
+  <span class="bc">Architecture Overview</span>
+</header>
+<nav id="nav">
+  <div class="ns"><div class="ns-title">Overview</div>
+    <a href="index.html" class="nl">Architecture</a>
+  </div>
+  <div class="ns"><div class="ns-title">Core Layer</div>
+    <a href="core-models.html" class="nl">Domain Models</a>
+    <a href="core-interfaces.html" class="nl">Interfaces</a>
+  </div>
+  <div class="ns"><div class="ns-title">Infrastructure</div>
+    <a href="repositories.html" class="nl">Repositories</a>
+  </div>
+  <div class="ns"><div class="ns-title">Feature Services</div>
+    <a href="services.html" class="nl">Services</a>
+  </div>
+  <div class="ns"><div class="ns-title">API Layer</div>
+    <a href="api-reference.html" class="nl">REST Endpoints</a>
+  </div>
+  <div class="ns"><div class="ns-title">Frontend</div>
+    <a href="frontend.html" class="nl">React Application</a>
+  </div>
+  <div class="ns"><div class="ns-title">Database</div>
+    <a href="database.html" class="nl">Schema Reference</a>
+  </div>
+</nav>
+<main id="main">
+
+<h1>Aperture ITSM</h1>
+<p class="subtitle">
+  A full-stack IT Service Management platform built on <strong>.NET 8 / ASP.NET Core</strong> (backend) and
+  <strong>React 18 / TypeScript</strong> (frontend), following clean-architecture principles with ITIL-aligned
+  modules for Incidents, Problems, Changes, Knowledge Base, and SLA management.
+</p>
+
+<h2>Layer Architecture</h2>
+<p>The solution is split into five discrete backend layers plus the React SPA, each with a single responsibility and
+   no downward dependencies (each layer depends only on the layer below it).</p>
+
+<div class="arch">
+  <div class="arch-layer arch-front">
+    <span class="arch-lbl">Frontend</span>
+    <span class="arch-box">React 18 + TypeScript</span>
+    <span class="arch-box">Zustand state</span>
+    <span class="arch-box">Tailwind CSS</span>
+    <span class="arch-box">Fetch API client</span>
+  </div>
+  <div class="arch-arrow">↕  HTTP / JSON &nbsp;+&nbsp; WebSocket (SignalR)</div>
+  <div class="arch-layer arch-api">
+    <span class="arch-lbl">API — ApertureITSM.Api</span>
+    <span class="arch-box">ASP.NET Core Controllers</span>
+    <span class="arch-box">NotificationHub (SignalR)</span>
+    <span class="arch-box">Program.cs (DI root)</span>
+  </div>
+  <div class="arch-arrow">↓ calls via injected interfaces</div>
+  <div class="arch-layer arch-feat">
+    <span class="arch-lbl">Features</span>
+    <span class="arch-box">Features.Incidents</span>
+    <span class="arch-box">Features.Problems</span>
+    <span class="arch-box">Features.Changes</span>
+    <span class="arch-box">Features.KnowledgeBase</span>
+    <span class="arch-box">Features.Notifications</span>
+    <span class="arch-box">Features.Sla</span>
+  </div>
+  <div class="arch-arrow">↓ calls via injected interfaces</div>
+  <div class="arch-layer arch-infra">
+    <span class="arch-lbl">Infrastructure — ApertureITSM.Infrastructure</span>
+    <span class="arch-box">IncidentRepository</span>
+    <span class="arch-box">ProblemRepository</span>
+    <span class="arch-box">ChangeRepository</span>
+    <span class="arch-box">KbRepository</span>
+    <span class="arch-box">ActivityRepository</span>
+    <span class="arch-box">UserRepository</span>
+    <span class="arch-box">LookupRepository</span>
+    <span class="arch-box">SlaRepository</span>
+    <span class="arch-box">AdminRepository</span>
+  </div>
+  <div class="arch-arrow">↓ implements interfaces defined in Core</div>
+  <div class="arch-layer arch-core">
+    <span class="arch-lbl">Core — ApertureITSM.Core</span>
+    <span class="arch-box">Domain Models</span>
+    <span class="arch-box">Repository Interfaces</span>
+    <span class="arch-box">Service Interfaces</span>
+  </div>
+  <div class="arch-arrow">↓ read/write via Dapper + SQL Server</div>
+  <div class="arch-layer arch-db">
+    <span class="arch-lbl">Database — SQL Server</span>
+    <span class="arch-box">schema: core</span>
+    <span class="arch-box">schema: itil</span>
+    <span class="arch-box">schema: kb</span>
+    <span class="arch-box">schema: lookup</span>
+    <span class="arch-box">schema: audit</span>
+    <span class="arch-box">schema: reporting</span>
+    <span class="arch-box">schema: admin</span>
+  </div>
+</div>
+
+<h2>Solution Projects</h2>
+<div class="tbl-wrap">
+<table>
+  <tr><th>Project</th><th>Layer</th><th>Responsibility</th></tr>
+  <tr><td><code>ApertureITSM.Core</code></td><td><span class="tag t-core">Core</span></td>
+      <td>All domain model classes and repository/service interfaces. No dependencies on other projects — the innermost ring.</td></tr>
+  <tr><td><code>ApertureITSM.Infrastructure</code></td><td><span class="tag t-infra">Infrastructure</span></td>
+      <td>Dapper-based SQL Server repository implementations. Depends only on Core.</td></tr>
+  <tr><td><code>ApertureITSM.Features.Incidents</code></td><td><span class="tag t-feat">Feature</span></td>
+      <td>Incident business logic and <code>IIncidentService</code> implementation.</td></tr>
+  <tr><td><code>ApertureITSM.Features.Problems</code></td><td><span class="tag t-feat">Feature</span></td>
+      <td>Problem management service (<code>IProblemService</code>).</td></tr>
+  <tr><td><code>ApertureITSM.Features.Changes</code></td><td><span class="tag t-feat">Feature</span></td>
+      <td>Change management service (<code>IChangeService</code>).</td></tr>
+  <tr><td><code>ApertureITSM.Features.KnowledgeBase</code></td><td><span class="tag t-feat">Feature</span></td>
+      <td>KB article search, view tracking, and helpfulness voting (<code>IKnowledgeService</code>).</td></tr>
+  <tr><td><code>ApertureITSM.Features.Notifications</code></td><td><span class="tag t-feat">Feature</span></td>
+      <td>Comments, activity timeline, watchers, in-app notifications (<code>INotificationService</code>).</td></tr>
+  <tr><td><code>ApertureITSM.Features.Sla</code></td><td><span class="tag t-feat">Feature</span></td>
+      <td>SLA analytics service and the <code>SlaBackgroundService</code> hosted service that evaluates breaches on a timer.</td></tr>
+  <tr><td><code>ApertureITSM.Api</code></td><td><span class="tag t-api">API</span></td>
+      <td>ASP.NET Core entry point — DI wiring, controllers, SignalR hub, Swagger, feature flags.</td></tr>
+</table>
+</div>
+
+<h2>Dependency Injection Wiring</h2>
+<p>All registrations happen in <code>ApertureITSM.Api/Program.cs</code>. Each feature can be
+   toggled on or off via the <code>Features</code> section of <code>appsettings.json</code>:</p>
+<pre><code><span class="cs-com">// appsettings.json</span>
+"Features": {
+  "Incidents": true,
+  "Problems":  true,
+  "Changes":   true,
+  "KnowledgeBase": true,
+  "Notifications": true,
+  "Sla":       true
+}</code></pre>
+<p>When a feature is disabled, a no-op implementation is registered so dependent code
+   never receives a null service reference.</p>
+
+<h2>Typical Request Flow</h2>
+<p>Example: A user opens an incident and the UI fetches the detail.</p>
+<pre><code>Browser GET /api/incidents/42
+  → IncidentsController.GetDetail(42)
+      → IIncidentService.GetDetailAsync(42)
+          → IIncidentRepository.GetByIdAsync(42)
+              → SQL Server: SELECT from itil.Incident + joins
+          ← returns Incident model
+      ← returns IncidentDetail DTO
+  ← JSON response to browser</code></pre>
+
+<h2>Real-Time Notifications</h2>
+<p>The <strong>NotificationHub</strong> (SignalR, at <code>/hubs/notifications</code>) pushes
+   events to connected clients when incidents are updated, SLA breaches are detected, or
+   comments are posted. The frontend connects via the browser's native WebSocket support
+   (no additional SignalR client library required for basic use).</p>
+
+<h2>Documentation Pages</h2>
+<div class="card-grid">
+  <a href="core-models.html" class="card">
+    <div class="card-icon">🧱</div>
+    <h3>Domain Models</h3>
+    <p>All C# model classes — Incident, Problem, Change, User, Service, lookup tables, and admin configuration objects.</p>
+  </a>
+  <a href="core-interfaces.html" class="card">
+    <div class="card-icon">📐</div>
+    <h3>Interfaces</h3>
+    <p>All repository and service interfaces defined in the Core project — the contracts every implementation must satisfy.</p>
+  </a>
+  <a href="repositories.html" class="card">
+    <div class="card-icon">🗄️</div>
+    <h3>Repositories</h3>
+    <p>Infrastructure layer: Dapper SQL implementations for all data access. Describes SQL schemas touched and key query patterns.</p>
+  </a>
+  <a href="services.html" class="card">
+    <div class="card-icon">⚙️</div>
+    <h3>Feature Services</h3>
+    <p>Domain services in each Feature project — the business logic layer between controllers and repositories.</p>
+  </a>
+  <a href="api-reference.html" class="card">
+    <div class="card-icon">🔌</div>
+    <h3>REST Endpoints</h3>
+    <p>Complete API reference — all 50+ HTTP endpoints across 9 controllers with method, path, parameters, and response types.</p>
+  </a>
+  <a href="frontend.html" class="card">
+    <div class="card-icon">⚛️</div>
+    <h3>React Application</h3>
+    <p>Frontend architecture: Zustand store, API client layer, layout components, reusable primitives, and feature views.</p>
+  </a>
+  <a href="database.html" class="card">
+    <div class="card-icon">🗃️</div>
+    <h3>Database Schema</h3>
+    <p>SQL Server schema reference — all tables by schema, key columns, primary keys, foreign-key relationships, and stored procedures.</p>
+  </a>
+</div>
+
+<h2>Technology Stack</h2>
+<div class="tbl-wrap">
+<table>
+  <tr><th>Layer</th><th>Technology</th><th>Version / Notes</th></tr>
+  <tr><td>Runtime</td><td>.NET 8 (LTS)</td><td>C# 12, nullable reference types enabled</td></tr>
+  <tr><td>Web framework</td><td>ASP.NET Core 8</td><td>Minimal hosting model, controller-based</td></tr>
+  <tr><td>Data access</td><td>Dapper 2.x</td><td>Micro-ORM; raw SQL with parameter binding</td></tr>
+  <tr><td>Database</td><td>SQL Server (MSSQL)</td><td>Multiple schemas; stored procs for SLA evaluation</td></tr>
+  <tr><td>Logging</td><td>log4net 2.x</td><td>Per-feature rolling file appenders in <code>logs/</code></td></tr>
+  <tr><td>Real-time</td><td>SignalR (ASP.NET Core)</td><td>WebSocket hub at <code>/hubs/notifications</code></td></tr>
+  <tr><td>Frontend</td><td>React 18 + TypeScript</td><td>Vite build tool, strict mode</td></tr>
+  <tr><td>State management</td><td>Zustand</td><td>Single <code>appStore</code> for global UI state</td></tr>
+  <tr><td>Styling</td><td>Tailwind CSS</td><td>Custom CSS design tokens; <code>data-theme</code> / <code>data-density</code> attributes</td></tr>
+  <tr><td>Icons</td><td>lucide-react</td><td>Used throughout the UI</td></tr>
+  <tr><td>API client</td><td>Native Fetch API</td><td>Thin typed wrapper in <code>web/src/api/</code></td></tr>
+</table>
+</div>
+
+</main>
+<script src="js/nav.js"></script>
+</body>
+</html>

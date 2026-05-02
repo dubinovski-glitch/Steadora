@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="log4net" Version="2.0.17" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.1.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ApertureITSM.Core\ApertureITSM.Core.csproj" />
+    <ProjectReference Include="..\ApertureITSM.Infrastructure\ApertureITSM.Infrastructure.csproj" />
+    <ProjectReference Include="..\ApertureITSM.Features.Incidents\ApertureITSM.Features.Incidents.csproj" />
+    <ProjectReference Include="..\ApertureITSM.Features.Problems\ApertureITSM.Features.Problems.csproj" />
+    <ProjectReference Include="..\ApertureITSM.Features.Changes\ApertureITSM.Features.Changes.csproj" />
+    <ProjectReference Include="..\ApertureITSM.Features.KnowledgeBase\ApertureITSM.Features.KnowledgeBase.csproj" />
+    <ProjectReference Include="..\ApertureITSM.Features.Sla\ApertureITSM.Features.Sla.csproj" />
+    <ProjectReference Include="..\ApertureITSM.Features.Notifications\ApertureITSM.Features.Notifications.csproj" />
+  </ItemGroup>
+
+</Project>

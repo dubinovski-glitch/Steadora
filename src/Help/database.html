@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Database Schema — Aperture ITSM Docs</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="hdr">
+  <a href="index.html" class="logo">Aperture ITSM</a>
+  <span class="badge">v1.0 · Docs</span>
+  <span class="bc"><a href="index.html">Home</a><span class="sep">›</span>Database Schema</span>
+</header>
+<nav id="nav">
+  <div class="ns"><div class="ns-title">Overview</div>
+    <a href="index.html" class="nl">Architecture</a>
+  </div>
+  <div class="ns"><div class="ns-title">Core Layer</div>
+    <a href="core-models.html" class="nl">Domain Models</a>
+    <a href="core-interfaces.html" class="nl">Interfaces</a>
+  </div>
+  <div class="ns"><div class="ns-title">Infrastructure</div>
+    <a href="repositories.html" class="nl">Repositories</a>
+  </div>
+  <div class="ns"><div class="ns-title">Feature Services</div>
+    <a href="services.html" class="nl">Services</a>
+  </div>
+  <div class="ns"><div class="ns-title">API Layer</div>
+    <a href="api-reference.html" class="nl">REST Endpoints</a>
+  </div>
+  <div class="ns"><div class="ns-title">Frontend</div>
+    <a href="frontend.html" class="nl">React Application</a>
+  </div>
+  <div class="ns"><div class="ns-title">Database</div>
+    <a href="database.html" class="nl">Schema Reference</a>
+  </div>
+</nav>
+<main id="main">
+
+<h1>Database Schema</h1>
+<p class="subtitle">
+  SQL Server database divided into 7 schemas.  Full schema scripts live in
+  <code>DatabaseSchema/FullSchema.sql</code>.  Incremental alter scripts follow the
+  naming convention <code>Alter_YYYYMMDD_Description.sql</code>.
+</p>
+
+<div class="note"><div class="note-title">Naming conventions</div>
+  <ul>
+    <li>Primary keys: <code>TableNameId</code> (INT IDENTITY or TINYINT for small lookup tables)</li>
+    <li>Timestamps: all UTC, stored as <code>DATETIME2(3)</code></li>
+    <li>Soft delete: <code>DeletedAt DATETIME2(3) NULL</code> — non-null = deleted</li>
+    <li>Audit columns: <code>CreatedAt</code>, <code>UpdatedAt</code> — set via <code>SYSUTCDATETIME()</code></li>
+    <li>Slugs: lower-kebab-case, URL-safe, generated from display names</li>
+  </ul>
+</div>
+
+<!-- Schema overview -->
+<h2>Schema Overview</h2>
+<div class="tbl-wrap"><table>
+  <tr><th>Schema</th><th>Purpose</th><th>Key tables</th></tr>
+  <tr><td><span class="tag t-db">core</span></td><td>People and infrastructure</td><td>User, Group, Service, ConfigurationItem</td></tr>
+  <tr><td><span class="tag t-db">itil</span></td><td>ITIL ticket types</td><td>Incident, Problem, Change, ChangeReviewer</td></tr>
+  <tr><td><span class="tag t-db">kb</span></td><td>Knowledge Base</td><td>Article, Category, Tag, ArticleTag</td></tr>
+  <tr><td><span class="tag t-db">lookup</span></td><td>Reference / lookup data</td><td>Priority, IncidentStatus, Role, Category, PriorityMatrix, …</td></tr>
+  <tr><td><span class="tag t-db">audit</span></td><td>Audit trail &amp; notifications</td><td>ActivityEvent, Comment, Watcher, Notification</td></tr>
+  <tr><td><span class="tag t-db">reporting</span></td><td>Stored procedures only</td><td>usp_DashboardKpis, usp_EvaluateSlaBreaches</td></tr>
+  <tr><td><span class="tag t-db">admin</span></td><td>Admin configuration</td><td>SlaTier, SlaTierTarget, BusinessCalendar, BusinessDay, BusinessHoliday, Automation</td></tr>
+</table></div>
+
+<!-- ─────────────────── core schema ─────────────────── -->
+<section id="schema-core" class="section-anchor">
+<h2>core schema</h2>
+
+<h3>core.User</h3>
+<div class="tbl-wrap"><table>
+  <tr><th>Column</th><th>Type</th><th>Constraints</th><th>Description</th></tr>
+  <tr><td><code>UserId</code></td><td>INT</td><td>PK, IDENTITY</td><td></td></tr>
+  <tr><td><code>ExternalId</code></td><td>NVARCHAR(128)</td><td>NOT NULL, UQ</td><td>Identity provider ID</td></tr>
+  <tr><td><code>Email</code></td><td>NVARCHAR(256)</td><td>NOT NULL, UQ</td><td></td></tr>
+  <tr><td><code>DisplayName</code></td><td>NVARCHAR(128)</td><td>NOT NULL</td><td></td></tr>
+  <tr><td><code>Title</code></td><td>NVARCHAR(128)</td><td>NULL</td><td>Job title</td></tr>
+  <tr><td><code>AvatarInitials</code></td><td>NCHAR(2)</td><td>NULL</td><td>Auto-generated from DisplayName</td></tr>
+  <tr><td><code>AvatarColor</code></td><td>NCHAR(7)</td><td>NULL</td><td>Hex colour e.g. <code>#4f6ef7</code></td></tr>
+  <tr><td><code>RoleId</code></td><td>TINYINT</td><td>NOT NULL, FK → lookup.Role</td><td></td></tr>
+  <tr><td><code>PrimaryGroupId</code></td><td>INT</td><td>NULL, FK → core.Group</td><td></td></tr>
+  <tr><td><code>IsActive</code></td><td>BIT</td><td>NOT NULL, DEFAULT 1</td><td></td></tr>
+  <tr><td><code>CreatedAt</code>, <code>UpdatedAt</code></td><td>DATETIME2(3)</td><td>NOT NULL</td><td></td></tr>
+</table></div>
+
+<h3>core.Group</h3>
+<div class="tbl-wrap"><table>
+  <tr><th>Column</th><th>Type</th><th>Constraints</th></tr>
+  <tr><td><code>GroupId</code></td><td>INT</td><td>PK, IDENTITY</td></tr>
+  <tr><td><code>Slug</code></td><td>NVARCHAR(128)</td><td>NOT NULL, UQ</td></tr>
+  <tr><td><code>Name</code></td><td>NVARCHAR(128)</td><td>NOT NULL</td></tr>
+  <tr><td><code>Description</code></td><td>NVARCHAR(512)</td><td>NULL</td></tr>
+  <tr><td><code>IsActive</code></td><td>BIT</td><td>NOT NULL, DEFAULT 1</td></tr>
+  <tr><td><code>CreatedAt</code>, <code>UpdatedAt</code></td><td>DATETIME2(3)</td><td>NOT NULL</td></tr>
+</table></div>
+
+<h3>core.Service</h3>
+<div class="tbl-wrap"><table>
+  <tr><th>Column</th><th>Type</th><th>Constraints</th></tr>
+  <tr><td><code>ServiceId</code></td><td>INT</td><td>PK, IDENTITY</td></tr>
+  <tr><td><code>Slug</code></td><td>NVARCHAR(128)</td><td>NOT NULL, UQ</td></tr>
+  <tr><td><code>Name</code></td><td>NVARCHAR(128)</td><td>NOT NULL</td></tr>
+  <tr><td><code>Description</code></td><td>NVARCHAR(512)</td><td>NULL</td></tr>
+  <tr><td><code>CategoryId</code></td><td>INT</td><td>NULL, FK → lookup.Category</td></tr>
+  <tr><td><code>OwningGroupId</code></td><td>INT</td><td>NULL, FK → core.Group</td></tr>
+  <tr><td><code>HealthId</code></td><td>TINYINT</td><td>NOT NULL, FK → lookup.ServiceHealth</td></tr>
+  <tr><td><code>SlaTierId</code></td><td>INT</td><td>NULL, FK → admin.SlaTier</td></tr>
+  <tr><td><code>IsActive</code></td><td>BIT</td><td>NOT NULL, DEFAULT 1</td></tr>
+  <tr><td><code>CreatedAt</code>, <code>UpdatedAt</code></td><td>DATETIME2(3)</td><td>NOT NULL</td></tr>
+</table></div>
+
+<h3>core.ConfigurationItem</h3>
+<div class="tbl-wrap"><table>
+  <tr><th>Column</th><th>Type</th><th>Constraints</th></tr>
+  <tr><td><code>CiId</code></td><td>INT</td><td>PK, IDENTITY</td></tr>
+  <tr><td><code>AssetTag</code></td><td>NVARCHAR(64)</td><td>NOT NULL, UQ</td></tr>
+  <tr><td><code>Name</code></td><td>NVARCHAR(128)</td><td>NOT NULL</td></tr>
+  <tr><td><code>Type</code></td><td>NVARCHAR(64)</td><td>NOT NULL — e.g. Server, Application</td></tr>
+  <tr><td><code>Environment</code></td><td>NVARCHAR(64)</td><td>NULL — e.g. Production, Staging</td></tr>
+  <tr><td><code>Region</code></td><td>NVARCHAR(64)</td><td>NULL</td></tr>
+  <tr><td><code>ServiceId</code></td><td>INT</td><td>NULL, FK → core.Service</td></tr>
+  <tr><td><code>OwnerUserId</code></td><td>INT</td><td>NULL, FK → core.User</td></tr>
+  <tr><td><code>IsActive</code></td><td>BIT</td><td>NOT NULL</td></tr>
+</table></div>
+</section>
+
+<!-- ─────────────────── itil schema ─────────────────── -->
+<section id="schema-itil" class="section-anchor">
+<h2>itil schema</h2>
+
+<h3>itil.Incident</h3>
+<div class="tbl-wrap"><table>
+  <tr><th>Column</th><th>Type</th><th>Constraints</th></tr>
+  <tr><td><code>IncidentId</code></td><td>BIGINT</td><td>PK, IDENTITY</td></tr>
+  <tr><td><code>Number</code></td><td>NVARCHAR(16)</td><td>NOT NULL, UQ — e.g. INC0001</td></tr>
+  <tr><td><code>Title</code></td><td>NVARCHAR(256)</td><td>NOT NULL</td></tr>
+  <tr><td><code>Description</code></td><td>NVARCHAR(MAX)</td><td>NULL</td></tr>
+  <tr><td><code>StepsToReproduce</code></td><td>NVARCHAR(MAX)</td><td>NULL</td></tr>
+  <tr><td><code>PriorityId</code></td><td>TINYINT</td><td>NOT NULL, FK → lookup.Priority</td></tr>
+  <tr><td><code>StatusId</code></td><td>TINYINT</td><td>NOT NULL, FK → lookup.IncidentStatus</td></tr>
+  <tr><td><code>ImpactId</code></td><td>TINYINT</td><td>NULL, FK → lookup.Impact</td></tr>
+  <tr><td><code>UrgencyId</code></td><td>TINYINT</td><td>NULL, FK → lookup.Urgency</td></tr>
+  <tr><td><code>CategoryId</code></td><td>INT</td><td>NULL, FK → lookup.Category</td></tr>
+  <tr><td><code>ServiceId</code></td><td>INT</td><td>NULL, FK → core.Service</td></tr>
+  <tr><td><code>CiId</code></td><td>INT</td><td>NULL, FK → core.ConfigurationItem</td></tr>
+  <tr><td><code>ReporterUserId</code></td><td>INT</td><td>NULL, FK → core.User</td></tr>
+  <tr><td><code>AssigneeUserId</code></td><td>INT</td><td>NULL, FK → core.User</td></tr>
+  <tr><td><code>GroupId</code></td><td>INT</td><td>NULL, FK → core.Group</td></tr>
+  <tr><td><code>ParentProblemId</code></td><td>INT</td><td>NULL, FK → itil.Problem</td></tr>
+  <tr><td><code>SlaTargetMinutes</code></td><td>INT</td><td>NULL</td></tr>
+  <tr><td><code>SlaStartedAt</code></td><td>DATETIME2(3)</td><td>NULL</td></tr>
+  <tr><td><code>SlaPausedSeconds</code></td><td>INT</td><td>NOT NULL, DEFAULT 0</td></tr>
+  <tr><td><code>SlaBreachedAt</code></td><td>DATETIME2(3)</td><td>NULL — set by SLA stored proc</td></tr>
+  <tr><td><code>SlaWarnedAt</code></td><td>DATETIME2(3)</td><td>NULL — set by SLA stored proc</td></tr>
+  <tr><td><code>SlaPercent</code></td><td>DECIMAL(6,2)</td><td>NULL — recalculated by stored proc</td></tr>
+  <tr><td><code>OpenedAt</code></td><td>DATETIME2(3)</td><td>NOT NULL, DEFAULT SYSUTCDATETIME()</td></tr>
+  <tr><td><code>ResolvedAt</code></td><td>DATETIME2(3)</td><td>NULL</td></tr>
+  <tr><td><code>ClosedAt</code></td><td>DATETIME2(3)</td><td>NULL</td></tr>
+  <tr><td><code>DeletedAt</code></td><td>DATETIME2(3)</td><td>NULL — soft delete</td></tr>
+  <tr><td><code>UpdatedAt</code></td><td>DATETIME2(3)</td><td>NOT NULL</td></tr>
+</table></div>
+
+<h3>itil.Problem</h3>
+<p>Columns: <code>ProblemId</code>, <code>Number</code>, <code>Title</code>, <code>RootCause</code>,
+   <code>Workaround</code>, <code>PriorityId</code> (FK → lookup.Priority),
+   <code>StateId</code> (FK → lookup.ProblemState), <code>IsKnownError</code>,
+   <code>AssigneeUserId</code>, <code>GroupId</code>, <code>OpenedAt</code>,
+   <code>ResolvedAt</code>, <code>DeletedAt</code>, <code>UpdatedAt</code>.</p>
+
+<h3>itil.Change</h3>
+<p>Columns: <code>ChangeId</code>, <code>Number</code>, <code>Title</code>,
+   <code>Description</code>, <code>RolloutPlan</code>, <code>RollbackPlan</code>,
+   <code>ImpactNotes</code>, <code>ChangeTypeId</code> (FK → lookup.ChangeType),
+   <code>RiskId</code> (FK → lookup.Risk), <code>StateId</code> (FK → lookup.ChangeState),
+   <code>OwnerUserId</code>, <code>GroupId</code>, <code>CabId</code>,
+   <code>ScheduledStart</code>, <code>ScheduledEnd</code>, <code>DowntimeEstimate</code>,
+   <code>SubmittedAt</code>, <code>ApprovedAt</code>, <code>CompletedAt</code>,
+   <code>DeletedAt</code>, <code>UpdatedAt</code>.</p>
+
+<h3>itil.ChangeReviewer</h3>
+<p>Join table between Change and User with vote data.
+   Columns: <code>ReviewerId</code>, <code>ChangeId</code> (FK → itil.Change),
+   <code>UserId</code> (FK → core.User), <code>VoteId</code> (FK → lookup.ApprovalVote),
+   <code>Comment</code>, <code>VotedAt</code>.</p>
+
+<h3>Stored Procedures in itil schema</h3>
+<ul>
+  <li><code>itil.usp_AddComment</code> — inserts a <code>audit.Comment</code> row, writes an ActivityEvent,
+      and creates Notification rows for all watchers of the parent ticket in a single transaction.</li>
+</ul>
+</section>
+
+<!-- ─────────────────── kb schema ─────────────────── -->
+<section id="schema-kb" class="section-anchor">
+<h2>kb schema</h2>
+<div class="tbl-wrap"><table>
+  <tr><th>Table</th><th>Key Columns</th></tr>
+  <tr><td><code>kb.Category</code></td><td><code>KbCategoryId</code>, <code>Slug</code>, <code>DisplayName</code>, <code>Icon</code>, <code>SortOrder</code></td></tr>
+  <tr><td><code>kb.Article</code></td><td><code>ArticleId</code>, <code>Number</code>, <code>Title</code>, <code>Snippet</code>, <code>Body</code>, <code>KbCategoryId</code> (FK), <code>AuthorUserId</code> (FK), <code>Status</code>, <code>Pinned</code>, <code>Views</code>, <code>HelpfulCount</code>, <code>NotHelpfulCount</code>, <code>CreatedAt</code>, <code>UpdatedAt</code></td></tr>
+  <tr><td><code>kb.Tag</code></td><td><code>TagId</code>, <code>Slug</code>, <code>DisplayName</code></td></tr>
+  <tr><td><code>kb.ArticleTag</code></td><td><code>ArticleId</code> (FK), <code>TagId</code> (FK) — composite PK</td></tr>
+</table></div>
+</section>
+
+<!-- ─────────────────── lookup schema ─────────────────── -->
+<section id="schema-lookup" class="section-anchor">
+<h2>lookup schema</h2>
+<p>All lookup tables are small, rarely-changing reference datasets.  Most have
+   <code>SortOrder INT</code> for display ordering.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Table</th><th>Columns (beyond PK)</th></tr>
+  <tr><td><code>lookup.Priority</code></td><td><code>Code</code>, <code>DisplayName</code>, <code>SortOrder</code>, <code>ColorHex</code></td></tr>
+  <tr><td><code>lookup.IncidentStatus</code></td><td><code>Code</code>, <code>DisplayName</code>, <code>IsTerminal</code>, <code>PausesSla</code>, <code>SortOrder</code></td></tr>
+  <tr><td><code>lookup.ProblemState</code></td><td><code>Code</code>, <code>DisplayName</code>, <code>IsResolved</code>, <code>SortOrder</code></td></tr>
+  <tr><td><code>lookup.ChangeState</code></td><td><code>Code</code>, <code>DisplayName</code>, <code>IsTerminal</code>, <code>SortOrder</code></td></tr>
+  <tr><td><code>lookup.ChangeType</code></td><td><code>Code</code> (<code>normal|standard|emergency</code>), <code>DisplayName</code></td></tr>
+  <tr><td><code>lookup.Risk</code></td><td><code>Code</code>, <code>DisplayName</code>, <code>SortOrder</code></td></tr>
+  <tr><td><code>lookup.Impact</code></td><td><code>Code</code>, <code>DisplayName</code>, <code>SortOrder</code></td></tr>
+  <tr><td><code>lookup.Urgency</code></td><td><code>Code</code>, <code>DisplayName</code>, <code>SortOrder</code></td></tr>
+  <tr><td><code>lookup.Role</code></td><td><code>Code</code>, <code>DisplayName</code>, <code>Description</code></td></tr>
+  <tr><td><code>lookup.Category</code></td><td><code>Code</code>, <code>DisplayName</code>, <code>SortOrder</code></td></tr>
+  <tr><td><code>lookup.SubCategory</code></td><td><code>CategoryId</code> (FK), <code>Code</code>, <code>DisplayName</code>, <code>SortOrder</code></td></tr>
+  <tr><td><code>lookup.ServiceHealth</code></td><td><code>Code</code> (<code>operational|degraded|outage|maintenance</code>), <code>DisplayName</code>, <code>ColorHex</code></td></tr>
+  <tr><td><code>lookup.ApprovalVote</code></td><td><code>Code</code> (<code>pending|approved|rejected|abstain</code>), <code>DisplayName</code></td></tr>
+  <tr><td><code>lookup.PriorityMatrix</code></td><td><code>ImpactId</code> (FK), <code>UrgencyId</code> (FK), <code>PriorityId</code> (FK) — composite PK on ImpactId + UrgencyId</td></tr>
+</table></div>
+</section>
+
+<!-- ─────────────────── audit schema ─────────────────── -->
+<section id="schema-audit" class="section-anchor">
+<h2>audit schema</h2>
+<div class="tbl-wrap"><table>
+  <tr><th>Table</th><th>Key Columns</th></tr>
+  <tr><td><code>audit.ActivityEvent</code></td>
+      <td><code>ActivityId</code>, <code>ParentType</code> (incident|problem|change), <code>ParentId</code>,
+          <code>ActorUserId</code> (FK), <code>Kind</code>, <code>Field</code>,
+          <code>OldValue</code>, <code>NewValue</code>, <code>OccurredAt</code></td></tr>
+  <tr><td><code>audit.Comment</code></td>
+      <td><code>CommentId</code>, <code>ParentType</code>, <code>ParentId</code>,
+          <code>AuthorUserId</code> (FK), <code>Body</code>, <code>IsInternal</code>,
+          <code>CreatedAt</code>, <code>EditedAt</code></td></tr>
+  <tr><td><code>audit.Watcher</code></td>
+      <td><code>WatcherId</code>, <code>ParentType</code>, <code>ParentId</code>,
+          <code>UserId</code> (FK), <code>CreatedAt</code> — composite UQ on (ParentType, ParentId, UserId)</td></tr>
+  <tr><td><code>audit.Notification</code></td>
+      <td><code>NotificationId</code>, <code>UserId</code> (FK), <code>ParentType</code>,
+          <code>ParentId</code>, <code>Message</code>, <code>IsRead</code>,
+          <code>CreatedAt</code></td></tr>
+</table></div>
+</section>
+
+<!-- ─────────────────── reporting schema ─────────────────── -->
+<section id="schema-reporting" class="section-anchor">
+<h2>reporting schema — Stored Procedures</h2>
+<div class="tbl-wrap"><table>
+  <tr><th>Procedure</th><th>Called by</th><th>Description</th></tr>
+  <tr>
+    <td><code>reporting.usp_DashboardKpis</code></td>
+    <td><a href="repositories.html#sla-repo">SlaRepository.GetStatsAsync</a></td>
+    <td>Returns a single row: open incidents, SLA at-risk count, changes this week, avg resolution minutes, SLA met %, breach count.  Parameter: <code>@Days INT</code>.</td>
+  </tr>
+  <tr>
+    <td><code>reporting.usp_EvaluateSlaBreaches</code></td>
+    <td><a href="services.html#sla-bg">SlaBackgroundService</a> (every 60s)</td>
+    <td>Creates <code>#breached</code> and <code>#warned</code> temp tables, calculates elapsed time vs SLA target for all open non-deleted incidents, updates <code>SlaBreachedAt</code>, <code>SlaWarnedAt</code>, and <code>SlaPercent</code> in <code>itil.Incident</code>.</td>
+  </tr>
+</table></div>
+</section>
+
+<!-- ─────────────────── admin schema ─────────────────── -->
+<section id="schema-admin" class="section-anchor">
+<h2>admin schema</h2>
+<div class="tbl-wrap"><table>
+  <tr><th>Table</th><th>Key Columns</th></tr>
+  <tr><td><code>admin.SlaTier</code></td>
+      <td><code>SlaTierId</code>, <code>Name</code>, <code>Description</code>,
+          <code>IsActive</code>, <code>Calculate247</code>, <code>AutoEscalate</code>,
+          <code>SortOrder</code></td></tr>
+  <tr><td><code>admin.SlaTierTarget</code></td>
+      <td><code>TargetId</code>, <code>SlaTierId</code> (FK), <code>PriorityId</code> (FK),
+          <code>ResponseMinutes</code>, <code>ResolutionMinutes</code>
+          — UQ on (SlaTierId, PriorityId)</td></tr>
+  <tr><td><code>admin.BusinessCalendar</code></td>
+      <td><code>CalendarId</code>, <code>Name</code>, <code>Timezone</code> (IANA),
+          <code>IsDefault</code></td></tr>
+  <tr><td><code>admin.BusinessDay</code></td>
+      <td><code>DayId</code>, <code>CalendarId</code> (FK), <code>DayOfWeek</code> (0–6),
+          <code>StartTime</code> (TIME), <code>EndTime</code> (TIME)
+          — UQ on (CalendarId, DayOfWeek)</td></tr>
+  <tr><td><code>admin.BusinessHoliday</code></td>
+      <td><code>HolidayId</code>, <code>CalendarId</code> (FK),
+          <code>HolidayDate</code> (DATE), <code>Name</code></td></tr>
+  <tr><td><code>admin.Automation</code></td>
+      <td><code>AutomationId</code>, <code>Name</code>, <code>WhenDescription</code>,
+          <code>ThenDescription</code>, <code>IsEnabled</code>,
+          <code>RunCount30d</code>, <code>CreatedAt</code>, <code>UpdatedAt</code></td></tr>
+</table></div>
+</section>
+
+<!-- ─────────────────── Relationships ─────────────────── -->
+<h2>Key Foreign-Key Relationships</h2>
+<div class="tbl-wrap"><table>
+  <tr><th>From</th><th>Column</th><th>To</th><th>Description</th></tr>
+  <tr><td>itil.Incident</td><td>PriorityId</td><td>lookup.Priority</td><td>Incident priority</td></tr>
+  <tr><td>itil.Incident</td><td>StatusId</td><td>lookup.IncidentStatus</td><td>Lifecycle state; <code>PausesSla</code> flag pauses SLA clock</td></tr>
+  <tr><td>itil.Incident</td><td>AssigneeUserId</td><td>core.User</td><td>Current owner</td></tr>
+  <tr><td>itil.Incident</td><td>ServiceId</td><td>core.Service</td><td>Affected service</td></tr>
+  <tr><td>itil.Incident</td><td>ParentProblemId</td><td>itil.Problem</td><td>Root-cause linkage</td></tr>
+  <tr><td>core.Service</td><td>SlaTierId</td><td>admin.SlaTier</td><td>SLA policy for the service</td></tr>
+  <tr><td>core.User</td><td>PrimaryGroupId</td><td>core.Group</td><td>Team membership</td></tr>
+  <tr><td>core.User</td><td>RoleId</td><td>lookup.Role</td><td>Access role</td></tr>
+  <tr><td>lookup.SubCategory</td><td>CategoryId</td><td>lookup.Category</td><td>Two-level classification</td></tr>
+  <tr><td>lookup.PriorityMatrix</td><td>ImpactId / UrgencyId / PriorityId</td><td>lookup.Impact / Urgency / Priority</td><td>Auto-priority assignment grid</td></tr>
+  <tr><td>admin.SlaTierTarget</td><td>SlaTierId</td><td>admin.SlaTier</td><td>Per-priority targets within a tier</td></tr>
+  <tr><td>audit.ActivityEvent</td><td>ParentType + ParentId</td><td>itil.Incident/Problem/Change</td><td>Polymorphic parent (no FK — discriminator column)</td></tr>
+  <tr><td>audit.Comment</td><td>ParentType + ParentId</td><td>itil.Incident/Problem/Change</td><td>Polymorphic parent</td></tr>
+</table></div>
+
+<!-- ─────────────────── Alter scripts ─────────────────── -->
+<h2>Applied Alter Scripts</h2>
+<div class="tbl-wrap"><table>
+  <tr><th>Script</th><th>Change</th></tr>
+  <tr><td><code>Alter_20260502_FixSlaBreachesTempTables.sql</code></td>
+      <td>Added explicit <code>CREATE TABLE #breached</code> and <code>#warned</code> before OUTPUT INTO clauses in <code>reporting.usp_EvaluateSlaBreaches</code></td></tr>
+  <tr><td><code>Alter_20260502_AddSubCategoryTable.sql</code></td>
+      <td>Created <code>lookup.SubCategory</code> table with FK to <code>lookup.Category</code></td></tr>
+  <tr><td><code>Alter_20260502_AddRoleDescription.sql</code></td>
+      <td>Added <code>Description NVARCHAR(256) NULL</code> to <code>lookup.Role</code>; updated role display names</td></tr>
+  <tr><td><code>Alter_20260502_AdminFeatureTables.sql</code></td>
+      <td>Created <code>admin</code> schema + SlaTier, SlaTierTarget, BusinessCalendar, BusinessDay, BusinessHoliday, Automation tables; added <code>SlaTierId</code> FK to <code>core.Service</code></td></tr>
+</table></div>
+
+</main>
+<script src="js/nav.js"></script>
+</body>
+</html>

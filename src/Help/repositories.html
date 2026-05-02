@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Repositories — Aperture ITSM Docs</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="hdr">
+  <a href="index.html" class="logo">Aperture ITSM</a>
+  <span class="badge">v1.0 · Docs</span>
+  <span class="bc"><a href="index.html">Home</a><span class="sep">›</span>Repositories</span>
+</header>
+<nav id="nav">
+  <div class="ns"><div class="ns-title">Overview</div>
+    <a href="index.html" class="nl">Architecture</a>
+  </div>
+  <div class="ns"><div class="ns-title">Core Layer</div>
+    <a href="core-models.html" class="nl">Domain Models</a>
+    <a href="core-interfaces.html" class="nl">Interfaces</a>
+  </div>
+  <div class="ns"><div class="ns-title">Infrastructure</div>
+    <a href="repositories.html" class="nl">Repositories</a>
+  </div>
+  <div class="ns"><div class="ns-title">Feature Services</div>
+    <a href="services.html" class="nl">Services</a>
+  </div>
+  <div class="ns"><div class="ns-title">API Layer</div>
+    <a href="api-reference.html" class="nl">REST Endpoints</a>
+  </div>
+  <div class="ns"><div class="ns-title">Frontend</div>
+    <a href="frontend.html" class="nl">React Application</a>
+  </div>
+  <div class="ns"><div class="ns-title">Database</div>
+    <a href="database.html" class="nl">Schema Reference</a>
+  </div>
+</nav>
+<main id="main">
+
+<h1>Repositories</h1>
+<p class="subtitle">
+  All data-access code lives in <code>ApertureITSM.Infrastructure/Repositories/</code>.
+  Each repository implements one <a href="core-interfaces.html">Core interface</a>,
+  uses <strong>Dapper</strong> for SQL execution, and writes to <strong>log4net</strong>
+  (all routing to <code>logs/Infrastructure.log</code>).
+</p>
+
+<div class="note"><div class="note-title">Common patterns</div>
+  <ul>
+    <li>All methods wrap their SQL in <code>try/catch</code>; exceptions are logged with <code>log.Error(..., ex)</code> then re-thrown.</li>
+    <li>Connection is obtained per-method via <code>IDbConnectionFactory.Create()</code> (SqlConnection, disposed with <code>using</code>).</li>
+    <li>Timestamps stored as UTC; returned as ISO-8601 strings via <code>CONVERT(VARCHAR, ..., 120)</code>.</li>
+    <li>Soft-delete pattern: <code>DeletedAt IS NULL</code> added to every WHERE clause that should exclude deleted rows.</li>
+    <li>Slug generation: <code>name.ToLowerInvariant().Replace(' ', '-')</code> with regex stripping non-alphanum/dash chars.</li>
+  </ul>
+</div>
+
+<!-- DbConnectionFactory -->
+<section id="db-factory" class="section-anchor">
+<h2>DbConnectionFactory <span class="since">· Database/DbConnectionFactory.cs</span></h2>
+<p>The only place in the codebase that knows about SQL Server.  Implements
+   <code>IDbConnectionFactory</code> which exposes one method: <code>Create() → SqlConnection</code>.
+   The connection string is injected via <code>IConfiguration.GetConnectionString("Default")</code>.</p>
+<pre><code><span class="cs-kw">public interface</span> <span class="cs-type">IDbConnectionFactory</span>
+{
+    <span class="cs-type">SqlConnection</span> <span class="cs-met">Create</span>();
+}
+
+<span class="cs-kw">public class</span> <span class="cs-type">SqlConnectionFactory</span>(<span class="cs-type">IConfiguration</span> config) : <span class="cs-type">IDbConnectionFactory</span>
+{
+    <span class="cs-kw">public</span> <span class="cs-type">SqlConnection</span> <span class="cs-met">Create</span>() =&gt;
+        <span class="cs-kw">new</span>(config.<span class="cs-met">GetConnectionString</span>(<span class="cs-str">"Default"</span>));
+}</code></pre>
+<p>Registered as <code>Singleton</code> in <code>Program.cs</code>.  The returned connection is always
+   opened lazily by Dapper's <code>QueryAsync</code> / <code>ExecuteAsync</code> — you never call <code>Open()</code> manually.</p>
+</section>
+
+<!-- IncidentRepository -->
+<section id="incident-repo" class="section-anchor">
+<h2>IncidentRepository</h2>
+<p>Implements <a href="core-interfaces.html#i-incident">IIncidentRepository</a>.
+   The most complex repository — handles filtering, pagination, SLA data, and multi-table joins.</p>
+
+<h3>GetPagedAsync</h3>
+<p>Builds a dynamic SQL query based on the <code>IncidentFilter</code> passed in.  Joins:</p>
+<ul>
+  <li><code>itil.Incident</code> → <code>lookup.Priority</code>, <code>lookup.IncidentStatus</code></li>
+  <li>→ <code>lookup.Impact</code>, <code>lookup.Urgency</code>, <code>lookup.Category</code></li>
+  <li>→ <code>core.Service</code>, <code>core.ConfigurationItem</code></li>
+  <li>→ <code>core.User</code> (reporter, assignee), <code>core.Group</code></li>
+  <li>→ <code>itil.Problem</code> (for parent problem number)</li>
+  <li>Subquery counts for comments and linked tickets</li>
+</ul>
+<p>Filter predicates appended conditionally: <code>StatusId IN (...)</code>, <code>PriorityId = @p</code>,
+   <code>AssigneeUserId = @a</code>, <code>SlaPercent &gt;= 75</code> (SLA at-risk), free-text
+   <code>LIKE '%@q%'</code> on title + description.</p>
+<p>Pagination via <code>OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY</code>.</p>
+
+<h3>CreateAsync</h3>
+<p>Looks up PriorityId, StatusId (= "new"), CategoryId, ServiceId, CiId, and ReporterUserId by their codes/external IDs, then inserts into <code>itil.Incident</code>.  Returns <code>SCOPE_IDENTITY()</code>.
+   Also inserts the initial <code>audit.ActivityEvent</code> row for the "created" event.</p>
+
+<h3>UpdateStatusAsync / UpdateAssigneeAsync / UpdatePriorityAsync</h3>
+<p>Each does an <code>UPDATE itil.Incident SET ... WHERE IncidentId = @id</code> followed by
+   an <code>INSERT INTO audit.ActivityEvent</code> for the audit trail.  The two operations
+   run in sequence on the same connection (not a transaction — if the activity insert
+   fails the status is still saved; acceptable trade-off for simplicity).</p>
+
+<h3>SoftDeleteAsync</h3>
+<p>Sets <code>DeletedAt = SYSUTCDATETIME()</code>.  All <code>GetPaged</code> queries filter on
+   <code>DeletedAt IS NULL</code>.</p>
+</section>
+
+<!-- ProblemRepository -->
+<section id="problem-repo" class="section-anchor">
+<h2>ProblemRepository</h2>
+<p>Implements <a href="core-interfaces.html#i-problem">IProblemRepository</a>.</p>
+
+<h4>Tables touched</h4>
+<p><code>itil.Problem</code>, <code>lookup.Priority</code>, <code>lookup.ProblemState</code>,
+   <code>core.User</code> (assignee), <code>core.Group</code>, <code>itil.Incident</code>
+   (for LinkedIncidentCount), <code>core.Service</code> (for affected service slugs),
+   <code>audit.ActivityEvent</code>.</p>
+
+<h4>Key notes</h4>
+<ul>
+  <li><strong>GetAllAsync</strong> runs one query for problem rows, then a separate query for linked incident counts grouped by ProblemId, then maps in C#.</li>
+  <li><strong>GetByIdAsync</strong> enriches the returned object by querying <code>itil.IncidentService</code> for service slugs (services linked through linked incidents).</li>
+  <li>State transitions write an <code>audit.ActivityEvent</code> with <code>Kind = 'state_change'</code>.</li>
+</ul>
+</section>
+
+<!-- ChangeRepository -->
+<section id="change-repo" class="section-anchor">
+<h2>ChangeRepository</h2>
+<p>Implements <a href="core-interfaces.html#i-change">IChangeRepository</a>.</p>
+
+<h4>Tables touched</h4>
+<p><code>itil.Change</code>, <code>lookup.ChangeType</code>, <code>lookup.Risk</code>,
+   <code>lookup.ChangeState</code>, <code>core.User</code> (owner, approver),
+   <code>core.Group</code>, <code>itil.ChangeReviewer</code>,
+   <code>lookup.ApprovalVote</code>, <code>core.Service</code>,
+   <code>audit.ActivityEvent</code>.</p>
+
+<h4>Key notes</h4>
+<ul>
+  <li><strong>GetAllAsync</strong> queries a flat result set then calls a private <code>EnrichAsync</code> helper that batch-loads all reviewer rows in one query and maps them to the correct Change by ChangeId.</li>
+  <li><strong>VoteAsync</strong> does a MERGE into <code>itil.ChangeReviewer</code> (one row per change+user) so re-voting updates the existing row.</li>
+  <li>Affected service slugs are loaded separately by querying <code>itil.ChangeService</code> (join table).</li>
+</ul>
+</section>
+
+<!-- KbRepository -->
+<section id="kb-repo" class="section-anchor">
+<h2>KbRepository</h2>
+<p>Implements <a href="core-interfaces.html#i-kb">IKbRepository</a>.</p>
+
+<h4>Tables touched</h4>
+<p><code>kb.Article</code>, <code>kb.Category</code>, <code>core.User</code> (author),
+   <code>kb.ArticleTag</code>, <code>kb.Tag</code>.</p>
+
+<h4>Key notes</h4>
+<ul>
+  <li><strong>SearchAsync</strong> uses <code>LIKE '%@q%'</code> on Title and Snippet.  For production
+    consider upgrading to SQL Server Full-Text Search (<code>CONTAINS</code>).</li>
+  <li><strong>GetByIdAsync</strong> loads the full body then calls <code>EnrichTagsAsync</code> which
+    queries <code>kb.ArticleTag JOIN kb.Tag</code> and populates <code>article.Tags</code>.</li>
+  <li><strong>IncrementViewsAsync</strong> runs a single <code>UPDATE kb.Article SET Views = Views + 1</code> — atomic at row level.</li>
+</ul>
+</section>
+
+<!-- ActivityRepository -->
+<section id="activity-repo" class="section-anchor">
+<h2>ActivityRepository</h2>
+<p>Implements <a href="core-interfaces.html#i-activity">IActivityRepository</a>.</p>
+
+<h4>Tables touched</h4>
+<p><code>audit.ActivityEvent</code>, <code>audit.Comment</code>, <code>audit.Watcher</code>,
+   <code>audit.Notification</code>, <code>core.User</code>, stored procedure
+   <code>itil.usp_AddComment</code>.</p>
+
+<h4>Key notes</h4>
+<ul>
+  <li><code>parentType</code> is a discriminator string (<code>'incident'|'problem'|'change'</code>)
+    stored directly in the <code>ParentType</code> column — no join table needed.</li>
+  <li><strong>AddCommentAsync</strong> calls the <code>itil.usp_AddComment</code> stored procedure which
+    atomically inserts the comment, writes an ActivityEvent, and fans out Notification rows
+    to all watchers.</li>
+  <li>Notifications are soft-read: <code>MarkNotificationsReadAsync</code> sets <code>IsRead = 1</code>
+    for all rows where <code>UserId = @userId AND IsRead = 0</code>.</li>
+</ul>
+</section>
+
+<!-- UserRepository -->
+<section id="user-repo" class="section-anchor">
+<h2>UserRepository</h2>
+<p>Implements <a href="core-interfaces.html#i-user">IUserRepository</a>.  Read-only.
+   Write operations (create/update users, groups) are handled by
+   <a href="#admin-repo">AdminRepository</a>.</p>
+
+<h4>Tables touched</h4>
+<p><code>core.User</code>, <code>lookup.Role</code>, <code>core.Group</code>,
+   <code>core.Service</code>, <code>lookup.ServiceHealth</code>,
+   <code>core.ConfigurationItem</code>.</p>
+
+<h4>GetByExternalIdAsync</h4>
+<p>Used at authentication time to resolve a claims-based identity into the app's internal
+   UserId.  Returns null if no match (user not yet provisioned).</p>
+</section>
+
+<!-- LookupRepository -->
+<section id="lookup-repo" class="section-anchor">
+<h2>LookupRepository</h2>
+<p>Implements <a href="core-interfaces.html#i-lookup">ILookupRepository</a>.
+   All methods are simple <code>SELECT ... FROM lookup.X ORDER BY SortOrder</code> queries.
+   No writes — lookup data is managed via seed scripts.</p>
+<p>Results are cached by the frontend on first load and served from Zustand state,
+   minimising repetitive calls.</p>
+</section>
+
+<!-- SlaRepository -->
+<section id="sla-repo" class="section-anchor">
+<h2>SlaRepository</h2>
+<p>Implements <a href="core-interfaces.html#i-sla">ISlaRepository</a>.</p>
+
+<h4>EvaluateBreachesAsync</h4>
+<p>Executes the stored procedure <code>reporting.usp_EvaluateSlaBreaches</code>.  This procedure:</p>
+<ol>
+  <li>Creates temp tables <code>#breached</code> and <code>#warned</code></li>
+  <li>Updates <code>SlaBreachedAt</code> on incidents that have exceeded their target</li>
+  <li>Updates <code>SlaWarnedAt</code> on incidents &gt;75% through their target</li>
+  <li>Recalculates <code>SlaPercent</code> on all open incidents</li>
+</ol>
+<p>Called by <a href="services.html#sla-bg">SlaBackgroundService</a> every 60 seconds.</p>
+
+<h4>GetStatsAsync</h4>
+<p>Calls <code>reporting.usp_DashboardKpis @days</code> which returns a single-row result
+   mapped to <code>SlaStats</code>.</p>
+
+<h4>GetTeamLoadAsync</h4>
+<p>Runs an aggregation query grouping <code>itil.Incident</code> by <code>core.Group</code>,
+   counting open incidents, SLA met, and breached counts per team.</p>
+
+<h4>GetDailyVolumeAsync</h4>
+<p>Groups <code>itil.Incident</code> by <code>CAST(OpenedAt AS DATE)</code> for the last N days,
+   counting total opened and those resolved on the same day.</p>
+</section>
+
+<!-- AdminRepository -->
+<section id="admin-repo" class="section-anchor">
+<h2>AdminRepository</h2>
+<p>Implements <a href="core-interfaces.html#i-admin">IAdminRepository</a>.
+   The largest repository — handles all administrative CRUD.  All write operations
+   log at INFO level with entity name/ID for audit trail purposes.</p>
+
+<h4>Tables touched</h4>
+<p><code>core.User</code>, <code>core.Group</code>, <code>lookup.Category</code>,
+   <code>lookup.SubCategory</code>, <code>lookup.Role</code>, <code>core.Service</code>,
+   <code>lookup.ServiceHealth</code>, <code>admin.SlaTier</code>, <code>admin.SlaTierTarget</code>,
+   <code>lookup.PriorityMatrix</code>, <code>admin.BusinessCalendar</code>,
+   <code>admin.BusinessDay</code>, <code>admin.BusinessHoliday</code>,
+   <code>admin.Automation</code>.</p>
+
+<h4>Key patterns</h4>
+<ul>
+  <li><strong>BuildInitials</strong> — private helper that extracts first+last initial from a display name for avatar generation.</li>
+  <li><strong>GenerateSlug</strong> — static helper using fully-qualified <code>System.Text.RegularExpressions.Regex.Replace</code> (avoids namespace collision with <code>ApertureITSM.Core.Models.Group</code>).</li>
+  <li><strong>SaveSlaTierTargetsAsync / SavePriorityMatrixAsync</strong> — use SQL MERGE (upsert) so the same method handles both insert and update of matrix/target rows.</li>
+  <li><strong>DeleteCategoryAsync</strong> — queries open incident count first; throws <code>InvalidOperationException</code> if &gt; 0 (controller returns HTTP 409 Conflict).</li>
+  <li><strong>GetCategoriesAsync</strong> — queries flat category rows with a COUNT JOIN on <code>itil.Incident</code> for TicketCount, then queries subcategories in a second round-trip and assembles the tree in C#.</li>
+  <li><strong>GetSlaTiersAsync</strong> — queries tier rows, then target rows in a second query, groups targets to tiers in C# to avoid Cartesian product.</li>
+  <li><strong>GetBusinessCalendarsAsync</strong> — three separate queries (calendars, days, holidays) assembled in C#.</li>
+</ul>
+</section>
+
+</main>
+<script src="js/nav.js"></script>
+</body>
+</html>

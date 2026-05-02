@@ -1,0 +1,171 @@
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #21253a;
+  --border: #2d3148;
+  --accent: #4f6ef7;
+  --text: #e2e8f0;
+  --text-muted: #8892a4;
+  --text-dim: #5a6375;
+  --code-bg: #252836;
+  --green: #6dda9e; --green-bg: #1a3028;
+  --blue: #7db8f7;  --blue-bg: #1a2a42;
+  --orange: #f0a742; --orange-bg: #2e2010;
+  --purple: #b48cf8; --purple-bg: #231840;
+  --red: #f07a7d;   --red-bg: #2e1416;
+  --sidebar-w: 230px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.65}
+
+/* ── Header ──────────────────────────────────────────────────── */
+#hdr{position:fixed;top:0;left:0;right:0;height:52px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:14px;z-index:100}
+#hdr .logo{color:var(--accent);font-weight:700;font-size:15px;text-decoration:none;letter-spacing:-0.3px}
+#hdr .badge{font-size:10px;font-weight:700;background:var(--blue-bg);color:var(--blue);
+  padding:2px 8px;border-radius:10px;letter-spacing:.04em}
+#hdr .bc{margin-left:auto;font-size:12px;color:var(--text-muted)}
+#hdr .bc a{color:var(--text-muted);text-decoration:none}
+#hdr .bc a:hover{color:var(--text)}
+#hdr .bc .sep{margin:0 5px;color:var(--text-dim)}
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+#nav{position:fixed;top:52px;left:0;bottom:0;width:var(--sidebar-w);
+  background:var(--surface);border-right:1px solid var(--border);
+  overflow-y:auto;padding:12px 0 24px}
+.ns{margin-bottom:16px}
+.ns-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-dim);padding:0 14px 5px}
+.nl{display:block;padding:5px 14px;font-size:12.5px;color:var(--text-muted);
+  text-decoration:none;transition:all .12s;border-left:2px solid transparent}
+.nl:hover{color:var(--text);background:rgba(255,255,255,0.04)}
+.nl.active{color:var(--accent);background:rgba(79,110,247,0.1);border-left-color:var(--accent)}
+
+/* ── Main ────────────────────────────────────────────────────── */
+#main{margin-left:var(--sidebar-w);margin-top:52px;padding:36px 48px;max-width:980px}
+
+/* ── Typography ──────────────────────────────────────────────── */
+h1{font-size:26px;font-weight:700;margin-bottom:6px;letter-spacing:-.3px}
+h2{font-size:19px;font-weight:600;margin:40px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+h3{font-size:14.5px;font-weight:600;margin:24px 0 8px}
+h4{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--text-muted);margin:20px 0 6px}
+p{color:var(--text-muted);margin-bottom:10px;max-width:760px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+ul,ol{color:var(--text-muted);padding-left:20px;margin-bottom:10px}
+li{margin-bottom:3px}
+.subtitle{color:var(--text-muted);font-size:15px;margin-bottom:28px;max-width:680px}
+
+/* ── Code ────────────────────────────────────────────────────── */
+code{font-family:'Cascadia Code','Fira Code',Consolas,monospace;font-size:12px;
+  background:var(--code-bg);padding:1px 5px;border-radius:3px;color:#a8d5a2}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:6px;
+  padding:16px;overflow-x:auto;margin:12px 0 20px}
+pre code{background:none;padding:0;font-size:12.5px;color:#cdd6f4}
+.cs-kw{color:#bd93f9}  /* C# keyword */
+.cs-type{color:#8be9fd} /* C# type */
+.cs-str{color:#f1fa8c}  /* string */
+.cs-com{color:#6272a4}  /* comment */
+.cs-met{color:#50fa7b}  /* method */
+
+/* ── Tables ──────────────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto;margin:12px 0 20px}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:500px}
+th{text-align:left;padding:7px 12px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);
+  border-bottom:2px solid var(--border);white-space:nowrap}
+td{padding:8px 12px;border-bottom:1px solid rgba(45,49,72,0.5);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,0.02)}
+td code{font-size:11.5px}
+
+/* ── Tags ────────────────────────────────────────────────────── */
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
+.t-core    {background:var(--blue-bg);  color:var(--blue)}
+.t-infra   {background:var(--green-bg); color:var(--green)}
+.t-feat    {background:var(--orange-bg);color:var(--orange)}
+.t-api     {background:var(--purple-bg);color:var(--purple)}
+.t-front   {background:#1a2830;color:#5ab6c8}
+.t-db      {background:#1e2018;color:#b8c46d}
+.t-get     {background:var(--green-bg); color:var(--green)}
+.t-post    {background:var(--orange-bg);color:var(--orange)}
+.t-put     {background:var(--blue-bg);  color:var(--blue)}
+.t-patch   {background:var(--purple-bg);color:var(--purple)}
+.t-delete  {background:var(--red-bg);   color:var(--red)}
+.t-opt     {background:rgba(45,49,72,0.6);color:var(--text-muted)}
+.t-bool    {background:var(--blue-bg);  color:var(--blue)}
+
+/* ── Cards ───────────────────────────────────────────────────── */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin:18px 0 28px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:16px 18px;text-decoration:none;display:block;transition:border-color .15s}
+.card:hover{border-color:var(--accent);text-decoration:none}
+.card-icon{font-size:20px;margin-bottom:8px}
+.card h3{font-size:13.5px;margin:0 0 4px;color:var(--text)}
+.card p{font-size:12.5px;margin:0;color:var(--text-muted)}
+
+/* ── Callouts ────────────────────────────────────────────────── */
+.note{border-left:3px solid var(--accent);background:rgba(79,110,247,.08);
+  border-radius:0 6px 6px 0;padding:10px 14px;margin:14px 0}
+.note.green{border-color:var(--green);background:rgba(109,218,158,.08)}
+.note.orange{border-color:var(--orange);background:rgba(240,167,66,.08)}
+.note-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--accent);margin-bottom:3px}
+.note.green .note-title{color:var(--green)}
+.note.orange .note-title{color:var(--orange)}
+
+/* ── Architecture diagram ────────────────────────────────────── */
+.arch{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:24px;margin:18px 0 28px;display:flex;flex-direction:column;gap:4px;align-items:stretch}
+.arch-layer{border:1px solid var(--border);border-radius:6px;padding:10px 14px;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.arch-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+  min-width:160px;color:var(--text-muted)}
+.arch-box{padding:3px 11px;border-radius:4px;font-size:12px;font-weight:500}
+.arch-arrow{text-align:center;color:var(--text-dim);font-size:14px;padding:2px 0}
+.arch-front{border-color:rgba(90,182,200,.3);background:rgba(90,182,200,.05)}
+.arch-front .arch-box{background:#1a2830;color:#5ab6c8}
+.arch-api  {border-color:rgba(180,140,248,.3);background:rgba(180,140,248,.05)}
+.arch-api  .arch-box{background:var(--purple-bg);color:var(--purple)}
+.arch-feat {border-color:rgba(240,167,66,.3);background:rgba(240,167,66,.05)}
+.arch-feat .arch-box{background:var(--orange-bg);color:var(--orange)}
+.arch-infra{border-color:rgba(109,218,158,.3);background:rgba(109,218,158,.05)}
+.arch-infra .arch-box{background:var(--green-bg);color:var(--green)}
+.arch-core {border-color:rgba(125,184,247,.3);background:rgba(125,184,247,.05)}
+.arch-core .arch-box{background:var(--blue-bg);color:var(--blue)}
+.arch-db   {border-color:rgba(184,196,109,.3);background:rgba(184,196,109,.05)}
+.arch-db   .arch-box{background:#1e2018;color:#b8c46d}
+
+/* ── Method list ─────────────────────────────────────────────── */
+.mlist{list-style:none;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin:10px 0 20px}
+.mlist li{padding:8px 14px;border-bottom:1px solid rgba(45,49,72,.5);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.mlist li:last-child{border-bottom:none}
+.mlist li:hover{background:rgba(255,255,255,.02)}
+.m-sig{font-family:'Cascadia Code','Fira Code',Consolas,monospace;font-size:12px;color:#a8d5a2;flex-shrink:0}
+.m-desc{font-size:12px;color:var(--text-muted);flex:1}
+.m-arrow{color:var(--text-dim);font-size:11px}
+
+/* ── Property table shorthand ────────────────────────────────── */
+.prop-opt{color:var(--text-dim);font-size:11px}
+
+/* ── Endpoint row ────────────────────────────────────────────── */
+.ep{border:1px solid var(--border);border-radius:6px;margin-bottom:8px;overflow:hidden}
+.ep-head{padding:10px 14px;display:flex;align-items:center;gap:10px;background:var(--surface2)}
+.ep-path{font-family:Consolas,monospace;font-size:13px;color:var(--text);font-weight:500}
+.ep-desc{color:var(--text-muted);font-size:12.5px;margin-left:auto}
+.ep-params{padding:8px 14px 10px;border-top:1px solid var(--border);display:grid;grid-template-columns:160px 80px 1fr;gap:4px 10px;font-size:12px}
+.ep-params .ph{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);padding-bottom:4px}
+.ep-pname{font-family:Consolas,monospace;color:#a8d5a2}
+.ep-ptype{color:var(--blue)}
+.ep-pdesc{color:var(--text-muted)}
+
+/* ── Misc ────────────────────────────────────────────────────── */
+.sep{height:1px;background:var(--border);margin:32px 0}
+.lead{color:var(--text);font-size:15px;line-height:1.7;max-width:720px;margin-bottom:28px}
+.since{font-size:11px;color:var(--text-dim);font-style:italic}
+section{scroll-margin-top:80px}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:16px 0}
+@media(max-width:760px){.two-col{grid-template-columns:1fr}}
