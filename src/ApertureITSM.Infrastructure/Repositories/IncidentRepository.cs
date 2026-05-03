@@ -17,31 +17,47 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
             i.StatusId, st.Code AS StatusCode,
             i.ImpactId, imp.Code AS ImpactCode,
             i.UrgencyId, urg.Code AS UrgencyCode,
+            i.SeverityId, sev.Code AS SeverityCode,
             i.CategoryId, cat.DisplayName AS CategoryName,
+            i.SubCategoryId, scat.Code AS SubCategoryCode, scat.DisplayName AS SubCategoryName,
             i.ServiceId, svc.Name AS ServiceName,
             i.CiId, ci.AssetTag AS CiAssetTag,
             i.ReporterUserId, rep.DisplayName AS ReporterName, i.ReporterDisplay,
+            i.CallerUserId, caller.DisplayName AS CallerName,
+            i.ContactMethodId, cm.Code AS ContactMethodCode,
+            i.Location,
             i.AssigneeUserId, asgn.DisplayName AS AssigneeName, asgn.AvatarInitials AS AssigneeInitials, asgn.AvatarColor AS AssigneeColor,
             i.GroupId, grp.Name AS GroupName,
-            i.SlaPolicyId, i.SlaTargetMinutes, i.SlaStartedAt, i.SlaPausedSeconds,
-            i.SlaPausedAt, i.SlaBreachedAt, i.SlaWarnedAt,
+            i.IsMajorIncident, i.ReassignCount,
+            i.ResolutionCodeId, rc.Code AS ResolutionCode, rc.DisplayName AS ResolutionCodeName,
+            i.ResolutionNotes,
+            i.SlaPolicyId, i.SlaTargetMinutes, i.SlaResponseTargetMinutes, i.SlaStartedAt,
+            i.SlaPausedSeconds, i.SlaPausedAt, i.SlaBreachedAt, i.SlaWarnedAt,
+            i.FirstResponseAt, i.ReopenCount,
             i.OpenedAt, i.ResolvedAt, i.ClosedAt,
             i.ParentProblemId, prb.Number AS ParentProblemNumber,
+            i.RelatedChangeId, i.RelatedKbArticleId,
+            i.CsatScore, i.IsFirstCallResolution, i.IsKbArticleCreated,
             i.CreatedAt, i.UpdatedAt,
             (SELECT COUNT(*) FROM audit.Comment c WHERE c.ParentType='INC' AND c.ParentId=i.IncidentId AND c.DeletedAt IS NULL) AS CommentCount,
             (SELECT COUNT(*) FROM itil.IncidentLink lnk WHERE lnk.IncidentId=i.IncidentId) AS LinkedCount
         FROM itil.Incident i
-        LEFT JOIN lookup.Priority        pr   ON pr.PriorityId  = i.PriorityId
-        LEFT JOIN lookup.IncidentStatus  st   ON st.StatusId    = i.StatusId
-        LEFT JOIN lookup.Impact          imp  ON imp.ImpactId   = i.ImpactId
-        LEFT JOIN lookup.Urgency         urg  ON urg.UrgencyId  = i.UrgencyId
-        LEFT JOIN lookup.Category        cat  ON cat.CategoryId = i.CategoryId
-        LEFT JOIN core.Service           svc  ON svc.ServiceId  = i.ServiceId
-        LEFT JOIN core.ConfigurationItem ci   ON ci.CiId        = i.CiId
-        LEFT JOIN core.[User]            rep  ON rep.UserId     = i.ReporterUserId
-        LEFT JOIN core.[User]            asgn ON asgn.UserId    = i.AssigneeUserId
-        LEFT JOIN core.[Group]           grp  ON grp.GroupId    = i.GroupId
-        LEFT JOIN itil.Problem           prb  ON prb.ProblemId  = i.ParentProblemId
+        LEFT JOIN lookup.Priority        pr     ON pr.PriorityId     = i.PriorityId
+        LEFT JOIN lookup.IncidentStatus  st     ON st.StatusId       = i.StatusId
+        LEFT JOIN lookup.Impact          imp    ON imp.ImpactId      = i.ImpactId
+        LEFT JOIN lookup.Urgency         urg    ON urg.UrgencyId     = i.UrgencyId
+        LEFT JOIN lookup.Severity        sev    ON sev.SeverityId    = i.SeverityId
+        LEFT JOIN lookup.Category        cat    ON cat.CategoryId    = i.CategoryId
+        LEFT JOIN lookup.SubCategory     scat   ON scat.SubCategoryId = i.SubCategoryId
+        LEFT JOIN lookup.ContactMethod   cm     ON cm.ContactMethodId = i.ContactMethodId
+        LEFT JOIN lookup.ResolutionCode  rc     ON rc.ResolutionCodeId = i.ResolutionCodeId
+        LEFT JOIN core.Service           svc    ON svc.ServiceId     = i.ServiceId
+        LEFT JOIN core.ConfigurationItem ci     ON ci.CiId           = i.CiId
+        LEFT JOIN core.[User]            rep    ON rep.UserId        = i.ReporterUserId
+        LEFT JOIN core.[User]            caller ON caller.UserId     = i.CallerUserId
+        LEFT JOIN core.[User]            asgn   ON asgn.UserId       = i.AssigneeUserId
+        LEFT JOIN core.[Group]           grp    ON grp.GroupId       = i.GroupId
+        LEFT JOIN itil.Problem           prb    ON prb.ProblemId     = i.ParentProblemId
         WHERE i.DeletedAt IS NULL
         """;
 
@@ -95,14 +111,22 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
             p.Add("@Description", request.Description);
             p.Add("@PriorityCode", request.PriorityCode);
             p.Add("@CategoryCode", request.CategoryCode);
+            p.Add("@SubCategoryCode", request.SubCategoryCode);
             p.Add("@ServiceSlug", request.ServiceSlug);
             p.Add("@CiAssetTag", request.CiAssetTag);
             p.Add("@ReporterExtId", request.ReporterExtId);
             p.Add("@ReporterDisplay", request.ReporterDisplay);
+            p.Add("@CallerExtId", request.CallerExtId);
+            p.Add("@ContactMethodCode", request.ContactMethodCode);
+            p.Add("@Location", request.Location);
             p.Add("@AssigneeExtId", request.AssigneeExtId);
             p.Add("@GroupSlug", request.GroupSlug);
             p.Add("@ImpactCode", request.ImpactCode);
             p.Add("@UrgencyCode", request.UrgencyCode);
+            p.Add("@SeverityCode", request.SeverityCode);
+            p.Add("@IsMajorIncident", request.IsMajorIncident);
+            p.Add("@ResolutionCodeCode", request.ResolutionCodeCode);
+            p.Add("@ResolutionNotes", request.ResolutionNotes);
             p.Add("@CreatedByExtId", request.CreatedByExtId);
             p.Add("@NewIncidentId", dbType: System.Data.DbType.Int64, direction: System.Data.ParameterDirection.Output);
             await conn.ExecuteAsync(sql, p, commandType: System.Data.CommandType.StoredProcedure);
@@ -113,6 +137,43 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
         catch (Exception ex)
         {
             SqlLogger.LogError(log, $"Failed to create incident: {request.Title}", sql, ex);
+            throw;
+        }
+    }
+
+    public async Task UpdateAsync(long incidentId, UpdateIncidentRequest request)
+    {
+        string sql = "itil.usp_UpdateIncident";
+        try
+        {
+            using var conn = db.Create();
+            var p = new DynamicParameters();
+            p.Add("@IncidentId",         incidentId);
+            p.Add("@Title",              request.Title);
+            p.Add("@Description",        request.Description);
+            p.Add("@CallerExtId",        request.CallerExtId);
+            p.Add("@ContactMethodCode",  request.ContactMethodCode);
+            p.Add("@Location",           request.Location);
+            p.Add("@ServiceSlug",        request.ServiceSlug);
+            p.Add("@CategoryCode",       request.CategoryCode);
+            p.Add("@SubCategoryCode",    request.SubCategoryCode);
+            p.Add("@CiAssetTag",         request.CiAssetTag);
+            p.Add("@PriorityCode",       request.PriorityCode);
+            p.Add("@ImpactCode",         request.ImpactCode);
+            p.Add("@UrgencyCode",        request.UrgencyCode);
+            p.Add("@SeverityCode",       request.SeverityCode);
+            p.Add("@IsMajorIncident",    request.IsMajorIncident);
+            p.Add("@GroupSlug",          request.GroupSlug);
+            p.Add("@AssigneeExtId",      request.AssigneeExtId);
+            p.Add("@ResolutionCodeCode", request.ResolutionCodeCode);
+            p.Add("@ResolutionNotes",    request.ResolutionNotes);
+            p.Add("@ActorExtId",         request.ActorExtId);
+            await conn.ExecuteAsync(sql, p, commandType: System.Data.CommandType.StoredProcedure);
+            log.Info($"Updated incident {incidentId}: {request.Title}");
+        }
+        catch (Exception ex)
+        {
+            SqlLogger.LogError(log, $"Failed to update incident {incidentId}", sql, ex);
             throw;
         }
     }

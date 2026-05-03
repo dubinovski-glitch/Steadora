@@ -151,6 +151,7 @@ CREATE TABLE lookup.Role (
 
 CREATE TABLE lookup.Category (
     CategoryId      INT          NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    ServiceId       INT          NULL,                  -- FK to core.Service; NULL = unassigned
     Code            VARCHAR(32)  NOT NULL UNIQUE,
     DisplayName     NVARCHAR(64) NOT NULL,
     SortOrder       INT          NOT NULL DEFAULT 100
@@ -183,6 +184,27 @@ CREATE TABLE lookup.PriorityMatrix (
     UrgencyId  TINYINT NOT NULL REFERENCES lookup.Urgency(UrgencyId),
     PriorityId TINYINT NOT NULL REFERENCES lookup.Priority(PriorityId),
     PRIMARY KEY (ImpactId, UrgencyId)
+);
+
+CREATE TABLE lookup.ContactMethod (
+    ContactMethodId TINYINT      NOT NULL PRIMARY KEY,
+    Code            VARCHAR(32)  NOT NULL UNIQUE,
+    DisplayName     NVARCHAR(64) NOT NULL,
+    SortOrder       TINYINT      NOT NULL
+);
+
+CREATE TABLE lookup.Severity (
+    SeverityId      TINYINT      NOT NULL PRIMARY KEY,
+    Code            VARCHAR(32)  NOT NULL UNIQUE,
+    DisplayName     NVARCHAR(64) NOT NULL,
+    SortOrder       TINYINT      NOT NULL
+);
+
+CREATE TABLE lookup.ResolutionCode (
+    ResolutionCodeId TINYINT     NOT NULL PRIMARY KEY,
+    Code             VARCHAR(32) NOT NULL UNIQUE,
+    DisplayName      NVARCHAR(64) NOT NULL,
+    SortOrder        TINYINT      NOT NULL
 );
 GO
 
@@ -261,12 +283,14 @@ CREATE TABLE core.[User] (
     UserId          INT             NOT NULL IDENTITY(1,1) PRIMARY KEY,
     ExternalId      VARCHAR(64)     NOT NULL UNIQUE,         -- e.g. 'u1','me' (matches prototype)
     Email           NVARCHAR(256)   NOT NULL UNIQUE,
+    Username        NVARCHAR(128)   NOT NULL UNIQUE,         -- login username
     DisplayName     NVARCHAR(128)   NOT NULL,
     Title           NVARCHAR(128)   NULL,
     AvatarInitials  NVARCHAR(4)     NULL,
     AvatarColor     VARCHAR(16)     NULL,
     RoleId          TINYINT         NOT NULL,
     PrimaryGroupId  INT             NULL,
+    PasswordHash    NVARCHAR(512)   NULL,                    -- PBKDF2-SHA256 base64 salt:hash
     IsActive        BIT             NOT NULL DEFAULT 1,
     CreatedAt       DATETIME2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
     UpdatedAt       DATETIME2(3)    NOT NULL DEFAULT SYSUTCDATETIME()
@@ -276,7 +300,6 @@ CREATE TABLE core.Service (
     ServiceId       INT             NOT NULL IDENTITY(1,1) PRIMARY KEY,
     Slug            VARCHAR(64)     NOT NULL UNIQUE,
     Name            NVARCHAR(128)   NOT NULL,
-    CategoryId      INT             NULL,
     OwningGroupId   INT             NULL,
     HealthId        TINYINT         NOT NULL DEFAULT 1,      -- healthy
     Description     NVARCHAR(512)   NULL,
@@ -285,6 +308,17 @@ CREATE TABLE core.Service (
     CreatedAt       DATETIME2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
     UpdatedAt       DATETIME2(3)    NOT NULL DEFAULT SYSUTCDATETIME()
 );
+
+CREATE TABLE core.UserService (
+    UserServiceId   INT  NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    UserId          INT  NOT NULL,
+    ServiceId       INT  NOT NULL,
+    CONSTRAINT UQ_UserService            UNIQUE (UserId, ServiceId),
+    CONSTRAINT FK_UserService_User       FOREIGN KEY (UserId)    REFERENCES core.[User]  (UserId),
+    CONSTRAINT FK_UserService_Service    FOREIGN KEY (ServiceId) REFERENCES core.Service (ServiceId)
+);
+CREATE INDEX IX_UserService_UserId    ON core.UserService (UserId);
+CREATE INDEX IX_UserService_ServiceId ON core.UserService (ServiceId);
 
 CREATE TABLE core.ConfigurationItem (
     CiId            INT             NOT NULL IDENTITY(1,1) PRIMARY KEY,
@@ -354,6 +388,39 @@ CREATE TABLE itil.Incident (
     CreatedAt       DATETIME2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
     UpdatedAt       DATETIME2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
     DeletedAt       DATETIME2(3)    NULL,
+    -- Identification / Reporter
+    CallerUserId            INT             NULL,
+    ContactMethodId         TINYINT         NULL,
+    Location                NVARCHAR(128)   NULL,
+
+    -- Classification
+    SubCategoryId           INT             NULL,
+
+    -- Prioritization
+    SeverityId              TINYINT         NULL,
+    IsMajorIncident         BIT             NOT NULL DEFAULT 0,
+
+    -- Assignment tracking (auto-maintained)
+    ReassignCount           INT             NOT NULL DEFAULT 0,
+
+    -- Resolution (required when resolving/closing)
+    ResolutionCodeId        TINYINT         NULL,
+    ResolutionNotes         NVARCHAR(MAX)   NULL,
+
+    -- SLA / Time Tracking (auto-tracked)
+    SlaResponseTargetMinutes INT            NULL,
+    FirstResponseAt         DATETIME2(3)    NULL,
+    ReopenCount             INT             NOT NULL DEFAULT 0,
+
+    -- Relationships
+    RelatedChangeId         BIGINT          NULL,
+    RelatedKbArticleId      BIGINT          NULL,
+
+    -- Resolution / Quality metrics
+    CsatScore               TINYINT         NULL,
+    IsFirstCallResolution   BIT             NULL,
+    IsKbArticleCreated      BIT             NOT NULL DEFAULT 0,
+
     RowVersion      ROWVERSION      NOT NULL
 );
 
@@ -582,7 +649,7 @@ GO
 -- core
 ALTER TABLE core.[User]               ADD CONSTRAINT FK_User_Role            FOREIGN KEY (RoleId)         REFERENCES lookup.Role(RoleId);
 ALTER TABLE core.[User]               ADD CONSTRAINT FK_User_PrimaryGroup    FOREIGN KEY (PrimaryGroupId) REFERENCES core.[Group](GroupId);
-ALTER TABLE core.Service              ADD CONSTRAINT FK_Service_Category     FOREIGN KEY (CategoryId)     REFERENCES lookup.Category(CategoryId);
+ALTER TABLE lookup.Category           ADD CONSTRAINT FK_Category_Service     FOREIGN KEY (ServiceId)      REFERENCES core.Service(ServiceId);
 ALTER TABLE core.Service              ADD CONSTRAINT FK_Service_Group        FOREIGN KEY (OwningGroupId)  REFERENCES core.[Group](GroupId);
 ALTER TABLE core.Service              ADD CONSTRAINT FK_Service_Health       FOREIGN KEY (HealthId)       REFERENCES lookup.ServiceHealth(HealthId);
 ALTER TABLE core.Service              ADD CONSTRAINT FK_Service_SlaTier      FOREIGN KEY (SlaTierId)      REFERENCES admin.SlaTier(SlaTierId);
@@ -603,6 +670,13 @@ ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_Assignee         FOR
 ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_Group            FOREIGN KEY (GroupId)         REFERENCES core.[Group](GroupId);
 ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_SlaPolicy        FOREIGN KEY (SlaPolicyId)     REFERENCES core.SlaPolicy(SlaPolicyId);
 ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_ParentProblem    FOREIGN KEY (ParentProblemId) REFERENCES itil.Problem(ProblemId);
+ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_Caller           FOREIGN KEY (CallerUserId)        REFERENCES core.[User](UserId);
+ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_ContactMethod    FOREIGN KEY (ContactMethodId)     REFERENCES lookup.ContactMethod(ContactMethodId);
+ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_SubCategory      FOREIGN KEY (SubCategoryId)       REFERENCES lookup.SubCategory(SubCategoryId);
+ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_Severity         FOREIGN KEY (SeverityId)          REFERENCES lookup.Severity(SeverityId);
+ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_ResolutionCode   FOREIGN KEY (ResolutionCodeId)    REFERENCES lookup.ResolutionCode(ResolutionCodeId);
+ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_RelatedChange    FOREIGN KEY (RelatedChangeId)     REFERENCES itil.[Change](ChangeId);
+ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_RelatedKbArticle FOREIGN KEY (RelatedKbArticleId)  REFERENCES kb.Article(ArticleId);
 
 -- itil.Problem
 ALTER TABLE itil.Problem              ADD CONSTRAINT FK_Prb_Priority         FOREIGN KEY (PriorityId)     REFERENCES lookup.Priority(PriorityId);
@@ -805,52 +879,69 @@ GO
    ---------------------------------------------------------------------------- */
 GO
 CREATE OR ALTER PROCEDURE itil.usp_CreateIncident
-    @Title           NVARCHAR(256),
-    @Description     NVARCHAR(MAX) = NULL,
-    @PriorityCode    VARCHAR(16),
-    @CategoryCode    VARCHAR(32) = NULL,
-    @ServiceSlug     VARCHAR(64) = NULL,
-    @CiAssetTag      VARCHAR(64) = NULL,
-    @ReporterExtId   VARCHAR(64) = NULL,
-    @ReporterDisplay NVARCHAR(128) = NULL,
-    @AssigneeExtId   VARCHAR(64) = NULL,
-    @GroupSlug       VARCHAR(64) = NULL,
-    @ImpactCode      VARCHAR(16) = NULL,
-    @UrgencyCode     VARCHAR(16) = NULL,
-    @CreatedByExtId  VARCHAR(64) = NULL,
-    @NewIncidentId   BIGINT OUTPUT
+    @Title                   NVARCHAR(256),
+    @Description             NVARCHAR(MAX)  = NULL,
+    @PriorityCode            VARCHAR(16),
+    @CategoryCode            VARCHAR(32)    = NULL,
+    @SubCategoryCode         VARCHAR(32)    = NULL,
+    @ServiceSlug             VARCHAR(64)    = NULL,
+    @CiAssetTag              VARCHAR(64)    = NULL,
+    @ReporterExtId           VARCHAR(64)    = NULL,
+    @ReporterDisplay         NVARCHAR(128)  = NULL,
+    @CallerExtId             VARCHAR(64)    = NULL,
+    @ContactMethodCode       VARCHAR(32)    = NULL,
+    @Location                NVARCHAR(128)  = NULL,
+    @AssigneeExtId           VARCHAR(64)    = NULL,
+    @GroupSlug               VARCHAR(64)    = NULL,
+    @ImpactCode              VARCHAR(16)    = NULL,
+    @UrgencyCode             VARCHAR(16)    = NULL,
+    @SeverityCode            VARCHAR(32)    = NULL,
+    @IsMajorIncident         BIT            = 0,
+    @ResolutionCodeCode      VARCHAR(32)    = NULL,
+    @ResolutionNotes         NVARCHAR(MAX)  = NULL,
+    @CreatedByExtId          VARCHAR(64)    = NULL,
+    @NewIncidentId           BIGINT         OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    DECLARE @PriorityId TINYINT       = (SELECT PriorityId FROM lookup.Priority         WHERE Code = @PriorityCode);
-    DECLARE @StatusId   TINYINT       = (SELECT StatusId   FROM lookup.IncidentStatus   WHERE Code = 'new');
-    DECLARE @CategoryId INT           = (SELECT CategoryId FROM lookup.Category         WHERE Code = @CategoryCode);
-    DECLARE @ServiceId  INT           = (SELECT ServiceId  FROM core.Service            WHERE Slug = @ServiceSlug);
-    DECLARE @CiId       INT           = (SELECT CiId       FROM core.ConfigurationItem  WHERE AssetTag = @CiAssetTag);
-    DECLARE @ImpactId   TINYINT       = (SELECT ImpactId   FROM lookup.Impact           WHERE Code = @ImpactCode);
-    DECLARE @UrgencyId  TINYINT       = (SELECT UrgencyId  FROM lookup.Urgency          WHERE Code = @UrgencyCode);
-    DECLARE @GroupId    INT           = (SELECT GroupId    FROM core.[Group]            WHERE Slug = @GroupSlug);
+    DECLARE @PriorityId        TINYINT = (SELECT PriorityId       FROM lookup.Priority         WHERE Code = @PriorityCode);
+    DECLARE @StatusId          TINYINT = (SELECT StatusId         FROM lookup.IncidentStatus   WHERE Code = 'new');
+    DECLARE @CategoryId        INT     = (SELECT CategoryId       FROM lookup.Category         WHERE Code = @CategoryCode);
+    DECLARE @SubCategoryId     INT     = (SELECT SubCategoryId    FROM lookup.SubCategory      WHERE Code = @SubCategoryCode);
+    DECLARE @ServiceId         INT     = (SELECT ServiceId        FROM core.Service            WHERE Slug = @ServiceSlug);
+    DECLARE @CiId              INT     = (SELECT CiId             FROM core.ConfigurationItem  WHERE AssetTag = @CiAssetTag);
+    DECLARE @ImpactId          TINYINT = (SELECT ImpactId         FROM lookup.Impact           WHERE Code = @ImpactCode);
+    DECLARE @UrgencyId         TINYINT = (SELECT UrgencyId        FROM lookup.Urgency          WHERE Code = @UrgencyCode);
+    DECLARE @SeverityId        TINYINT = (SELECT SeverityId       FROM lookup.Severity         WHERE Code = @SeverityCode);
+    DECLARE @GroupId           INT     = (SELECT GroupId          FROM core.[Group]            WHERE Slug = @GroupSlug);
+    DECLARE @ContactMethodId   TINYINT = (SELECT ContactMethodId  FROM lookup.ContactMethod    WHERE Code = @ContactMethodCode);
+    DECLARE @ResolutionCodeId  TINYINT = (SELECT ResolutionCodeId FROM lookup.ResolutionCode   WHERE Code = @ResolutionCodeCode);
 
-    DECLARE @ReporterUserId INT       = (SELECT UserId FROM core.[User] WHERE ExternalId = @ReporterExtId);
-    DECLARE @AssigneeUserId INT       = (SELECT UserId FROM core.[User] WHERE ExternalId = @AssigneeExtId);
-    DECLARE @CreatedById    INT       = (SELECT UserId FROM core.[User] WHERE ExternalId = @CreatedByExtId);
+    DECLARE @ReporterUserId INT = (SELECT UserId FROM core.[User] WHERE ExternalId = @ReporterExtId);
+    DECLARE @CallerUserId   INT = (SELECT UserId FROM core.[User] WHERE ExternalId = ISNULL(@CallerExtId, @ReporterExtId));
+    DECLARE @AssigneeUserId INT = (SELECT UserId FROM core.[User] WHERE ExternalId = @AssigneeExtId);
+    DECLARE @CreatedById    INT = (SELECT UserId FROM core.[User] WHERE ExternalId = @CreatedByExtId);
 
     IF @PriorityId IS NULL
         THROW 50001, 'Invalid priority code', 1;
 
     -- pick SLA: the most specific policy wins (priority + category, else priority alone)
-    DECLARE @SlaPolicyId INT, @SlaTarget INT;
-    SELECT TOP (1) @SlaPolicyId = SlaPolicyId, @SlaTarget = ResolutionMinutes
+    DECLARE @SlaPolicyId INT, @SlaResolutionTarget INT, @SlaResponseTarget INT;
+    SELECT TOP (1)
+        @SlaPolicyId         = SlaPolicyId,
+        @SlaResolutionTarget = ResolutionMinutes,
+        @SlaResponseTarget   = ResponseMinutes
     FROM core.SlaPolicy
     WHERE IsActive = 1
       AND PriorityId = @PriorityId
       AND (CategoryId = @CategoryId OR CategoryId IS NULL)
     ORDER BY CASE WHEN CategoryId = @CategoryId THEN 0 ELSE 1 END;
 
-    IF @SlaTarget IS NULL
-        SELECT @SlaTarget = DefaultResolutionMin FROM lookup.Priority WHERE PriorityId = @PriorityId;
+    IF @SlaResolutionTarget IS NULL
+        SELECT @SlaResolutionTarget = DefaultResolutionMin, @SlaResponseTarget = DefaultResponseMin
+        FROM lookup.Priority WHERE PriorityId = @PriorityId;
 
     DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
     SET @NewIncidentId = NEXT VALUE FOR itil.IncidentSeq;
@@ -858,17 +949,21 @@ BEGIN
     BEGIN TRAN;
         INSERT INTO itil.Incident (
             IncidentId, Title, Description,
-            PriorityId, StatusId, ImpactId, UrgencyId, CategoryId,
+            PriorityId, StatusId, ImpactId, UrgencyId, SeverityId, CategoryId, SubCategoryId,
             ServiceId, CiId,
-            ReporterUserId, ReporterDisplay, AssigneeUserId, GroupId,
-            SlaPolicyId, SlaTargetMinutes, SlaStartedAt,
+            ReporterUserId, ReporterDisplay, CallerUserId, AssigneeUserId, GroupId,
+            ContactMethodId, Location, IsMajorIncident,
+            ResolutionCodeId, ResolutionNotes,
+            SlaPolicyId, SlaTargetMinutes, SlaResponseTargetMinutes, SlaStartedAt,
             OpenedAt, CreatedBy, CreatedAt, UpdatedAt
         ) VALUES (
             @NewIncidentId, @Title, @Description,
-            @PriorityId, @StatusId, @ImpactId, @UrgencyId, @CategoryId,
+            @PriorityId, @StatusId, @ImpactId, @UrgencyId, @SeverityId, @CategoryId, @SubCategoryId,
             @ServiceId, @CiId,
-            @ReporterUserId, @ReporterDisplay, @AssigneeUserId, @GroupId,
-            @SlaPolicyId, @SlaTarget, @Now,
+            @ReporterUserId, @ReporterDisplay, @CallerUserId, @AssigneeUserId, @GroupId,
+            @ContactMethodId, @Location, @IsMajorIncident,
+            @ResolutionCodeId, @ResolutionNotes,
+            @SlaPolicyId, @SlaResolutionTarget, @SlaResponseTarget, @Now,
             @Now, @CreatedById, @Now, @Now
         );
 
@@ -950,6 +1045,74 @@ BEGIN
         VALUES ('INC', @IncidentId, @ActorId, 'status_changed', 'StatusId',
                 CAST(@OldStatusId AS VARCHAR(8)), CAST(@StatusId AS VARCHAR(8)), @Now);
     COMMIT;
+END
+GO
+
+CREATE OR ALTER PROCEDURE itil.usp_UpdateIncident
+    @IncidentId         BIGINT,
+    @Title              NVARCHAR(256),
+    @Description        NVARCHAR(MAX)   = NULL,
+    @CallerExtId        VARCHAR(64)     = NULL,
+    @ContactMethodCode  VARCHAR(32)     = NULL,
+    @Location           NVARCHAR(128)   = NULL,
+    @ServiceSlug        VARCHAR(64)     = NULL,
+    @CategoryCode       VARCHAR(32)     = NULL,
+    @SubCategoryCode    VARCHAR(32)     = NULL,
+    @CiAssetTag         VARCHAR(64)     = NULL,
+    @PriorityCode       VARCHAR(16)     = NULL,
+    @ImpactCode         VARCHAR(16)     = NULL,
+    @UrgencyCode        VARCHAR(16)     = NULL,
+    @SeverityCode       VARCHAR(32)     = NULL,
+    @IsMajorIncident    BIT             = 0,
+    @GroupSlug          VARCHAR(64)     = NULL,
+    @AssigneeExtId      VARCHAR(64)     = NULL,
+    @ResolutionCodeCode VARCHAR(32)     = NULL,
+    @ResolutionNotes    NVARCHAR(MAX)   = NULL,
+    @ActorExtId         VARCHAR(64)     = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @CallerUserId     INT     = (SELECT UserId          FROM core.[User]             WHERE ExternalId    = @CallerExtId);
+    DECLARE @ContactMethodId  TINYINT = (SELECT ContactMethodId FROM lookup.ContactMethod    WHERE Code          = @ContactMethodCode);
+    DECLARE @ServiceId        INT     = (SELECT ServiceId       FROM core.Service            WHERE Slug          = @ServiceSlug);
+    DECLARE @CategoryId       INT     = (SELECT CategoryId      FROM lookup.Category         WHERE Code          = @CategoryCode);
+    DECLARE @SubCategoryId    INT     = (SELECT SubCategoryId   FROM lookup.SubCategory      WHERE Code          = @SubCategoryCode);
+    DECLARE @CiId             INT     = (SELECT CiId            FROM core.ConfigurationItem  WHERE AssetTag      = @CiAssetTag);
+    DECLARE @PriorityId       TINYINT = (SELECT PriorityId      FROM lookup.Priority         WHERE Code          = @PriorityCode);
+    DECLARE @ImpactId         TINYINT = (SELECT ImpactId        FROM lookup.Impact           WHERE Code          = @ImpactCode);
+    DECLARE @UrgencyId        TINYINT = (SELECT UrgencyId       FROM lookup.Urgency          WHERE Code          = @UrgencyCode);
+    DECLARE @SeverityId       TINYINT = (SELECT SeverityId      FROM lookup.Severity         WHERE Code          = @SeverityCode);
+    DECLARE @GroupId          INT     = (SELECT GroupId         FROM core.[Group]            WHERE Slug          = @GroupSlug);
+    DECLARE @AssigneeUserId   INT     = (SELECT UserId          FROM core.[User]             WHERE ExternalId    = @AssigneeExtId);
+    DECLARE @ResolutionCodeId TINYINT = (SELECT ResolutionCodeId FROM lookup.ResolutionCode  WHERE Code          = @ResolutionCodeCode);
+    DECLARE @ActorUserId      INT     = (SELECT UserId          FROM core.[User]             WHERE ExternalId    = @ActorExtId);
+
+    UPDATE itil.Incident SET
+        Title             = @Title,
+        Description       = NULLIF(@Description,     ''),
+        CallerUserId      = @CallerUserId,
+        ContactMethodId   = @ContactMethodId,
+        Location          = NULLIF(@Location,        ''),
+        ServiceId         = @ServiceId,
+        CategoryId        = @CategoryId,
+        SubCategoryId     = @SubCategoryId,
+        CiId              = @CiId,
+        PriorityId        = ISNULL(@PriorityId,      PriorityId),
+        ImpactId          = @ImpactId,
+        UrgencyId         = @UrgencyId,
+        SeverityId        = @SeverityId,
+        IsMajorIncident   = @IsMajorIncident,
+        GroupId           = @GroupId,
+        AssigneeUserId    = @AssigneeUserId,
+        ResolutionCodeId  = @ResolutionCodeId,
+        ResolutionNotes   = NULLIF(@ResolutionNotes, ''),
+        UpdatedAt         = SYSUTCDATETIME()
+    WHERE IncidentId = @IncidentId;
+
+    INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, OccurredAt)
+    VALUES ('INC', @IncidentId, @ActorUserId, 'updated', SYSUTCDATETIME());
 END
 GO
 
@@ -1211,6 +1374,25 @@ INSERT INTO lookup.Role    (RoleId,Code,DisplayName,Description) VALUES
 INSERT INTO lookup.ServiceHealth (HealthId,Code,DisplayName)         VALUES (1,'healthy','Healthy'),(2,'degraded','Degraded'),(3,'incident','Incident');
 INSERT INTO lookup.ApprovalVote (VoteId,Code,DisplayName)            VALUES (1,'pending','Pending'),(2,'approve','Approve'),(3,'reject','Reject');
 
+INSERT INTO lookup.ContactMethod (ContactMethodId, Code, DisplayName, SortOrder) VALUES
+    (1,'portal',     'Portal',          1),
+    (2,'phone',      'Phone',           2),
+    (3,'email',      'Email',           3),
+    (4,'chat',       'Chat',            4),
+    (5,'monitoring', 'Monitoring Tool', 5);
+
+INSERT INTO lookup.Severity (SeverityId, Code, DisplayName, SortOrder) VALUES
+    (1,'sev1','SEV-1 (Critical)', 1),
+    (2,'sev2','SEV-2 (High)',     2),
+    (3,'sev3','SEV-3 (Medium)',   3),
+    (4,'sev4','SEV-4 (Low)',      4);
+
+INSERT INTO lookup.ResolutionCode (ResolutionCodeId, Code, DisplayName, SortOrder) VALUES
+    (1,'resolved',         'Resolved',         1),
+    (2,'workaround',       'Workaround',        2),
+    (3,'duplicate',        'Duplicate',         3),
+    (4,'cannot_reproduce', 'Cannot Reproduce',  4);
+
 INSERT INTO lookup.Category (Code, DisplayName, SortOrder) VALUES
     ('email',          'Email',           10),
     ('network',        'Network',         20),
@@ -1250,26 +1432,25 @@ VALUES
     ('me','acarter@acme.com', N'Alex Carter',   N'Service Desk Agent',  N'AC','blue',  2,(SELECT GroupId FROM core.[Group] WHERE Slug='productivity-apps'));
 GO
 
--- 14d. services
-INSERT INTO core.Service (Slug, Name, CategoryId, OwningGroupId, HealthId)
-SELECT s.Slug, s.Name, c.CategoryId, g.GroupId, h.HealthId
+-- 14d. services (CategoryId removed from core.Service in Alter_20260503_ServiceCategoryHierarchy)
+INSERT INTO core.Service (Slug, Name, OwningGroupId, HealthId)
+SELECT s.Slug, s.Name, g.GroupId, h.HealthId
 FROM (VALUES
-    ('microsoft-365',   N'Microsoft 365',   'saas',          'productivity-apps','degraded'),
-    ('corporate-vpn',   N'Corporate VPN',   'network',       'network',          'degraded'),
-    ('salesforce',      N'Salesforce',      'saas',          'collaboration',    'healthy'),
-    ('okta',            N'Okta',            'identity',      'identity',         'healthy'),
-    ('endpoint',        N'Endpoint',        'hardware',      'field-services',   'healthy'),
-    ('sap-erp',         N'SAP ERP',         'application',   'database',         'incident'),
-    ('slack',           N'Slack',           'communication', 'collaboration',    'healthy'),
-    ('corporate-wifi',  N'Corporate WiFi',  'network',       'network',          'degraded'),
-    ('atlassian',       N'Atlassian',       'saas',          'collaboration',    'healthy'),
-    ('postgres',        N'Postgres',        'infrastructure','database',         'incident'),
-    ('zoom',            N'Zoom',            'communication', 'collaboration',    'healthy'),
-    ('github',          N'Github',          'devops',        'devops',           'healthy'),
-    ('public-api',      N'Public API',      'application',   'cloud-ops',        'healthy'),
-    ('file-storage',    N'File Storage',    'infrastructure','field-services',   'healthy')
-) s(Slug, Name, CatCode, GrpSlug, HealthCode)
-LEFT JOIN lookup.Category       c ON c.Code = s.CatCode
+    ('microsoft-365',   N'Microsoft 365',   'productivity-apps','degraded'),
+    ('corporate-vpn',   N'Corporate VPN',   'network',          'degraded'),
+    ('salesforce',      N'Salesforce',      'collaboration',    'healthy'),
+    ('okta',            N'Okta',            'identity',         'healthy'),
+    ('endpoint',        N'Endpoint',        'field-services',   'healthy'),
+    ('sap-erp',         N'SAP ERP',         'database',         'incident'),
+    ('slack',           N'Slack',           'collaboration',    'healthy'),
+    ('corporate-wifi',  N'Corporate WiFi',  'network',          'degraded'),
+    ('atlassian',       N'Atlassian',       'collaboration',    'healthy'),
+    ('postgres',        N'Postgres',        'database',         'incident'),
+    ('zoom',            N'Zoom',            'collaboration',    'healthy'),
+    ('github',          N'Github',          'devops',           'healthy'),
+    ('public-api',      N'Public API',      'cloud-ops',        'healthy'),
+    ('file-storage',    N'File Storage',    'field-services',   'healthy')
+) s(Slug, Name, GrpSlug, HealthCode)
 LEFT JOIN core.[Group]          g ON g.Slug = s.GrpSlug
 LEFT JOIN lookup.ServiceHealth  h ON h.Code = s.HealthCode;
 GO

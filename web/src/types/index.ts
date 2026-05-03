@@ -10,26 +10,46 @@ export interface Incident {
   statusCode: string
   impactCode?: string
   urgencyCode?: string
+  severityCode?: string
   categoryName?: string
+  subCategoryCode?: string
+  subCategoryName?: string
   serviceName?: string
   ciAssetTag?: string
   reporterName?: string
   reporterDisplay?: string
+  callerUserId?: number
+  callerName?: string
+  contactMethodCode?: string
+  location?: string
   assigneeUserId?: number
   assigneeName?: string
   assigneeInitials?: string
   assigneeColor?: string
   groupName?: string
+  isMajorIncident: boolean
+  reassignCount: number
+  resolutionCode?: string
+  resolutionCodeName?: string
+  resolutionNotes?: string
   slaTargetMinutes?: number
+  slaResponseTargetMinutes?: number
   slaStartedAt?: string
   slaPausedSeconds: number
   slaBreachedAt?: string
   slaWarnedAt?: string
   slaPercent?: number
+  firstResponseAt?: string
+  reopenCount: number
   openedAt: string
   resolvedAt?: string
   closedAt?: string
   parentProblemNumber?: string
+  relatedChangeId?: number
+  relatedKbArticleId?: number  // BIGINT — safe as JS number up to 2^53
+  csatScore?: number
+  isFirstCallResolution?: boolean
+  isKbArticleCreated: boolean
   commentCount: number
   linkedCount: number
   updatedAt: string
@@ -163,6 +183,7 @@ export interface User {
   userId: number
   externalId: string
   email: string
+  username: string
   displayName: string
   title?: string
   avatarInitials?: string
@@ -193,6 +214,8 @@ export interface AdminSubCategory {
 
 export interface AdminCategory {
   categoryId: number
+  serviceId?: number
+  serviceName?: string
   code: string
   displayName: string
   sortOrder: number
@@ -212,7 +235,6 @@ export interface Service {
   serviceId: number
   slug: string
   name: string
-  categoryName?: string
   healthCode: string
   openIncidentCount: number
 }
@@ -221,8 +243,6 @@ export interface AdminService {
   serviceId: number
   slug: string
   name: string
-  categoryId?: number
-  categoryName?: string
   owningGroupId?: number
   owningGroupName?: string
   healthCode: string
@@ -325,6 +345,66 @@ export interface IncidentStatus {
   displayName: string
   isTerminal: boolean
   pausesSla: boolean
+  sortOrder: number
+}
+
+export interface Priority {
+  priorityId: number
+  code: string
+  displayName: string
+  sortOrder: number
+  defaultResponseMin: number
+  defaultResolutionMin: number
+}
+
+export interface ContactMethod {
+  contactMethodId: number
+  code: string
+  displayName: string
+  sortOrder: number
+}
+
+export interface Severity {
+  severityId: number
+  code: string
+  displayName: string
+  sortOrder: number
+}
+
+export interface ResolutionCode {
+  resolutionCodeId: number
+  code: string
+  displayName: string
+  sortOrder: number
+}
+
+export interface Impact {
+  impactId: number
+  code: string
+  displayName: string
+  sortOrder: number
+}
+
+export interface Urgency {
+  urgencyId: number
+  code: string
+  displayName: string
+  sortOrder: number
+}
+
+export interface SubCategoryLookup {
+  subCategoryId: number
+  categoryId: number
+  code: string
+  displayName: string
+  sortOrder: number
+}
+
+export interface CategoryLookup {
+  categoryId: number
+  serviceId?: number
+  code: string
+  displayName: string
   sortOrder: number
 }
 

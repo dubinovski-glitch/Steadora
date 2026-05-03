@@ -7,10 +7,12 @@ import type {
 export const adminApi = {
   // Users
   getUsers: () => api.get<User[]>('/admin/users'),
-  createUser: (body: { externalId: string; email: string; displayName: string; title?: string; roleId: number; primaryGroupId?: number }) =>
+  createUser: (body: { externalId: string; email: string; username: string; displayName: string; title?: string; roleId: number; primaryGroupId?: number; password?: string; serviceIds?: number[] }) =>
     api.post<{ id: number }>('/admin/users', body),
-  updateUser: (id: number, body: { email: string; displayName: string; title?: string; roleId: number; primaryGroupId?: number; isActive: boolean }) =>
+  updateUser: (id: number, body: { email: string; username: string; displayName: string; title?: string; roleId: number; primaryGroupId?: number; isActive: boolean; password?: string }) =>
     api.put<void>(`/admin/users/${id}`, body),
+  getUserServices: (id: number) => api.get<number[]>(`/admin/users/${id}/services`),
+  setUserServices: (id: number, serviceIds: number[]) => api.put<void>(`/admin/users/${id}/services`, serviceIds),
 
   // Groups
   getGroups: () => api.get<Group[]>('/admin/groups'),
@@ -21,9 +23,9 @@ export const adminApi = {
 
   // Categories
   getCategories: () => api.get<AdminCategory[]>('/admin/categories'),
-  createCategory: (body: { code: string; displayName: string; sortOrder: number }) =>
+  createCategory: (body: { code: string; displayName: string; sortOrder: number; serviceId?: number }) =>
     api.post<{ id: number }>('/admin/categories', body),
-  updateCategory: (id: number, body: { code: string; displayName: string; sortOrder: number }) =>
+  updateCategory: (id: number, body: { code: string; displayName: string; sortOrder: number; serviceId?: number }) =>
     api.put<void>(`/admin/categories/${id}`, body),
   deleteCategory: (id: number) =>
     api.delete<void>(`/admin/categories/${id}`),
@@ -41,9 +43,9 @@ export const adminApi = {
 
   // Services
   getServices: () => api.get<AdminService[]>('/admin/services'),
-  createService: (body: { name: string; categoryId?: number; owningGroupId?: number; healthCode: string; slaTierId?: number }) =>
+  createService: (body: { name: string; owningGroupId?: number; healthCode: string; slaTierId?: number }) =>
     api.post<{ id: number }>('/admin/services', body),
-  updateService: (id: number, body: { name: string; categoryId?: number; owningGroupId?: number; healthCode: string; slaTierId?: number; isActive: boolean }) =>
+  updateService: (id: number, body: { name: string; owningGroupId?: number; healthCode: string; slaTierId?: number; isActive: boolean }) =>
     api.put<void>(`/admin/services/${id}`, body),
 
   // SLA Tiers

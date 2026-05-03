@@ -7,6 +7,7 @@ using ApertureITSM.Features.Sla;
 using ApertureITSM.Features.Problems;
 using ApertureITSM.Infrastructure.Database;
 using ApertureITSM.Infrastructure.Repositories;
+using ApertureITSM.Api;
 using ApertureITSM.Api.Hubs;
 using log4net;
 using log4net.Config;
@@ -66,6 +67,9 @@ if (features.GetValue<bool>("Sla"))
     builder.Services.AddScoped<ISlaService, SlaService>();
     builder.Services.AddHostedService<SlaBackgroundService>();
 }
+
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddHostedService<ViteDevServerService>();
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();

@@ -28,6 +28,7 @@ export const incidentApi = {
   getQueue: (f: IncidentFilter = {}) => api.get<IncidentPage>(`/incidents?${qs(f)}`),
   getById: (id: number) => api.get<Incident>(`/incidents/${id}`),
   create: (body: object) => api.post<{ id: number }>('/incidents', body),
+  update: (id: number, body: object) => api.patch(`/incidents/${id}`, body),
   setStatus: (id: number, statusCode: string, actorUserId?: number) =>
     api.patch(`/incidents/${id}/status`, { statusCode, actorUserId }),
   assign: (id: number, assigneeExtId: string | null, actorUserId?: number) =>

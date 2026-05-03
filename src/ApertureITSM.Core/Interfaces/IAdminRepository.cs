@@ -6,8 +6,10 @@ public interface IAdminRepository
 {
     // ── Users ────────────────────────────────────────────────────────────────
     Task<IEnumerable<User>> GetUsersAsync();
-    Task<int> CreateUserAsync(string externalId, string email, string displayName, string? title, byte roleId, int? primaryGroupId);
-    Task UpdateUserAsync(int userId, string email, string displayName, string? title, byte roleId, int? primaryGroupId, bool isActive);
+    Task<int> CreateUserAsync(string externalId, string email, string username, string displayName, string? title, byte roleId, int? primaryGroupId, string? passwordHash);
+    Task UpdateUserAsync(int userId, string email, string username, string displayName, string? title, byte roleId, int? primaryGroupId, bool isActive, string? passwordHash);
+    Task<IEnumerable<int>> GetUserServiceIdsAsync(int userId);
+    Task SetUserServicesAsync(int userId, IEnumerable<int> serviceIds);
 
     // ── Groups ───────────────────────────────────────────────────────────────
     Task<IEnumerable<Group>> GetGroupsAsync();
@@ -16,8 +18,8 @@ public interface IAdminRepository
 
     // ── Categories ───────────────────────────────────────────────────────────
     Task<IEnumerable<CategoryWithSubs>> GetCategoriesAsync();
-    Task<int> CreateCategoryAsync(string code, string displayName, int sortOrder);
-    Task UpdateCategoryAsync(int categoryId, string code, string displayName, int sortOrder);
+    Task<int> CreateCategoryAsync(string code, string displayName, int sortOrder, int? serviceId);
+    Task UpdateCategoryAsync(int categoryId, string code, string displayName, int sortOrder, int? serviceId);
     Task DeleteCategoryAsync(int categoryId);
     Task<int> CreateSubCategoryAsync(int categoryId, string code, string displayName, int sortOrder);
     Task UpdateSubCategoryAsync(int subCategoryId, int categoryId, string code, string displayName, int sortOrder);
@@ -29,8 +31,8 @@ public interface IAdminRepository
 
     // ── Services ─────────────────────────────────────────────────────────────
     Task<IEnumerable<Service>> GetAdminServicesAsync();
-    Task<int> CreateServiceAsync(string slug, string name, int? categoryId, int? owningGroupId, string healthCode, int? slaTierId);
-    Task UpdateServiceAsync(int serviceId, string name, int? categoryId, int? owningGroupId, string healthCode, int? slaTierId, bool isActive);
+    Task<int> CreateServiceAsync(string slug, string name, int? owningGroupId, string healthCode, int? slaTierId);
+    Task UpdateServiceAsync(int serviceId, string name, int? owningGroupId, string healthCode, int? slaTierId, bool isActive);
 
     // ── SLA Tiers ────────────────────────────────────────────────────────────
     Task<IEnumerable<SlaTier>> GetSlaTiersAsync();

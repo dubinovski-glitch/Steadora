@@ -13,4 +13,8 @@ public interface ILookupRepository
     Task<IEnumerable<Impact>> GetImpactsAsync();
     Task<IEnumerable<Urgency>> GetUrgenciesAsync();
     Task<IEnumerable<Category>> GetCategoriesAsync();
+    Task<IEnumerable<SubCategory>> GetSubCategoriesAsync(int categoryId);
+    Task<IEnumerable<ContactMethod>> GetContactMethodsAsync();
+    Task<IEnumerable<Severity>> GetSeveritiesAsync();
+    Task<IEnumerable<ResolutionCode>> GetResolutionCodesAsync();
 }

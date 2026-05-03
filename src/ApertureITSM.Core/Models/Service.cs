@@ -5,8 +5,6 @@ public class Service
     public int ServiceId { get; init; }
     public string Slug { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
-    public int? CategoryId { get; init; }
-    public string? CategoryName { get; init; }
     public int? OwningGroupId { get; init; }
     public string? OwningGroupName { get; init; }
     public byte HealthId { get; init; }

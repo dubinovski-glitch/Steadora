@@ -33,4 +33,17 @@ public class LookupsController(ILookupRepository repo) : ControllerBase
 
     [HttpGet("categories")]
     public async Task<IActionResult> GetCategories() => Ok(await repo.GetCategoriesAsync());
+
+    [HttpGet("subcategories")]
+    public async Task<IActionResult> GetSubCategories([FromQuery] int categoryId)
+        => Ok(await repo.GetSubCategoriesAsync(categoryId));
+
+    [HttpGet("contact-methods")]
+    public async Task<IActionResult> GetContactMethods() => Ok(await repo.GetContactMethodsAsync());
+
+    [HttpGet("severities")]
+    public async Task<IActionResult> GetSeverities() => Ok(await repo.GetSeveritiesAsync());
+
+    [HttpGet("resolution-codes")]
+    public async Task<IActionResult> GetResolutionCodes() => Ok(await repo.GetResolutionCodesAsync());
 }

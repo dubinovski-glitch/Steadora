@@ -15,7 +15,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
     public async Task<IEnumerable<User>> GetUsersAsync()
     {
         string sql = """
-            SELECT u.UserId, u.ExternalId, u.Email, u.DisplayName, u.Title,
+            SELECT u.UserId, u.ExternalId, u.Email, u.Username, u.DisplayName, u.Title,
                    u.AvatarInitials, u.AvatarColor, u.RoleId, r.Code AS RoleCode,
                    u.PrimaryGroupId, g.Name AS PrimaryGroupName, u.IsActive,
                    u.CreatedAt, u.UpdatedAt
@@ -36,18 +36,18 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task<int> CreateUserAsync(string externalId, string email, string displayName, string? title, byte roleId, int? primaryGroupId)
+    public async Task<int> CreateUserAsync(string externalId, string email, string username, string displayName, string? title, byte roleId, int? primaryGroupId, string? passwordHash)
     {
         string sql = """
-            INSERT INTO core.[User] (ExternalId, Email, DisplayName, Title, AvatarInitials, RoleId, PrimaryGroupId, IsActive)
-            VALUES (@externalId, @email, @displayName, @title, @initials, @roleId, @primaryGroupId, 1);
+            INSERT INTO core.[User] (ExternalId, Email, Username, DisplayName, Title, AvatarInitials, RoleId, PrimaryGroupId, PasswordHash, IsActive)
+            VALUES (@externalId, @email, @username, @displayName, @title, @initials, @roleId, @primaryGroupId, @passwordHash, 1);
             SELECT SCOPE_IDENTITY();
             """;
         try
         {
             var initials = BuildInitials(displayName);
             using var conn = db.Create();
-            var id = await conn.ExecuteScalarAsync<int>(sql, new { externalId, email, displayName, title, initials, roleId, primaryGroupId });
+            var id = await conn.ExecuteScalarAsync<int>(sql, new { externalId, email, username, displayName, title, initials, roleId, primaryGroupId, passwordHash });
             log.Info($"Created user '{displayName}' ({email})");
             return id;
         }
@@ -58,26 +58,69 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task UpdateUserAsync(int userId, string email, string displayName, string? title, byte roleId, int? primaryGroupId, bool isActive)
+    public async Task UpdateUserAsync(int userId, string email, string username, string displayName, string? title, byte roleId, int? primaryGroupId, bool isActive, string? passwordHash)
     {
-        string sql = """
-            UPDATE core.[User]
-            SET Email = @email, DisplayName = @displayName, Title = @title,
-                AvatarInitials = @initials, RoleId = @roleId,
-                PrimaryGroupId = @primaryGroupId, IsActive = @isActive,
-                UpdatedAt = SYSUTCDATETIME()
-            WHERE UserId = @userId
-            """;
+        string sql = passwordHash != null
+            ? """
+              UPDATE core.[User]
+              SET Email = @email, Username = @username, DisplayName = @displayName, Title = @title,
+                  AvatarInitials = @initials, RoleId = @roleId, PrimaryGroupId = @primaryGroupId,
+                  IsActive = @isActive, PasswordHash = @passwordHash, UpdatedAt = SYSUTCDATETIME()
+              WHERE UserId = @userId
+              """
+            : """
+              UPDATE core.[User]
+              SET Email = @email, Username = @username, DisplayName = @displayName, Title = @title,
+                  AvatarInitials = @initials, RoleId = @roleId, PrimaryGroupId = @primaryGroupId,
+                  IsActive = @isActive, UpdatedAt = SYSUTCDATETIME()
+              WHERE UserId = @userId
+              """;
         try
         {
             var initials = BuildInitials(displayName);
             using var conn = db.Create();
-            await conn.ExecuteAsync(sql, new { userId, email, displayName, title, initials, roleId, primaryGroupId, isActive });
+            await conn.ExecuteAsync(sql, new { userId, email, username, displayName, title, initials, roleId, primaryGroupId, isActive, passwordHash });
             log.Info($"Updated user {userId}");
         }
         catch (Exception ex)
         {
             SqlLogger.LogError(log, $"Failed to update user {userId}", sql, ex);
+            throw;
+        }
+    }
+
+    public async Task<IEnumerable<int>> GetUserServiceIdsAsync(int userId)
+    {
+        string sql = "SELECT ServiceId FROM core.UserService WHERE UserId = @userId";
+        try
+        {
+            using var conn = db.Create();
+            return await conn.QueryAsync<int>(sql, new { userId });
+        }
+        catch (Exception ex)
+        {
+            SqlLogger.LogError(log, $"Failed to get services for user {userId}", sql, ex);
+            throw;
+        }
+    }
+
+    public async Task SetUserServicesAsync(int userId, IEnumerable<int> serviceIds)
+    {
+        string sql = "DELETE FROM core.UserService WHERE UserId = @userId";
+        try
+        {
+            using var conn = db.Create();
+            await conn.ExecuteAsync(sql, new { userId });
+            foreach (var sid in serviceIds)
+            {
+                sql = "INSERT INTO core.UserService (UserId, ServiceId) VALUES (@userId, @sid)";
+                await conn.ExecuteAsync(sql, new { userId, sid });
+            }
+            log.Info($"Updated services for user {userId}");
+        }
+        catch (Exception ex)
+        {
+            SqlLogger.LogError(log, $"Failed to set services for user {userId}", sql, ex);
             throw;
         }
     }
@@ -159,14 +202,16 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         {
             using var conn = db.Create();
             sql = """
-                SELECT c.CategoryId, c.Code, c.DisplayName, c.SortOrder,
+                SELECT c.CategoryId, c.ServiceId, s.Name AS ServiceName,
+                       c.Code, c.DisplayName, c.SortOrder,
                        COUNT(i.IncidentId) AS TicketCount
                 FROM lookup.Category c
+                LEFT JOIN core.Service s ON s.ServiceId = c.ServiceId
                 LEFT JOIN itil.Incident i ON i.CategoryId = c.CategoryId AND i.DeletedAt IS NULL
-                GROUP BY c.CategoryId, c.Code, c.DisplayName, c.SortOrder
-                ORDER BY c.SortOrder, c.DisplayName
+                GROUP BY c.CategoryId, c.ServiceId, s.Name, c.Code, c.DisplayName, c.SortOrder
+                ORDER BY s.Name, c.SortOrder, c.DisplayName
                 """;
-            var cats = (await conn.QueryAsync<(int CategoryId, string Code, string DisplayName, int SortOrder, int TicketCount)>(sql)).ToList();
+            var cats = (await conn.QueryAsync<(int CategoryId, int? ServiceId, string? ServiceName, string Code, string DisplayName, int SortOrder, int TicketCount)>(sql)).ToList();
 
             sql = "SELECT SubCategoryId, CategoryId, Code, DisplayName, SortOrder FROM lookup.SubCategory ORDER BY SortOrder, DisplayName";
             var subs = (await conn.QueryAsync<SubCategory>(sql)).ToList();
@@ -174,6 +219,8 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
             return cats.Select(c => new CategoryWithSubs
             {
                 CategoryId  = c.CategoryId,
+                ServiceId   = c.ServiceId,
+                ServiceName = c.ServiceName,
                 Code        = c.Code,
                 DisplayName = c.DisplayName,
                 SortOrder   = c.SortOrder,
@@ -188,18 +235,18 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task<int> CreateCategoryAsync(string code, string displayName, int sortOrder)
+    public async Task<int> CreateCategoryAsync(string code, string displayName, int sortOrder, int? serviceId)
     {
         string sql = """
-            INSERT INTO lookup.Category (Code, DisplayName, SortOrder)
-            VALUES (@code, @displayName, @sortOrder);
+            INSERT INTO lookup.Category (ServiceId, Code, DisplayName, SortOrder)
+            VALUES (@serviceId, @code, @displayName, @sortOrder);
             SELECT SCOPE_IDENTITY();
             """;
         try
         {
             using var conn = db.Create();
-            var id = await conn.ExecuteScalarAsync<int>(sql, new { code, displayName, sortOrder });
-            log.Info($"Created category '{displayName}' (code: {code})");
+            var id = await conn.ExecuteScalarAsync<int>(sql, new { serviceId, code, displayName, sortOrder });
+            log.Info($"Created category '{displayName}' (code: {code}, serviceId: {serviceId})");
             return id;
         }
         catch (Exception ex)
@@ -209,17 +256,17 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task UpdateCategoryAsync(int categoryId, string code, string displayName, int sortOrder)
+    public async Task UpdateCategoryAsync(int categoryId, string code, string displayName, int sortOrder, int? serviceId)
     {
         string sql = """
             UPDATE lookup.Category
-            SET Code = @code, DisplayName = @displayName, SortOrder = @sortOrder
+            SET ServiceId = @serviceId, Code = @code, DisplayName = @displayName, SortOrder = @sortOrder
             WHERE CategoryId = @categoryId
             """;
         try
         {
             using var conn = db.Create();
-            await conn.ExecuteAsync(sql, new { categoryId, code, displayName, sortOrder });
+            await conn.ExecuteAsync(sql, new { categoryId, serviceId, code, displayName, sortOrder });
             log.Info($"Updated category {categoryId}");
         }
         catch (Exception ex)
@@ -361,21 +408,19 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
     {
         string sql = """
             SELECT s.ServiceId, s.Slug, s.Name,
-                   s.CategoryId,  c.DisplayName AS CategoryName,
                    s.OwningGroupId, g.Name AS OwningGroupName,
                    s.HealthId, h.Code AS HealthCode,
                    s.Description, s.SlaTierId, t.Name AS SlaTierName,
                    s.IsActive,
                    COUNT(i.IncidentId) AS OpenIncidentCount
             FROM core.Service s
-            LEFT JOIN lookup.Category    c ON c.CategoryId    = s.CategoryId
-            LEFT JOIN core.[Group]       g ON g.GroupId       = s.OwningGroupId
-            LEFT JOIN lookup.ServiceHealth h ON h.HealthId    = s.HealthId
-            LEFT JOIN admin.SlaTier      t ON t.SlaTierId     = s.SlaTierId
-            LEFT JOIN itil.Incident      i ON i.ServiceId     = s.ServiceId
-                                           AND i.DeletedAt IS NULL
-                                           AND i.ClosedAt  IS NULL
-            GROUP BY s.ServiceId, s.Slug, s.Name, s.CategoryId, c.DisplayName,
+            LEFT JOIN core.[Group]        g ON g.GroupId    = s.OwningGroupId
+            LEFT JOIN lookup.ServiceHealth h ON h.HealthId  = s.HealthId
+            LEFT JOIN admin.SlaTier       t ON t.SlaTierId  = s.SlaTierId
+            LEFT JOIN itil.Incident       i ON i.ServiceId  = s.ServiceId
+                                            AND i.DeletedAt IS NULL
+                                            AND i.ClosedAt  IS NULL
+            GROUP BY s.ServiceId, s.Slug, s.Name,
                      s.OwningGroupId, g.Name, s.HealthId, h.Code,
                      s.Description, s.SlaTierId, t.Name, s.IsActive
             ORDER BY s.Name
@@ -392,18 +437,18 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task<int> CreateServiceAsync(string slug, string name, int? categoryId, int? owningGroupId, string healthCode, int? slaTierId)
+    public async Task<int> CreateServiceAsync(string slug, string name, int? owningGroupId, string healthCode, int? slaTierId)
     {
         string sql = """
             DECLARE @HealthId TINYINT = (SELECT HealthId FROM lookup.ServiceHealth WHERE Code = @healthCode);
-            INSERT INTO core.Service (Slug, Name, CategoryId, OwningGroupId, HealthId, SlaTierId, IsActive)
-            VALUES (@slug, @name, @categoryId, @owningGroupId, ISNULL(@HealthId,1), @slaTierId, 1);
+            INSERT INTO core.Service (Slug, Name, OwningGroupId, HealthId, SlaTierId, IsActive)
+            VALUES (@slug, @name, @owningGroupId, ISNULL(@HealthId,1), @slaTierId, 1);
             SELECT SCOPE_IDENTITY();
             """;
         try
         {
             using var conn = db.Create();
-            var id = await conn.ExecuteScalarAsync<int>(sql, new { slug, name, categoryId, owningGroupId, healthCode, slaTierId });
+            var id = await conn.ExecuteScalarAsync<int>(sql, new { slug, name, owningGroupId, healthCode, slaTierId });
             log.Info($"Created service '{name}' (slug: {slug})");
             return id;
         }
@@ -414,12 +459,12 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task UpdateServiceAsync(int serviceId, string name, int? categoryId, int? owningGroupId, string healthCode, int? slaTierId, bool isActive)
+    public async Task UpdateServiceAsync(int serviceId, string name, int? owningGroupId, string healthCode, int? slaTierId, bool isActive)
     {
         string sql = """
             DECLARE @HealthId TINYINT = (SELECT HealthId FROM lookup.ServiceHealth WHERE Code = @healthCode);
             UPDATE core.Service
-            SET Name = @name, CategoryId = @categoryId, OwningGroupId = @owningGroupId,
+            SET Name = @name, OwningGroupId = @owningGroupId,
                 HealthId = ISNULL(@HealthId,1), SlaTierId = @slaTierId,
                 IsActive = @isActive, UpdatedAt = SYSUTCDATETIME()
             WHERE ServiceId = @serviceId
@@ -427,7 +472,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         try
         {
             using var conn = db.Create();
-            await conn.ExecuteAsync(sql, new { serviceId, name, categoryId, owningGroupId, healthCode, slaTierId, isActive });
+            await conn.ExecuteAsync(sql, new { serviceId, name, owningGroupId, healthCode, slaTierId, isActive });
             log.Info($"Updated service {serviceId}");
         }
         catch (Exception ex)

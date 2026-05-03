@@ -61,8 +61,8 @@ export function ChangesView({ addToast }: Props) {
       {loading ? (
         <div className="py-12 text-center text-text-muted">Loading…</div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {changes.map(c => <ChangeCard key={c.changeId} change={c} onVote={vote} />)}
+        <div className="flex flex-col gap-3 list-font">
+          {changes.map((c, idx) => <ChangeCard key={c.changeId} change={c} onVote={vote} idx={idx} />)}
           {changes.length === 0 && <div className="py-12 text-center text-text-muted">No changes found</div>}
         </div>
       )}
@@ -70,21 +70,21 @@ export function ChangesView({ addToast }: Props) {
   )
 }
 
-function ChangeCard({ change: c, onVote }: { change: Change; onVote: (id: number, vote: string) => void }) {
+function ChangeCard({ change: c, onVote, idx }: { change: Change; onVote: (id: number, vote: string) => void; idx: number }) {
   const currentStep = CHANGE_STEPS.indexOf(c.stateCode)
   const isRejected = c.stateCode === 'rejected'
 
   return (
-    <div className="bg-surface rounded-lg border border-border-default shadow-sm overflow-hidden">
+    <div className={`rounded-lg border border-border-default shadow-sm overflow-hidden ${idx % 2 === 1 ? 'bg-subtle' : 'bg-surface'}`}>
       {/* Top strip */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border-default">
-        <span className="tabular font-mono text-xs text-text-tertiary">{c.number}</span>
+        <span className="tabular font-mono text-text-primary">{c.number}</span>
         <Badge variant={typeVariant(c.changeTypeCode) as any}>{c.changeTypeCode}</Badge>
         <Badge variant={riskVariant(c.riskCode) as any}>Risk: {c.riskCode}</Badge>
         <Badge variant="info">{c.stateName}</Badge>
         <span className="flex-1 font-medium text-text-primary">{c.title}</span>
         {c.scheduledStart && (
-          <span className="text-xs text-text-secondary flex items-center gap-1">
+          <span className="text-text-secondary flex items-center gap-1">
             <Clock size={12} /> {new Date(c.scheduledStart).toLocaleDateString()}
             {c.scheduledEnd && <> – {new Date(c.scheduledEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}
           </span>

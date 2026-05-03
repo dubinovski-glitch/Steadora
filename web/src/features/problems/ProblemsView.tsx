@@ -74,31 +74,33 @@ function ProblemGroup({ title, items }: { title: string; items: Problem[] }) {
       <div className="px-4 py-3 border-b border-border-default bg-subtle">
         <h2 className="text-sm font-medium text-text-primary">{title} <span className="text-text-muted">({items.length})</span></h2>
       </div>
+      <div className="zebra-list">
       {items.map(p => (
-        <div key={p.problemId} className="grid grid-cols-5 gap-4 px-4 py-3 border-b border-border-default last:border-0 hover:bg-hover transition-colors text-sm items-start">
+        <div key={p.problemId} className="grid grid-cols-5 gap-4 px-4 py-3 border-b border-border-default last:border-0 hover:bg-hover transition-colors items-start">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs text-text-tertiary">{p.number}</span>
+            <span className="font-mono text-text-primary">{p.number}</span>
             <Badge variant={priorityVariant(p.priorityCode)}>{p.priorityCode}</Badge>
           </div>
           <div className="col-span-2">
             <div className="font-medium text-text-primary">{p.title}</div>
-            {p.rootCause && <div className="text-xs text-text-secondary mt-0.5 line-clamp-1">{p.rootCause}</div>}
+            {p.rootCause && <div className="text-text-secondary mt-0.5 line-clamp-1">{p.rootCause}</div>}
             {p.isKnownError && <span className="inline-flex mt-1 text-xs bg-[#fdf3e3] text-[#d97706] border border-[#f3d9a4] px-1.5 py-0.5 rounded">Known error</span>}
           </div>
           <div className="flex flex-col gap-1">
-            <div className="text-xs text-text-secondary">{p.stateName}</div>
+            <div className="text-text-secondary">{p.stateName}</div>
             <StateProgress stateCode={p.stateCode} />
           </div>
           <div className="flex items-center gap-2">
             {p.assigneeName ? (
               <>
                 <Avatar initials={p.assigneeInitials} color={p.assigneeColor} size="sm" />
-                <span className="text-xs text-text-secondary">{p.assigneeName}</span>
+                <span className="text-text-secondary">{p.assigneeName}</span>
               </>
-            ) : <span className="text-xs text-text-muted">Unassigned</span>}
+            ) : <span className="text-text-muted">Unassigned</span>}
           </div>
         </div>
       ))}
+      </div>
     </div>
   )
 }

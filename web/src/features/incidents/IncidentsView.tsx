@@ -111,7 +111,7 @@ export function IncidentsView({ addToast }: Props) {
 
       {/* Table */}
       <div className="flex-1 overflow-auto rounded-lg border border-border-default bg-surface shadow-sm">
-        <table className="w-full text-sm">
+        <table className="w-full zebra-table">
           <thead>
             <tr className="bg-subtle border-b border-border-default">
               <th className="w-8 px-3 py-2"><input type="checkbox" className="rounded" onChange={e => setSelected(e.target.checked ? new Set(incidents.map(i => i.incidentId)) : new Set())} /></th>
@@ -133,13 +133,13 @@ export function IncidentsView({ addToast }: Props) {
             ) : incidents.map(inc => (
               <tr
                 key={inc.incidentId}
-                className={`table-row border-b border-border-default last:border-0 hover:bg-hover cursor-pointer transition-colors ${selected.has(inc.incidentId) ? 'bg-accent-subtle' : ''}`}
+                className={`table-row border-b border-border-default last:border-0 hover:bg-hover cursor-pointer transition-colors ${selected.has(inc.incidentId) ? 'row-selected' : ''}`}
                 onClick={() => openIncident(inc.incidentId)}
               >
                 <td className="px-3" onClick={e => e.stopPropagation()}>
                   <input type="checkbox" className="rounded" checked={selected.has(inc.incidentId)} onChange={() => toggleSelect(inc.incidentId)} />
                 </td>
-                <td className="px-3 tabular text-xs text-text-tertiary font-mono">{inc.number}</td>
+                <td className="px-3 tabular text-text-primary font-mono">{inc.number}</td>
                 <td className="px-3"><Badge variant={priorityVariant(inc.priorityCode)}>{inc.priorityCode}</Badge></td>
                 <td className="px-3 text-text-primary font-medium max-w-xs truncate">{inc.title}</td>
                 <td className="px-3"><Badge variant={statusVariant(inc.statusCode)}>{inc.statusCode}</Badge></td>
@@ -147,15 +147,15 @@ export function IncidentsView({ addToast }: Props) {
                   {inc.assigneeName ? (
                     <div className="flex items-center gap-1.5">
                       <Avatar initials={inc.assigneeInitials} color={inc.assigneeColor} size="sm" />
-                      <span className="text-xs text-text-secondary truncate">{inc.assigneeName.split(' ')[0]}</span>
+                      <span className="text-text-secondary truncate">{inc.assigneeName.split(' ')[0]}</span>
                     </div>
-                  ) : <span className="text-text-muted text-xs">—</span>}
+                  ) : <span className="text-text-muted">—</span>}
                 </td>
-                <td className="px-3 text-xs text-text-secondary truncate">{inc.serviceName ?? '—'}</td>
+                <td className="px-3 text-text-secondary truncate">{inc.serviceName ?? '—'}</td>
                 <td className="px-3">
                   <SlaBar percent={inc.slaPercent} breachedAt={inc.slaBreachedAt} targetMinutes={inc.slaTargetMinutes} startedAt={inc.slaStartedAt} pausedSeconds={inc.slaPausedSeconds} compact />
                 </td>
-                <td className="px-3 text-xs text-text-tertiary tabular">
+                <td className="px-3 text-text-tertiary tabular">
                   {new Date(inc.updatedAt).toLocaleDateString()}
                 </td>
               </tr>

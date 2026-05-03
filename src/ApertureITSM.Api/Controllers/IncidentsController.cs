@@ -49,6 +49,13 @@ public class IncidentsController(IIncidentService service, INotificationService?
         return CreatedAtAction(nameof(GetDetail), new { id }, new { id });
     }
 
+    [HttpPatch("{id:long}")]
+    public async Task<IActionResult> Update(long id, [FromBody] UpdateIncidentRequest request)
+    {
+        await service.UpdateAsync(id, request);
+        return NoContent();
+    }
+
     [HttpPatch("{id:long}/status")]
     public async Task<IActionResult> SetStatus(long id, [FromBody] SetStatusRequest request)
     {

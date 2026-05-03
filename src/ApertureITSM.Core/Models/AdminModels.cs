@@ -5,6 +5,8 @@ public record SubCategory(int SubCategoryId, int CategoryId, string Code, string
 public class CategoryWithSubs
 {
     public int CategoryId { get; init; }
+    public int? ServiceId { get; init; }
+    public string? ServiceName { get; init; }
     public string Code { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
     public int SortOrder { get; init; }

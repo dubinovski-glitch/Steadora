@@ -74,12 +74,11 @@ public class UserRepository(IDbConnectionFactory db) : IUserRepository
     public async Task<IEnumerable<Service>> GetServicesAsync()
     {
         string sql = """
-            SELECT s.ServiceId, s.Slug, s.Name, s.CategoryId, c.DisplayName AS CategoryName,
+            SELECT s.ServiceId, s.Slug, s.Name,
                    s.OwningGroupId, g.Name AS OwningGroupName, s.HealthId, h.Code AS HealthCode,
                    s.Description, s.IsActive,
                    (SELECT COUNT(*) FROM itil.Incident i JOIN lookup.IncidentStatus st ON st.StatusId=i.StatusId WHERE i.ServiceId=s.ServiceId AND st.IsTerminal=0 AND i.DeletedAt IS NULL) AS OpenIncidentCount
             FROM core.Service s
-            LEFT JOIN lookup.Category      c ON c.CategoryId = s.CategoryId
             LEFT JOIN core.[Group]         g ON g.GroupId    = s.OwningGroupId
             LEFT JOIN lookup.ServiceHealth h ON h.HealthId   = s.HealthId
             WHERE s.IsActive=1 ORDER BY s.Name

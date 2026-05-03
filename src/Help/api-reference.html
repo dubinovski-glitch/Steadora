@@ -290,25 +290,31 @@
 <h3>Users</h3>
 <div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/users</span><span class="ep-desc">All users</span></div></div>
 <div class="ep">
-  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/users</span><span class="ep-desc">Create user — returns <code>201 { id }</code></span></div>
+  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/admin/users</span><span class="ep-desc">Create user — returns <code>201 { id }</code>. Services assigned atomically.</span></div>
   <div class="ep-params">
     <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
-    <span class="ep-pname">externalId</span><span class="ep-ptype">string</span><span class="ep-pdesc">Identity provider ID</span>
+    <span class="ep-pname">externalId</span><span class="ep-ptype">string</span><span class="ep-pdesc">Identity provider ID (auto-derived from email if blank)</span>
     <span class="ep-pname">email</span><span class="ep-ptype">string</span><span class="ep-pdesc"></span>
+    <span class="ep-pname">username</span><span class="ep-ptype">string</span><span class="ep-pdesc">Unique login username</span>
     <span class="ep-pname">displayName</span><span class="ep-ptype">string</span><span class="ep-pdesc"></span>
     <span class="ep-pname">title</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Job title</span>
     <span class="ep-pname">roleId</span><span class="ep-ptype">byte</span><span class="ep-pdesc">FK → lookup.Role</span>
     <span class="ep-pname">primaryGroupId</span><span class="ep-ptype">int?</span><span class="ep-pdesc">FK → core.Group</span>
+    <span class="ep-pname">password</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Plain-text; hashed server-side with PBKDF2-SHA256</span>
+    <span class="ep-pname">serviceIds</span><span class="ep-ptype">int[]?</span><span class="ep-pdesc">Services the user is assigned to (core.UserService)</span>
   </div>
 </div>
 <div class="ep">
   <div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/users/{id}</span><span class="ep-desc">Update user — returns 204</span></div>
   <div class="ep-params">
     <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
-    <span class="ep-pname">email, displayName, title, roleId, primaryGroupId</span><span class="ep-ptype">…</span><span class="ep-pdesc">Same as create</span>
+    <span class="ep-pname">email, username, displayName, title, roleId, primaryGroupId</span><span class="ep-ptype">…</span><span class="ep-pdesc">Same as create</span>
     <span class="ep-pname">isActive</span><span class="ep-ptype">bool</span><span class="ep-pdesc">Deactivate without deleting</span>
+    <span class="ep-pname">password</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Leave null/blank to keep existing password</span>
   </div>
 </div>
+<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/users/{id}/services</span><span class="ep-desc">Returns <code>int[]</code> of serviceIds assigned to this user</span></div></div>
+<div class="ep"><div class="ep-head"><span class="tag t-put">PUT</span><span class="ep-path">/api/admin/users/{id}/services</span><span class="ep-desc">Replace user's service assignments. Body: <code>int[]</code> of serviceIds</span></div></div>
 
 <h3>Groups</h3>
 <div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/admin/groups</span></div></div>

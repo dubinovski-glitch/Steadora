@@ -77,14 +77,26 @@
   <tr><td><code>UserId</code></td><td>INT</td><td>PK, IDENTITY</td><td></td></tr>
   <tr><td><code>ExternalId</code></td><td>NVARCHAR(128)</td><td>NOT NULL, UQ</td><td>Identity provider ID</td></tr>
   <tr><td><code>Email</code></td><td>NVARCHAR(256)</td><td>NOT NULL, UQ</td><td></td></tr>
+  <tr><td><code>Username</code></td><td>NVARCHAR(128)</td><td>NOT NULL, UQ</td><td>Login username</td></tr>
   <tr><td><code>DisplayName</code></td><td>NVARCHAR(128)</td><td>NOT NULL</td><td></td></tr>
   <tr><td><code>Title</code></td><td>NVARCHAR(128)</td><td>NULL</td><td>Job title</td></tr>
   <tr><td><code>AvatarInitials</code></td><td>NCHAR(2)</td><td>NULL</td><td>Auto-generated from DisplayName</td></tr>
   <tr><td><code>AvatarColor</code></td><td>NCHAR(7)</td><td>NULL</td><td>Hex colour e.g. <code>#4f6ef7</code></td></tr>
   <tr><td><code>RoleId</code></td><td>TINYINT</td><td>NOT NULL, FK → lookup.Role</td><td></td></tr>
   <tr><td><code>PrimaryGroupId</code></td><td>INT</td><td>NULL, FK → core.Group</td><td></td></tr>
+  <tr><td><code>PasswordHash</code></td><td>NVARCHAR(512)</td><td>NULL</td><td>PBKDF2-SHA256 stored as <code>base64salt:base64hash</code></td></tr>
   <tr><td><code>IsActive</code></td><td>BIT</td><td>NOT NULL, DEFAULT 1</td><td></td></tr>
   <tr><td><code>CreatedAt</code>, <code>UpdatedAt</code></td><td>DATETIME2(3)</td><td>NOT NULL</td><td></td></tr>
+</table></div>
+
+<h3>core.UserService</h3>
+<p>Many-to-many junction — which services a user is assigned to.</p>
+<div class="tbl-wrap"><table>
+  <tr><th>Column</th><th>Type</th><th>Constraints</th></tr>
+  <tr><td><code>UserServiceId</code></td><td>INT</td><td>PK, IDENTITY</td></tr>
+  <tr><td><code>UserId</code></td><td>INT</td><td>NOT NULL, FK → core.User</td></tr>
+  <tr><td><code>ServiceId</code></td><td>INT</td><td>NOT NULL, FK → core.Service</td></tr>
+  <tr><td colspan="3">UQ (UserId, ServiceId)</td></tr>
 </table></div>
 
 <h3>core.Group</h3>

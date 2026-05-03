@@ -68,8 +68,36 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
 
     public async Task<IEnumerable<Category>> GetCategoriesAsync()
     {
-        string sql = "SELECT * FROM lookup.Category ORDER BY SortOrder";
+        string sql = "SELECT CategoryId, ServiceId, Code, DisplayName, SortOrder FROM lookup.Category ORDER BY SortOrder";
         try { using var conn = db.Create(); return await conn.QueryAsync<Category>(sql); }
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get categories", sql, ex); throw; }
+    }
+
+    public async Task<IEnumerable<SubCategory>> GetSubCategoriesAsync(int categoryId)
+    {
+        string sql = "SELECT SubCategoryId, CategoryId, Code, DisplayName, SortOrder FROM lookup.SubCategory WHERE CategoryId=@categoryId ORDER BY SortOrder";
+        try { using var conn = db.Create(); return await conn.QueryAsync<SubCategory>(sql, new { categoryId }); }
+        catch (Exception ex) { SqlLogger.LogError(log, $"Failed to get subcategories for category {categoryId}", sql, ex); throw; }
+    }
+
+    public async Task<IEnumerable<ContactMethod>> GetContactMethodsAsync()
+    {
+        string sql = "SELECT * FROM lookup.ContactMethod ORDER BY SortOrder";
+        try { using var conn = db.Create(); return await conn.QueryAsync<ContactMethod>(sql); }
+        catch (Exception ex) { SqlLogger.LogError(log, "Failed to get contact methods", sql, ex); throw; }
+    }
+
+    public async Task<IEnumerable<Severity>> GetSeveritiesAsync()
+    {
+        string sql = "SELECT * FROM lookup.Severity ORDER BY SortOrder";
+        try { using var conn = db.Create(); return await conn.QueryAsync<Severity>(sql); }
+        catch (Exception ex) { SqlLogger.LogError(log, "Failed to get severities", sql, ex); throw; }
+    }
+
+    public async Task<IEnumerable<ResolutionCode>> GetResolutionCodesAsync()
+    {
+        string sql = "SELECT * FROM lookup.ResolutionCode ORDER BY SortOrder";
+        try { using var conn = db.Create(); return await conn.QueryAsync<ResolutionCode>(sql); }
+        catch (Exception ex) { SqlLogger.LogError(log, "Failed to get resolution codes", sql, ex); throw; }
     }
 }

@@ -20,14 +20,29 @@ public class AdminController(IAdminRepository repo) : ControllerBase
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest req)
     {
-        var id = await repo.CreateUserAsync(req.ExternalId, req.Email, req.DisplayName, req.Title, req.RoleId, req.PrimaryGroupId);
+        var hash = string.IsNullOrWhiteSpace(req.Password) ? null : ApertureITSM.Infrastructure.PasswordHelper.Hash(req.Password);
+        var id = await repo.CreateUserAsync(req.ExternalId, req.Email, req.Username, req.DisplayName, req.Title, req.RoleId, req.PrimaryGroupId, hash);
+        if (req.ServiceIds is { Length: > 0 })
+            await repo.SetUserServicesAsync(id, req.ServiceIds);
         return CreatedAtAction(nameof(GetUsers), new { id });
     }
 
     [HttpPut("users/{id:int}")]
     public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserRequest req)
     {
-        await repo.UpdateUserAsync(id, req.Email, req.DisplayName, req.Title, req.RoleId, req.PrimaryGroupId, req.IsActive);
+        var hash = string.IsNullOrWhiteSpace(req.Password) ? null : ApertureITSM.Infrastructure.PasswordHelper.Hash(req.Password);
+        await repo.UpdateUserAsync(id, req.Email, req.Username, req.DisplayName, req.Title, req.RoleId, req.PrimaryGroupId, req.IsActive, hash);
+        return NoContent();
+    }
+
+    [HttpGet("users/{id:int}/services")]
+    public async Task<IActionResult> GetUserServices(int id) =>
+        Ok(await repo.GetUserServiceIdsAsync(id));
+
+    [HttpPut("users/{id:int}/services")]
+    public async Task<IActionResult> SetUserServices(int id, [FromBody] int[] serviceIds)
+    {
+        await repo.SetUserServicesAsync(id, serviceIds);
         return NoContent();
     }
 
@@ -60,14 +75,14 @@ public class AdminController(IAdminRepository repo) : ControllerBase
     [HttpPost("categories")]
     public async Task<IActionResult> CreateCategory([FromBody] CreateCategoryRequest req)
     {
-        var id = await repo.CreateCategoryAsync(req.Code, req.DisplayName, req.SortOrder);
+        var id = await repo.CreateCategoryAsync(req.Code, req.DisplayName, req.SortOrder, req.ServiceId);
         return CreatedAtAction(nameof(GetCategories), new { id });
     }
 
     [HttpPut("categories/{id:int}")]
     public async Task<IActionResult> UpdateCategory(int id, [FromBody] UpdateCategoryRequest req)
     {
-        await repo.UpdateCategoryAsync(id, req.Code, req.DisplayName, req.SortOrder);
+        await repo.UpdateCategoryAsync(id, req.Code, req.DisplayName, req.SortOrder, req.ServiceId);
         return NoContent();
     }
 
@@ -131,14 +146,14 @@ public class AdminController(IAdminRepository repo) : ControllerBase
     public async Task<IActionResult> CreateService([FromBody] CreateServiceRequest req)
     {
         var slug = GenerateSlug(req.Name);
-        var id = await repo.CreateServiceAsync(slug, req.Name, req.CategoryId, req.OwningGroupId, req.HealthCode, req.SlaTierId);
+        var id = await repo.CreateServiceAsync(slug, req.Name, req.OwningGroupId, req.HealthCode, req.SlaTierId);
         return CreatedAtAction(nameof(GetServices), new { id });
     }
 
     [HttpPut("services/{id:int}")]
     public async Task<IActionResult> UpdateService(int id, [FromBody] UpdateServiceRequest req)
     {
-        await repo.UpdateServiceAsync(id, req.Name, req.CategoryId, req.OwningGroupId, req.HealthCode, req.SlaTierId, req.IsActive);
+        await repo.UpdateServiceAsync(id, req.Name, req.OwningGroupId, req.HealthCode, req.SlaTierId, req.IsActive);
         return NoContent();
     }
 
@@ -251,17 +266,17 @@ public class AdminController(IAdminRepository repo) : ControllerBase
 
 // ── Request records ────────────────────────────────────────────────────────
 
-public record CreateUserRequest(string ExternalId, string Email, string DisplayName, string? Title, byte RoleId, int? PrimaryGroupId);
-public record UpdateUserRequest(string Email, string DisplayName, string? Title, byte RoleId, int? PrimaryGroupId, bool IsActive);
+public record CreateUserRequest(string ExternalId, string Email, string Username, string DisplayName, string? Title, byte RoleId, int? PrimaryGroupId, string? Password, int[]? ServiceIds);
+public record UpdateUserRequest(string Email, string Username, string DisplayName, string? Title, byte RoleId, int? PrimaryGroupId, bool IsActive, string? Password);
 public record CreateGroupRequest(string Name, string? Description);
 public record UpdateGroupRequest(string Name, string? Description, bool IsActive);
-public record CreateCategoryRequest(string Code, string DisplayName, int SortOrder);
-public record UpdateCategoryRequest(string Code, string DisplayName, int SortOrder);
+public record CreateCategoryRequest(string Code, string DisplayName, int SortOrder, int? ServiceId);
+public record UpdateCategoryRequest(string Code, string DisplayName, int SortOrder, int? ServiceId);
 public record CreateSubCategoryRequest(int CategoryId, string Code, string DisplayName, int SortOrder);
 public record UpdateSubCategoryRequest(int CategoryId, string Code, string DisplayName, int SortOrder);
 public record UpdateRoleRequest(string DisplayName, string? Description);
-public record CreateServiceRequest(string Name, int? CategoryId, int? OwningGroupId, string HealthCode, int? SlaTierId);
-public record UpdateServiceRequest(string Name, int? CategoryId, int? OwningGroupId, string HealthCode, int? SlaTierId, bool IsActive);
+public record CreateServiceRequest(string Name, int? OwningGroupId, string HealthCode, int? SlaTierId);
+public record UpdateServiceRequest(string Name, int? OwningGroupId, string HealthCode, int? SlaTierId, bool IsActive);
 public record CreateSlaTierRequest(string Name, string? Description, bool Calculate247, bool AutoEscalate);
 public record UpdateSlaTierRequest(string Name, string? Description, bool IsActive, bool Calculate247, bool AutoEscalate);
 public record SlaTierTargetRequest(int PriorityId, int ResponseMinutes, int ResolutionMinutes);

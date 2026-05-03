@@ -13,7 +13,7 @@ import { ChangesView } from './features/changes/ChangesView'
 import { KnowledgeView } from './features/knowledge/KnowledgeView'
 import { SlaView } from './features/sla/SlaView'
 import { AdminView } from './features/admin/AdminView'
-import { NewIncidentModal } from './features/incidents/NewIncidentModal'
+import { NewIncidentForm } from './features/incidents/NewIncidentForm'
 
 export default function App() {
   const { view, openIncidentId, theme, density, showNewIncident } = useAppStore()
@@ -34,7 +34,8 @@ export default function App() {
         <Topbar />
         <div className="page-content">
           {view === 'dashboard' && <DashboardView />}
-          {view === 'incidents' && !openIncidentId && <IncidentsView addToast={addToast} />}
+          {view === 'incidents' && !openIncidentId && !showNewIncident && <IncidentsView addToast={addToast} />}
+          {view === 'incidents' && !openIncidentId && showNewIncident && <NewIncidentForm addToast={addToast} />}
           {view === 'incidents' && openIncidentId && <IncidentDetailView incidentId={openIncidentId} addToast={addToast} />}
           {view === 'problems' && <ProblemsView />}
           {view === 'changes' && <ChangesView addToast={addToast} />}
@@ -44,7 +45,6 @@ export default function App() {
         </div>
       </div>
 
-      {showNewIncident && <NewIncidentModal addToast={addToast} />}
       <ToastStack toasts={toasts} />
     </div>
   )
