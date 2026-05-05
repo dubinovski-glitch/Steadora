@@ -39,11 +39,16 @@ const VALUE_COLOR: Record<string, string> = {
 export function RolesTab({ addToast }: Props) {
   const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Role | null>(null)
 
   const load = () => {
     setLoading(true)
-    adminApi.getRoles().then(setRoles).finally(() => setLoading(false))
+    setError(null)
+    adminApi.getRoles()
+      .then(setRoles)
+      .catch(err => setError(err?.message ?? 'Failed to load roles'))
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
@@ -64,6 +69,15 @@ export function RolesTab({ addToast }: Props) {
       {/* Role cards */}
       {loading ? (
         <div className="py-12 text-center text-text-muted">Loading…</div>
+      ) : error ? (
+        <div className="py-12 text-center">
+          <p className="text-sm text-[#c8252b] mb-3">{error}</p>
+          <button onClick={load} className="px-4 py-2 text-sm border border-border-default rounded-md hover:bg-hover text-text-secondary transition-colors">
+            Retry
+          </button>
+        </div>
+      ) : sorted.length === 0 ? (
+        <div className="py-12 text-center text-text-muted text-sm">No roles found.</div>
       ) : (
         <div className="bg-surface rounded-lg border border-border-default shadow-sm overflow-hidden">
           {sorted.map((role, i) => (

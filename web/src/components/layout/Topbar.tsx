@@ -9,6 +9,7 @@ const labels: Record<View, string[]> = {
   changes: ['Change management'],
   knowledge: ['Knowledge base'],
   sla: ['SLA & reporting'],
+  admin: ['Administration'],
 }
 
 interface Props { unreadCount?: number }
