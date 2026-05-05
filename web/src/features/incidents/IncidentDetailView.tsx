@@ -3,6 +3,7 @@ import { ArrowLeft, Star, Share2, Lock } from 'lucide-react'
 import { incidentApi } from '../../api/incidents'
 import { adminApi } from '../../api/admin'
 import { lookupsApi } from '../../api/lookups'
+import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
 import { Badge, priorityVariant, statusVariant } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
@@ -10,7 +11,7 @@ import { SlaBar } from '../../components/primitives/SlaBar'
 import type {
   Incident, Comment, ActivityEvent,
   User, Group, Service, AdminCategory, AdminSubCategory,
-  ContactMethod, Severity, ResolutionCode, Impact, Urgency,
+  ContactMethod, Severity, ResolutionCode,
 } from '../../types'
 
 interface Props { incidentId: number; addToast: (t: string) => void }
@@ -27,7 +28,7 @@ interface EditState {
   title: string; description: string
   callerExtId: string; contactMethodCode: string; location: string
   serviceSlug: string; categoryCode: string; subCategoryCode: string; ciAssetTag: string
-  priorityCode: string; impactCode: string; urgencyCode: string; severityCode: string
+  priorityCode: string; severityCode: string
   isMajorIncident: boolean; groupSlug: string; assigneeExtId: string; statusCode: string
   resolutionCodeCode: string; resolutionNotes: string
 }
@@ -37,8 +38,7 @@ function toEdit(i: Incident): EditState {
     title: i.title ?? '', description: i.description ?? '',
     callerExtId: '', contactMethodCode: i.contactMethodCode ?? '', location: i.location ?? '',
     serviceSlug: '', categoryCode: '', subCategoryCode: i.subCategoryCode ?? '', ciAssetTag: i.ciAssetTag ?? '',
-    priorityCode: i.priorityCode ?? 'medium', impactCode: i.impactCode ?? '',
-    urgencyCode: i.urgencyCode ?? '', severityCode: i.severityCode ?? '',
+    priorityCode: i.priorityCode ?? 'medium', severityCode: i.severityCode ?? '',
     isMajorIncident: i.isMajorIncident, groupSlug: '', assigneeExtId: '',
     statusCode: i.statusCode ?? 'new', resolutionCodeCode: i.resolutionCode ?? '',
     resolutionNotes: i.resolutionNotes ?? '',
@@ -67,8 +67,6 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
   const [contactMethods, setContactMethods] = useState<ContactMethod[]>([])
   const [severities, setSeverities] = useState<Severity[]>([])
   const [resolutionCodes, setResolutionCodes] = useState<ResolutionCode[]>([])
-  const [impacts, setImpacts] = useState<Impact[]>([])
-  const [urgencies, setUrgencies] = useState<Urgency[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -77,22 +75,19 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
       incidentApi.getTimeline(incidentId).catch(() => []),
       adminApi.getServices().catch(() => []),
       adminApi.getCategories().catch(() => []),
-      fetch('/api/users').then(r => r.json()).catch(() => []),
-      fetch('/api/users/groups').then(r => r.json()).catch(() => []),
+      api.get<User[]>('/users').catch(() => []),
+      api.get<Group[]>('/users/groups').catch(() => []),
       lookupsApi.getContactMethods().catch(() => []),
       lookupsApi.getSeverities().catch(() => []),
       lookupsApi.getResolutionCodes().catch(() => []),
-      lookupsApi.getImpacts().catch(() => []),
-      lookupsApi.getUrgencies().catch(() => []),
-    ]).then(([inc, cmts, tl, svcs, cats, usrs, grps, cms, sevs, rcs, imps, urgs]) => {
+    ]).then(([inc, cmts, tl, svcs, cats, usrs, grps, cms, sevs, rcs]) => {
       const i = inc as Incident
       setIncident(i); setEdit(toEdit(i))
       setComments(cmts as Comment[]); setTimeline(tl as ActivityEvent[])
       setServices(svcs as Service[]); setCategories(cats as AdminCategory[])
       setUsers(usrs as User[]); setGroups(grps as Group[])
       setContactMethods(cms as ContactMethod[]); setSeverities(sevs as Severity[])
-      setResolutionCodes(rcs as ResolutionCode[]); setImpacts(imps as Impact[])
-      setUrgencies(urgs as Urgency[])
+      setResolutionCodes(rcs as ResolutionCode[])
     })
   }, [incidentId])
 
@@ -148,8 +143,6 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
         subCategoryCode: edit.subCategoryCode || undefined,
         ciAssetTag: edit.ciAssetTag || undefined,
         priorityCode: edit.priorityCode,
-        impactCode: edit.impactCode || undefined,
-        urgencyCode: edit.urgencyCode || undefined,
         severityCode: edit.severityCode || undefined,
         isMajorIncident: edit.isMajorIncident,
         groupSlug: edit.groupSlug || undefined,
@@ -252,12 +245,24 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
             )}
             {incident.ciAssetTag && <span className="text-xs text-text-muted font-mono">{incident.ciAssetTag}</span>}
             <span className="text-xs text-text-muted">Opened {relative(incident.openedAt)}</span>
-            {incident.slaTargetMinutes && (
-              <div className="flex items-center gap-1.5 ml-auto px-2 py-1 rounded-full border border-border-default text-xs">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: (incident.slaPercent ?? 0) >= 80 ? '#dc2626' : '#d97706' }} />
-                <SlaBar percent={incident.slaPercent} breachedAt={incident.slaBreachedAt} targetMinutes={incident.slaTargetMinutes} startedAt={incident.slaStartedAt} pausedSeconds={incident.slaPausedSeconds} compact />
-              </div>
-            )}
+            <div className="ml-auto flex flex-col items-end gap-1">
+              <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={edit.isMajorIncident}
+                  onChange={e => setEdit(prev => prev ? { ...prev, isMajorIncident: e.target.checked } : prev)}
+                  disabled={dis}
+                  className="w-3.5 h-3.5 accent-accent disabled:opacity-50"
+                />
+                <span className="font-medium text-text-secondary">Major Incident</span>
+              </label>
+              {incident.slaTargetMinutes && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-border-default text-xs">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: (incident.slaPercent ?? 0) >= 80 ? '#dc2626' : '#d97706' }} />
+                  <SlaBar percent={incident.slaPercent} breachedAt={incident.slaBreachedAt} targetMinutes={incident.slaTargetMinutes} startedAt={incident.slaStartedAt} pausedSeconds={incident.slaPausedSeconds} compact />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -283,7 +288,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
               disabled={dis}
               rows={7}
               placeholder="Full description, steps to reproduce, impact…"
-              className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[15px] text-text-primary bg-surface focus:outline-none focus:border-border-focus disabled:opacity-60 disabled:cursor-not-allowed resize-none leading-relaxed"
+              className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[15px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus disabled:opacity-60 disabled:cursor-not-allowed resize-none leading-relaxed"
             />
           </div>
 
@@ -298,7 +303,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitNote() }}
                 disabled={isClosed}
                 placeholder={isClosed ? 'Closed incidents cannot receive new notes.' : 'Write a note…'}
-                className="w-full px-3 py-2 text-sm text-text-primary bg-transparent resize-none focus:outline-none"
+                className="w-full px-3 py-2 text-sm text-text-primary bg-surface resize-none focus:outline-none"
               />
               <div className="flex items-center justify-between px-3 py-2 bg-subtle">
                 <span className="text-xs text-text-muted">⌘+⏎ to add</span>
@@ -382,8 +387,8 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
 
         <div className="p-4 flex flex-col gap-5">
 
-          {/* PROPERTIES */}
-          <SbSection title="PROPERTIES">
+          {/* Properties */}
+          <div className="flex flex-col gap-2.5">
             <SbField label="Status">
               <select value={edit.statusCode} onChange={sf('statusCode')} disabled={dis} className={sel}>
                 {STATUSES.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
@@ -394,42 +399,28 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
                 {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase()+p.slice(1)}</option>)}
               </select>
             </SbField>
-            <SbField label="Impact">
-              <select value={edit.impactCode} onChange={sf('impactCode')} disabled={dis} className={sel}>
-                <option value="">— none —</option>
-                {impacts.map(i => <option key={i.code} value={i.code}>{i.displayName}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Urgency">
-              <select value={edit.urgencyCode} onChange={sf('urgencyCode')} disabled={dis} className={sel}>
-                <option value="">— none —</option>
-                {urgencies.map(u => <option key={u.code} value={u.code}>{u.displayName}</option>)}
-              </select>
-            </SbField>
             <SbField label="Severity">
               <select value={edit.severityCode} onChange={sf('severityCode')} disabled={dis} className={sel}>
                 <option value="">— none —</option>
                 {severities.map(s => <option key={s.code} value={s.code}>{s.displayName}</option>)}
               </select>
             </SbField>
-            <SbField label="Major Incident">
-              <label className="flex items-center gap-2 cursor-pointer select-none mt-0.5">
-                <input
-                  type="checkbox"
-                  checked={edit.isMajorIncident}
-                  onChange={e => setEdit(prev => prev ? { ...prev, isMajorIncident: e.target.checked } : prev)}
-                  disabled={dis}
-                  className="w-4 h-4 accent-accent disabled:opacity-50"
-                />
-                <span className="text-sm font-medium text-text-primary">
-                  {edit.isMajorIncident ? 'Yes' : 'No'}
-                </span>
-              </label>
+            <SbField label="Assignment team">
+              <select value={edit.groupSlug} onChange={sf('groupSlug')} disabled={dis} className={sel}>
+                <option value="">— select —</option>
+                {groups.map(g => <option key={g.slug} value={g.slug}>{g.name}</option>)}
+              </select>
             </SbField>
-          </SbSection>
+            <SbField label="Assigned to">
+              <select value={edit.assigneeExtId} onChange={sf('assigneeExtId')} disabled={dis} className={sel}>
+                <option value="">— unassigned —</option>
+                {users.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
+              </select>
+            </SbField>
+          </div>
 
-          {/* CLASSIFICATION */}
-          <SbSection title="CLASSIFICATION">
+          {/* Classification */}
+          <div className="flex flex-col gap-2.5">
             <SbField label="Service">
               <select value={edit.serviceSlug} onChange={e => setEdit(prev => prev ? { ...prev, serviceSlug: e.target.value, categoryCode: '', subCategoryCode: '' } : prev)} disabled={dis} className={sel}>
                 <option value="">— select —</option>
@@ -451,25 +442,13 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
             <SbField label="Config Item">
               <input value={edit.ciAssetTag} onChange={sf('ciAssetTag')} disabled={dis} placeholder="Asset tag" className={inp} />
             </SbField>
-          </SbSection>
+          </div>
 
-          {/* ASSIGNMENT */}
-          <SbSection title="ASSIGNMENT">
+          {/* Caller / Contact */}
+          <div className="flex flex-col gap-2.5">
             <SbField label="Caller">
               <select value={edit.callerExtId} onChange={sf('callerExtId')} disabled={dis} className={sel}>
                 <option value="">— select —</option>
-                {users.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Group">
-              <select value={edit.groupSlug} onChange={sf('groupSlug')} disabled={dis} className={sel}>
-                <option value="">— select —</option>
-                {groups.map(g => <option key={g.slug} value={g.slug}>{g.name}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Assignee">
-              <select value={edit.assigneeExtId} onChange={sf('assigneeExtId')} disabled={dis} className={sel}>
-                <option value="">— unassigned —</option>
                 {users.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
               </select>
             </SbField>
@@ -482,10 +461,10 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
             <SbField label="Location">
               <input value={edit.location} onChange={sf('location')} disabled={dis} placeholder="e.g. HQ Floor 4" className={inp} />
             </SbField>
-          </SbSection>
+          </div>
 
-          {/* RESOLUTION */}
-          <SbSection title="RESOLUTION">
+          {/* Resolution */}
+          <div className="flex flex-col gap-2.5">
             <SbField label="Resolution Code">
               <select value={edit.resolutionCodeCode} onChange={sf('resolutionCodeCode')} disabled={dis} className={sel}>
                 <option value="">— none —</option>
@@ -502,17 +481,17 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
                 className={`${inp} resize-none`}
               />
             </SbField>
-          </SbSection>
+          </div>
 
-          {/* DATES (read-only) */}
-          <SbSection title="DATES">
+          {/* Dates (read-only) */}
+          <div className="flex flex-col gap-2.5">
             <SbInfo label="Opened"     value={incident.openedAt   ? new Date(incident.openedAt).toLocaleString()   : '—'} />
             <SbInfo label="Resolved"   value={incident.resolvedAt ? new Date(incident.resolvedAt).toLocaleString() : '—'} />
             <SbInfo label="Closed"     value={incident.closedAt   ? new Date(incident.closedAt).toLocaleString()   : '—'} />
             <SbInfo label="1st Response" value={incident.firstResponseAt ? new Date(incident.firstResponseAt).toLocaleString() : '—'} />
             <SbInfo label="Reopens"    value={String(incident.reopenCount ?? 0)} />
             <SbInfo label="Reassigns"  value={String(incident.reassignCount ?? 0)} />
-          </SbSection>
+          </div>
 
         </div>
       </div>
@@ -521,15 +500,6 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
 }
 
 /* ── Sidebar primitives ── */
-
-function SbSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-2">{title}</p>
-      <div className="flex flex-col gap-2.5">{children}</div>
-    </div>
-  )
-}
 
 function SbField({ label, children }: { label: string; children: React.ReactNode }) {
   return (

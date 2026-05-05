@@ -3,6 +3,7 @@ import { Info } from 'lucide-react'
 import { incidentApi } from '../../api/incidents'
 import { adminApi } from '../../api/admin'
 import { lookupsApi } from '../../api/lookups'
+import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
 import type {
   User, Group, Service, AdminCategory, AdminSubCategory,
@@ -81,8 +82,8 @@ export function NewIncidentForm({ addToast }: Props) {
     Promise.all([
       adminApi.getServices().catch(() => []),
       adminApi.getCategories().catch(() => []),
-      fetch('/api/users').then(r => r.json()).catch(() => []),
-      fetch('/api/users/groups').then(r => r.json()).catch(() => []),
+      api.get<User[]>('/users').catch(() => []),
+      api.get<Group[]>('/users/groups').catch(() => []),
       lookupsApi.getPriorities().catch(() => []),
       lookupsApi.getContactMethods().catch(() => []),
       lookupsApi.getSeverities().catch(() => []),
