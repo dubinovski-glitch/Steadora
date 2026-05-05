@@ -33,6 +33,19 @@
   --success-text:  #1f8a4c; --success-bg:  #e6f4ec; --success-border:  #b6dcc4;
   --pending-text:  #6c3eb8; --pending-bg:  #f0e8fb;
 
+  /* Sidebar dark palette */
+  --sb-bg:           #0e1f3d;
+  --sb-border:       #1a3258;
+  --sb-hover:        #162d52;
+  --sb-active-bg:    #1c3768;
+  --sb-text:         #c5d8f0;
+  --sb-text-muted:   #5b7aa6;
+  --sb-text-label:   #3a5878;
+  --sb-accent:       #5b9cf8;
+  --sb-accent-bg:    #173466;
+  --sb-badge-bg:     #1a3a72;
+  --sb-badge-text:   #7eb8ff;
+
   /* Spacing */
   --space-1: 4px; --space-2: 8px;  --space-3: 12px; --space-4: 16px;
   --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
@@ -91,12 +104,14 @@ body {
 .sidebar {
   width: 232px;
   flex-shrink: 0;
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border-default);
+  background: var(--sb-bg);
+  border-right: 1px solid var(--sb-border);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
 }
+
+.sidebar::-webkit-scrollbar-thumb { background: var(--sb-border); }
 
 .main-content {
   flex: 1;
