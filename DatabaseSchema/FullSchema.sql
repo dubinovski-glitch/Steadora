@@ -289,7 +289,6 @@ CREATE TABLE core.[User] (
     AvatarInitials  NVARCHAR(4)     NULL,
     AvatarColor     VARCHAR(16)     NULL,
     RoleId          TINYINT         NOT NULL,
-    PrimaryGroupId  INT             NULL,
     PasswordHash    NVARCHAR(512)   NULL,                    -- PBKDF2-SHA256 base64 salt:hash
     IsActive        BIT             NOT NULL DEFAULT 1,
     CreatedAt       DATETIME2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
@@ -319,6 +318,17 @@ CREATE TABLE core.UserService (
 );
 CREATE INDEX IX_UserService_UserId    ON core.UserService (UserId);
 CREATE INDEX IX_UserService_ServiceId ON core.UserService (ServiceId);
+
+CREATE TABLE core.UserGroup (
+    UserGroupId  INT NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    UserId       INT NOT NULL,
+    GroupId      INT NOT NULL,
+    CONSTRAINT UQ_UserGroup        UNIQUE (UserId, GroupId),
+    CONSTRAINT FK_UserGroup_User   FOREIGN KEY (UserId)  REFERENCES core.[User]  (UserId),
+    CONSTRAINT FK_UserGroup_Group  FOREIGN KEY (GroupId) REFERENCES core.[Group] (GroupId)
+);
+CREATE INDEX IX_UserGroup_UserId  ON core.UserGroup (UserId);
+CREATE INDEX IX_UserGroup_GroupId ON core.UserGroup (GroupId);
 
 CREATE TABLE core.ConfigurationItem (
     CiId            INT             NOT NULL IDENTITY(1,1) PRIMARY KEY,
@@ -648,7 +658,6 @@ GO
    ---------------------------------------------------------------------------- */
 -- core
 ALTER TABLE core.[User]               ADD CONSTRAINT FK_User_Role            FOREIGN KEY (RoleId)         REFERENCES lookup.Role(RoleId);
-ALTER TABLE core.[User]               ADD CONSTRAINT FK_User_PrimaryGroup    FOREIGN KEY (PrimaryGroupId) REFERENCES core.[Group](GroupId);
 ALTER TABLE lookup.Category           ADD CONSTRAINT FK_Category_Service     FOREIGN KEY (ServiceId)      REFERENCES core.Service(ServiceId);
 ALTER TABLE core.Service              ADD CONSTRAINT FK_Service_Group        FOREIGN KEY (OwningGroupId)  REFERENCES core.[Group](GroupId);
 ALTER TABLE core.Service              ADD CONSTRAINT FK_Service_Health       FOREIGN KEY (HealthId)       REFERENCES lookup.ServiceHealth(HealthId);
@@ -906,8 +915,10 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    DECLARE @PriorityId        TINYINT = (SELECT PriorityId       FROM lookup.Priority         WHERE Code = @PriorityCode);
-    DECLARE @StatusId          TINYINT = (SELECT StatusId         FROM lookup.IncidentStatus   WHERE Code = 'new');
+    DECLARE @PriorityId        TINYINT = (SELECT PriorityId FROM lookup.Priority WHERE Code = @PriorityCode);
+    -- Use 'open' when an assignee is given at creation time, otherwise 'new'
+    DECLARE @StatusId          TINYINT = (SELECT StatusId FROM lookup.IncidentStatus WHERE Code =
+        CASE WHEN @AssigneeExtId IS NOT NULL AND @AssigneeExtId <> '' THEN 'open' ELSE 'new' END);
     DECLARE @CategoryId        INT     = (SELECT CategoryId       FROM lookup.Category         WHERE Code = @CategoryCode);
     DECLARE @SubCategoryId     INT     = (SELECT SubCategoryId    FROM lookup.SubCategory      WHERE Code = @SubCategoryCode);
     DECLARE @ServiceId         INT     = (SELECT ServiceId        FROM core.Service            WHERE Slug = @ServiceSlug);
@@ -1089,6 +1100,15 @@ BEGIN
     DECLARE @ResolutionCodeId TINYINT = (SELECT ResolutionCodeId FROM lookup.ResolutionCode  WHERE Code          = @ResolutionCodeCode);
     DECLARE @ActorUserId      INT     = (SELECT UserId          FROM core.[User]             WHERE ExternalId    = @ActorExtId);
 
+    -- Capture status before the update for auto-transition check
+    DECLARE @PrevStatusCode VARCHAR(16);
+    SELECT @PrevStatusCode = s.Code
+    FROM itil.Incident i
+    JOIN lookup.IncidentStatus s ON s.StatusId = i.StatusId
+    WHERE i.IncidentId = @IncidentId;
+
+    DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+
     UPDATE itil.Incident SET
         Title             = @Title,
         Description       = NULLIF(@Description,     ''),
@@ -1108,11 +1128,20 @@ BEGIN
         AssigneeUserId    = @AssigneeUserId,
         ResolutionCodeId  = @ResolutionCodeId,
         ResolutionNotes   = NULLIF(@ResolutionNotes, ''),
-        UpdatedAt         = SYSUTCDATETIME()
+        UpdatedAt         = @Now
     WHERE IncidentId = @IncidentId;
 
     INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, OccurredAt)
-    VALUES ('INC', @IncidentId, @ActorUserId, 'updated', SYSUTCDATETIME());
+    VALUES ('INC', @IncidentId, @ActorUserId, 'updated', @Now);
+
+    -- Auto-transition: 'new' → 'open' when an assignee is first set
+    IF @AssigneeUserId IS NOT NULL AND @PrevStatusCode = 'new'
+    BEGIN
+        DECLARE @OpenStatusId TINYINT = (SELECT StatusId FROM lookup.IncidentStatus WHERE Code = 'open');
+        UPDATE itil.Incident SET StatusId = @OpenStatusId WHERE IncidentId = @IncidentId;
+        INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, Field, OldValue, NewValue, OccurredAt)
+        VALUES ('INC', @IncidentId, @ActorUserId, 'status_changed', 'status', 'new', 'open', @Now);
+    END
 END
 GO
 
@@ -1335,10 +1364,11 @@ INSERT INTO lookup.Priority (PriorityId, Code, DisplayName, SortOrder, DefaultRe
 
 INSERT INTO lookup.IncidentStatus (StatusId, Code, DisplayName, IsTerminal, PausesSla, SortOrder) VALUES
     (1,'new',     'New',         0,0,1),
-    (2,'progress','In Progress', 0,0,2),
-    (3,'pending', 'Pending',     0,1,3),
-    (4,'resolved','Resolved',    1,0,4),
-    (5,'closed',  'Closed',      1,0,5);
+    (6,'open',    'Open',        0,0,2),
+    (2,'progress','In Progress', 0,0,3),
+    (3,'pending', 'Pending',     0,1,4),
+    (4,'resolved','Resolved',    1,0,5),
+    (5,'closed',  'Closed',      1,0,6);
 
 INSERT INTO lookup.ProblemState (StateId, Code, DisplayName, SortOrder, IsTerminal) VALUES
     (1,'investigating',     'Investigating',         1,0),
@@ -1419,17 +1449,35 @@ INSERT INTO core.[Group] (Slug, Name) VALUES
 GO
 
 -- 14c. users (matches the prototype's USERS array)
-INSERT INTO core.[User] (ExternalId, Email, DisplayName, Title, AvatarInitials, AvatarColor, RoleId, PrimaryGroupId)
+INSERT INTO core.[User] (ExternalId, Email, DisplayName, Title, AvatarInitials, AvatarColor, RoleId)
 VALUES
-    ('u1','mchen@acme.com',   N'Maya Chen',     N'Service Desk Lead',   N'MC','blue',  3,(SELECT GroupId FROM core.[Group] WHERE Slug='productivity-apps')),
-    ('u2','dalvarez@acme.com',N'Diego Alvarez', N'Network Engineer',    N'DA','green', 2,(SELECT GroupId FROM core.[Group] WHERE Slug='network')),
-    ('u3','praman@acme.com',  N'Priya Raman',   N'L2 Support',          N'PR','purple',2,(SELECT GroupId FROM core.[Group] WHERE Slug='collaboration')),
-    ('u4','twalsh@acme.com',  N'Tom Walsh',     N'Sysadmin',            N'TW','amber', 2,(SELECT GroupId FROM core.[Group] WHERE Slug='field-services')),
-    ('u5','hvoss@acme.com',   N'Hannah Voss',   N'Security',            N'HV','pink',  2,(SELECT GroupId FROM core.[Group] WHERE Slug='identity')),
-    ('u6','ksato@acme.com',   N'Kenji Sato',    N'Cloud Ops',           N'KS','teal',  2,(SELECT GroupId FROM core.[Group] WHERE Slug='cloud-ops')),
-    ('u7','opark@acme.com',   N'Olivia Park',   N'Change Manager',      N'OP','blue',  3,(SELECT GroupId FROM core.[Group] WHERE Slug='change-mgmt')),
-    ('u8','mwebb@acme.com',   N'Marcus Webb',   N'Database Admin',      N'MW','green', 2,(SELECT GroupId FROM core.[Group] WHERE Slug='database')),
-    ('me','acarter@acme.com', N'Alex Carter',   N'Service Desk Agent',  N'AC','blue',  2,(SELECT GroupId FROM core.[Group] WHERE Slug='productivity-apps'));
+    ('u1','mchen@acme.com',   N'Maya Chen',     N'Service Desk Lead',   N'MC','blue',  3),
+    ('u2','dalvarez@acme.com',N'Diego Alvarez', N'Network Engineer',    N'DA','green', 2),
+    ('u3','praman@acme.com',  N'Priya Raman',   N'L2 Support',          N'PR','purple',2),
+    ('u4','twalsh@acme.com',  N'Tom Walsh',     N'Sysadmin',            N'TW','amber', 2),
+    ('u5','hvoss@acme.com',   N'Hannah Voss',   N'Security',            N'HV','pink',  2),
+    ('u6','ksato@acme.com',   N'Kenji Sato',    N'Cloud Ops',           N'KS','teal',  2),
+    ('u7','opark@acme.com',   N'Olivia Park',   N'Change Manager',      N'OP','blue',  3),
+    ('u8','mwebb@acme.com',   N'Marcus Webb',   N'Database Admin',      N'MW','green', 2),
+    ('me','acarter@acme.com', N'Alex Carter',   N'Service Desk Agent',  N'AC','blue',  2);
+GO
+
+-- 14c-ii. initial group memberships
+INSERT INTO core.UserGroup (UserId, GroupId)
+SELECT u.UserId, g.GroupId
+FROM (VALUES
+    ('u1','productivity-apps'),
+    ('u2','network'),
+    ('u3','collaboration'),
+    ('u4','field-services'),
+    ('u5','identity'),
+    ('u6','cloud-ops'),
+    ('u7','change-mgmt'),
+    ('u8','database'),
+    ('me','productivity-apps')
+) v(ExtId, GrpSlug)
+JOIN core.[User]  u ON u.ExternalId = v.ExtId
+JOIN core.[Group] g ON g.Slug       = v.GrpSlug;
 GO
 
 -- 14d. services (CategoryId removed from core.Service in Alter_20260503_ServiceCategoryHierarchy)

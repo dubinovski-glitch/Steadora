@@ -12,8 +12,7 @@ public class User
     public string? AvatarColor { get; init; }
     public byte RoleId { get; init; }
     public string RoleCode { get; init; } = string.Empty;
-    public int? PrimaryGroupId { get; init; }
-    public string? PrimaryGroupName { get; init; }
+    public string? GroupNames { get; init; }
     public bool IsActive { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }

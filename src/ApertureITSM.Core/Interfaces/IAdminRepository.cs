@@ -6,10 +6,12 @@ public interface IAdminRepository
 {
     // ── Users ────────────────────────────────────────────────────────────────
     Task<IEnumerable<User>> GetUsersAsync();
-    Task<int> CreateUserAsync(string externalId, string email, string username, string displayName, string? title, byte roleId, int? primaryGroupId, string? passwordHash);
-    Task UpdateUserAsync(int userId, string email, string username, string displayName, string? title, byte roleId, int? primaryGroupId, bool isActive, string? passwordHash);
+    Task<int> CreateUserAsync(string externalId, string email, string username, string displayName, string? title, byte roleId, string? passwordHash);
+    Task UpdateUserAsync(int userId, string email, string username, string displayName, string? title, byte roleId, bool isActive, string? passwordHash);
     Task<IEnumerable<int>> GetUserServiceIdsAsync(int userId);
     Task SetUserServicesAsync(int userId, IEnumerable<int> serviceIds);
+    Task<IEnumerable<int>> GetUserGroupIdsAsync(int userId);
+    Task SetUserGroupsAsync(int userId, IEnumerable<int> groupIds);
 
     // ── Groups ───────────────────────────────────────────────────────────────
     Task<IEnumerable<Group>> GetGroupsAsync();

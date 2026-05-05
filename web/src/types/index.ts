@@ -190,8 +190,7 @@ export interface User {
   avatarColor?: string
   roleId: number
   roleCode: string
-  primaryGroupId?: number
-  primaryGroupName?: string
+  groupNames?: string
   isActive: boolean
 }
 
@@ -406,6 +405,18 @@ export interface CategoryLookup {
   code: string
   displayName: string
   sortOrder: number
+}
+
+export interface CurrentUser {
+  userId: number
+  username: string
+  email: string
+  displayName: string
+  avatarInitials?: string
+  avatarColor?: string
+  roleCode: string
+  roleDisplayName: string
+  serviceIds: number[]
 }
 
 export type PriorityCode = 'critical' | 'high' | 'medium' | 'low'

@@ -17,11 +17,14 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         string sql = """
             SELECT u.UserId, u.ExternalId, u.Email, u.Username, u.DisplayName, u.Title,
                    u.AvatarInitials, u.AvatarColor, u.RoleId, r.Code AS RoleCode,
-                   u.PrimaryGroupId, g.Name AS PrimaryGroupName, u.IsActive,
-                   u.CreatedAt, u.UpdatedAt
+                   STRING_AGG(g.Name, ', ') WITHIN GROUP (ORDER BY g.Name) AS GroupNames,
+                   u.IsActive, u.CreatedAt, u.UpdatedAt
             FROM core.[User] u
-            LEFT JOIN lookup.Role  r ON r.RoleId  = u.RoleId
-            LEFT JOIN core.[Group] g ON g.GroupId = u.PrimaryGroupId
+            LEFT JOIN lookup.Role    r  ON r.RoleId  = u.RoleId
+            LEFT JOIN core.UserGroup ug ON ug.UserId = u.UserId
+            LEFT JOIN core.[Group]   g  ON g.GroupId = ug.GroupId
+            GROUP BY u.UserId, u.ExternalId, u.Email, u.Username, u.DisplayName, u.Title,
+                     u.AvatarInitials, u.AvatarColor, u.RoleId, r.Code, u.IsActive, u.CreatedAt, u.UpdatedAt
             ORDER BY u.DisplayName
             """;
         try
@@ -36,18 +39,18 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task<int> CreateUserAsync(string externalId, string email, string username, string displayName, string? title, byte roleId, int? primaryGroupId, string? passwordHash)
+    public async Task<int> CreateUserAsync(string externalId, string email, string username, string displayName, string? title, byte roleId, string? passwordHash)
     {
         string sql = """
-            INSERT INTO core.[User] (ExternalId, Email, Username, DisplayName, Title, AvatarInitials, RoleId, PrimaryGroupId, PasswordHash, IsActive)
-            VALUES (@externalId, @email, @username, @displayName, @title, @initials, @roleId, @primaryGroupId, @passwordHash, 1);
+            INSERT INTO core.[User] (ExternalId, Email, Username, DisplayName, Title, AvatarInitials, RoleId, PasswordHash, IsActive)
+            VALUES (@externalId, @email, @username, @displayName, @title, @initials, @roleId, @passwordHash, 1);
             SELECT SCOPE_IDENTITY();
             """;
         try
         {
             var initials = BuildInitials(displayName);
             using var conn = db.Create();
-            var id = await conn.ExecuteScalarAsync<int>(sql, new { externalId, email, username, displayName, title, initials, roleId, primaryGroupId, passwordHash });
+            var id = await conn.ExecuteScalarAsync<int>(sql, new { externalId, email, username, displayName, title, initials, roleId, passwordHash });
             log.Info($"Created user '{displayName}' ({email})");
             return id;
         }
@@ -58,20 +61,20 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task UpdateUserAsync(int userId, string email, string username, string displayName, string? title, byte roleId, int? primaryGroupId, bool isActive, string? passwordHash)
+    public async Task UpdateUserAsync(int userId, string email, string username, string displayName, string? title, byte roleId, bool isActive, string? passwordHash)
     {
         string sql = passwordHash != null
             ? """
               UPDATE core.[User]
               SET Email = @email, Username = @username, DisplayName = @displayName, Title = @title,
-                  AvatarInitials = @initials, RoleId = @roleId, PrimaryGroupId = @primaryGroupId,
+                  AvatarInitials = @initials, RoleId = @roleId,
                   IsActive = @isActive, PasswordHash = @passwordHash, UpdatedAt = SYSUTCDATETIME()
               WHERE UserId = @userId
               """
             : """
               UPDATE core.[User]
               SET Email = @email, Username = @username, DisplayName = @displayName, Title = @title,
-                  AvatarInitials = @initials, RoleId = @roleId, PrimaryGroupId = @primaryGroupId,
+                  AvatarInitials = @initials, RoleId = @roleId,
                   IsActive = @isActive, UpdatedAt = SYSUTCDATETIME()
               WHERE UserId = @userId
               """;
@@ -79,12 +82,48 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         {
             var initials = BuildInitials(displayName);
             using var conn = db.Create();
-            await conn.ExecuteAsync(sql, new { userId, email, username, displayName, title, initials, roleId, primaryGroupId, isActive, passwordHash });
+            await conn.ExecuteAsync(sql, new { userId, email, username, displayName, title, initials, roleId, isActive, passwordHash });
             log.Info($"Updated user {userId}");
         }
         catch (Exception ex)
         {
             SqlLogger.LogError(log, $"Failed to update user {userId}", sql, ex);
+            throw;
+        }
+    }
+
+    public async Task<IEnumerable<int>> GetUserGroupIdsAsync(int userId)
+    {
+        string sql = "SELECT GroupId FROM core.UserGroup WHERE UserId = @userId ORDER BY GroupId";
+        try
+        {
+            using var conn = db.Create();
+            return await conn.QueryAsync<int>(sql, new { userId });
+        }
+        catch (Exception ex)
+        {
+            SqlLogger.LogError(log, $"Failed to get groups for user {userId}", sql, ex);
+            throw;
+        }
+    }
+
+    public async Task SetUserGroupsAsync(int userId, IEnumerable<int> groupIds)
+    {
+        string sql = "DELETE FROM core.UserGroup WHERE UserId = @userId";
+        try
+        {
+            using var conn = db.Create();
+            await conn.ExecuteAsync(sql, new { userId });
+            foreach (var gid in groupIds)
+            {
+                sql = "INSERT INTO core.UserGroup (UserId, GroupId) VALUES (@userId, @gid)";
+                await conn.ExecuteAsync(sql, new { userId, gid });
+            }
+            log.Info($"Updated group memberships for user {userId}");
+        }
+        catch (Exception ex)
+        {
+            SqlLogger.LogError(log, $"Failed to set groups for user {userId}", sql, ex);
             throw;
         }
     }
@@ -134,7 +173,8 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
                    g.CreatedAt, g.UpdatedAt,
                    COUNT(u.UserId) AS MemberCount
             FROM core.[Group] g
-            LEFT JOIN core.[User] u ON u.PrimaryGroupId = g.GroupId AND u.IsActive = 1
+            LEFT JOIN core.UserGroup ug ON ug.GroupId = g.GroupId
+            LEFT JOIN core.[User]    u  ON u.UserId   = ug.UserId AND u.IsActive = 1
             GROUP BY g.GroupId, g.Slug, g.Name, g.Description, g.IsActive, g.CreatedAt, g.UpdatedAt
             ORDER BY g.Name
             """;

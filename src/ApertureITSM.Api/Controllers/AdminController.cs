@@ -21,9 +21,11 @@ public class AdminController(IAdminRepository repo) : ControllerBase
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest req)
     {
         var hash = string.IsNullOrWhiteSpace(req.Password) ? null : ApertureITSM.Infrastructure.PasswordHelper.Hash(req.Password);
-        var id = await repo.CreateUserAsync(req.ExternalId, req.Email, req.Username, req.DisplayName, req.Title, req.RoleId, req.PrimaryGroupId, hash);
+        var id = await repo.CreateUserAsync(req.ExternalId, req.Email, req.Username, req.DisplayName, req.Title, req.RoleId, hash);
         if (req.ServiceIds is { Length: > 0 })
             await repo.SetUserServicesAsync(id, req.ServiceIds);
+        if (req.GroupIds is { Length: > 0 })
+            await repo.SetUserGroupsAsync(id, req.GroupIds);
         return CreatedAtAction(nameof(GetUsers), new { id });
     }
 
@@ -31,7 +33,18 @@ public class AdminController(IAdminRepository repo) : ControllerBase
     public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserRequest req)
     {
         var hash = string.IsNullOrWhiteSpace(req.Password) ? null : ApertureITSM.Infrastructure.PasswordHelper.Hash(req.Password);
-        await repo.UpdateUserAsync(id, req.Email, req.Username, req.DisplayName, req.Title, req.RoleId, req.PrimaryGroupId, req.IsActive, hash);
+        await repo.UpdateUserAsync(id, req.Email, req.Username, req.DisplayName, req.Title, req.RoleId, req.IsActive, hash);
+        return NoContent();
+    }
+
+    [HttpGet("users/{id:int}/groups")]
+    public async Task<IActionResult> GetUserGroups(int id) =>
+        Ok(await repo.GetUserGroupIdsAsync(id));
+
+    [HttpPut("users/{id:int}/groups")]
+    public async Task<IActionResult> SetUserGroups(int id, [FromBody] int[] groupIds)
+    {
+        await repo.SetUserGroupsAsync(id, groupIds);
         return NoContent();
     }
 
@@ -266,8 +279,8 @@ public class AdminController(IAdminRepository repo) : ControllerBase
 
 // ── Request records ────────────────────────────────────────────────────────
 
-public record CreateUserRequest(string ExternalId, string Email, string Username, string DisplayName, string? Title, byte RoleId, int? PrimaryGroupId, string? Password, int[]? ServiceIds);
-public record UpdateUserRequest(string Email, string Username, string DisplayName, string? Title, byte RoleId, int? PrimaryGroupId, bool IsActive, string? Password);
+public record CreateUserRequest(string ExternalId, string Email, string Username, string DisplayName, string? Title, byte RoleId, string? Password, int[]? ServiceIds, int[]? GroupIds);
+public record UpdateUserRequest(string Email, string Username, string DisplayName, string? Title, byte RoleId, bool IsActive, string? Password);
 public record CreateGroupRequest(string Name, string? Description);
 public record UpdateGroupRequest(string Name, string? Description, bool IsActive);
 public record CreateCategoryRequest(string Code, string DisplayName, int SortOrder, int? ServiceId);

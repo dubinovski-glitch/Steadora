@@ -18,6 +18,7 @@ interface Props { incidentId: number; addToast: (t: string) => void }
 
 const STATUSES = [
   { code: 'new',      label: 'New' },
+  { code: 'open',     label: 'Open' },
   { code: 'progress', label: 'In Progress' },
   { code: 'pending',  label: 'Pending' },
   { code: 'resolved', label: 'Resolved' },
@@ -67,6 +68,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
   const [contactMethods, setContactMethods] = useState<ContactMethod[]>([])
   const [severities, setSeverities] = useState<Severity[]>([])
   const [resolutionCodes, setResolutionCodes] = useState<ResolutionCode[]>([])
+  const [groupUsers, setGroupUsers] = useState<User[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -123,6 +125,13 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
     const cat = categories.find(c => c.code === edit.categoryCode)
     setSubCategories(cat?.subCategories ?? [])
   }, [edit?.categoryCode, categories])
+
+  useEffect(() => {
+    if (!edit?.groupSlug) { setGroupUsers([]); return }
+    api.get<User[]>(`/users?groupSlug=${encodeURIComponent(edit.groupSlug)}`)
+      .then(us => setGroupUsers(us))
+      .catch(() => setGroupUsers([]))
+  }, [edit?.groupSlug])
 
   const sf = <K extends keyof EditState>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -412,9 +421,9 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
               </select>
             </SbField>
             <SbField label="Assigned to">
-              <select value={edit.assigneeExtId} onChange={sf('assigneeExtId')} disabled={dis} className={sel}>
+              <select value={edit.assigneeExtId} onChange={sf('assigneeExtId')} disabled={dis || !edit.groupSlug} className={sel}>
                 <option value="">— unassigned —</option>
-                {users.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
+                {groupUsers.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
               </select>
             </SbField>
           </div>

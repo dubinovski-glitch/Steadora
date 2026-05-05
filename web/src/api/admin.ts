@@ -7,12 +7,14 @@ import type {
 export const adminApi = {
   // Users
   getUsers: () => api.get<User[]>('/admin/users'),
-  createUser: (body: { externalId: string; email: string; username: string; displayName: string; title?: string; roleId: number; primaryGroupId?: number; password?: string; serviceIds?: number[] }) =>
+  createUser: (body: { externalId: string; email: string; username: string; displayName: string; title?: string; roleId: number; password?: string; serviceIds?: number[]; groupIds?: number[] }) =>
     api.post<{ id: number }>('/admin/users', body),
-  updateUser: (id: number, body: { email: string; username: string; displayName: string; title?: string; roleId: number; primaryGroupId?: number; isActive: boolean; password?: string }) =>
+  updateUser: (id: number, body: { email: string; username: string; displayName: string; title?: string; roleId: number; isActive: boolean; password?: string }) =>
     api.put<void>(`/admin/users/${id}`, body),
   getUserServices: (id: number) => api.get<number[]>(`/admin/users/${id}/services`),
   setUserServices: (id: number, serviceIds: number[]) => api.put<void>(`/admin/users/${id}/services`, serviceIds),
+  getUserGroups: (id: number) => api.get<number[]>(`/admin/users/${id}/groups`),
+  setUserGroups: (id: number, groupIds: number[]) => api.put<void>(`/admin/users/${id}/groups`, groupIds),
 
   // Groups
   getGroups: () => api.get<Group[]>('/admin/groups'),

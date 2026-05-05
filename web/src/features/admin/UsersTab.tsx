@@ -19,17 +19,17 @@ interface FormState {
   displayName: string
   title: string
   roleId: number
-  primaryGroupId: number | ''
   isActive: boolean
   password: string
   serviceIds: number[]
+  groupIds: number[]
 }
 
 function emptyForm(roles: Role[]): FormState {
   return {
     externalId: '', email: '', username: '', displayName: '', title: '',
-    roleId: roles[0]?.roleId ?? 0, primaryGroupId: '',
-    isActive: true, password: '', serviceIds: [],
+    roleId: roles[0]?.roleId ?? 0,
+    isActive: true, password: '', serviceIds: [], groupIds: [],
   }
 }
 
@@ -41,10 +41,10 @@ function fromUser(u: User, roles: Role[]): FormState {
     displayName: u.displayName,
     title: u.title ?? '',
     roleId: u.roleId ?? roles[0]?.roleId ?? 0,
-    primaryGroupId: u.primaryGroupId ?? '',
     isActive: u.isActive,
     password: '',
     serviceIds: [],
+    groupIds: [],
   }
 }
 
@@ -94,9 +94,12 @@ export function UsersTab({ addToast }: Props) {
     setForm(f)
     setShowPw(false)
     try {
-      const ids = await adminApi.getUserServices(u.userId)
-      setForm(prev => prev ? { ...prev, serviceIds: ids } : prev)
-    } catch { /* services load is non-critical */ }
+      const [svcIds, grpIds] = await Promise.all([
+        adminApi.getUserServices(u.userId),
+        adminApi.getUserGroups(u.userId),
+      ])
+      setForm(prev => prev ? { ...prev, serviceIds: svcIds, groupIds: grpIds } : prev)
+    } catch { /* non-critical */ }
   }
 
   const closePanel = () => { setPanel(null); setForm(null) }
@@ -111,6 +114,13 @@ export function UsersTab({ addToast }: Props) {
       return { ...prev, serviceIds: has ? prev.serviceIds.filter(x => x !== id) : [...prev.serviceIds, id] }
     })
 
+  const toggleGroup = (id: number) =>
+    setForm(prev => {
+      if (!prev) return prev
+      const has = prev.groupIds.includes(id)
+      return { ...prev, groupIds: has ? prev.groupIds.filter(x => x !== id) : [...prev.groupIds, id] }
+    })
+
   const submit = async () => {
     if (!form) return
     if (!form.displayName.trim()) { addToast('Display name is required'); return }
@@ -122,30 +132,32 @@ export function UsersTab({ addToast }: Props) {
     try {
       if (panel === 'new') {
         await adminApi.createUser({
-          externalId:     form.externalId || form.email.split('@')[0],
-          email:          form.email,
-          username:       form.username,
-          displayName:    form.displayName,
-          title:          form.title || undefined,
-          roleId:         Number(form.roleId),
-          primaryGroupId: form.primaryGroupId !== '' ? Number(form.primaryGroupId) : undefined,
-          password:       form.password || undefined,
-          serviceIds:     form.serviceIds,
+          externalId:  form.externalId || form.email.split('@')[0],
+          email:       form.email,
+          username:    form.username,
+          displayName: form.displayName,
+          title:       form.title || undefined,
+          roleId:      Number(form.roleId),
+          password:    form.password || undefined,
+          serviceIds:  form.serviceIds,
+          groupIds:    form.groupIds,
         })
         addToast(`Created user ${form.displayName}`)
       } else {
         const u = panel as User
         await adminApi.updateUser(u.userId, {
-          email:          form.email,
-          username:       form.username,
-          displayName:    form.displayName,
-          title:          form.title || undefined,
-          roleId:         Number(form.roleId),
-          primaryGroupId: form.primaryGroupId !== '' ? Number(form.primaryGroupId) : undefined,
-          isActive:       form.isActive,
-          password:       form.password || undefined,
+          email:       form.email,
+          username:    form.username,
+          displayName: form.displayName,
+          title:       form.title || undefined,
+          roleId:      Number(form.roleId),
+          isActive:    form.isActive,
+          password:    form.password || undefined,
         })
-        await adminApi.setUserServices(u.userId, form.serviceIds)
+        await Promise.all([
+          adminApi.setUserServices(u.userId, form.serviceIds),
+          adminApi.setUserGroups(u.userId, form.groupIds),
+        ])
         addToast(`Updated user ${form.displayName}`)
       }
       closePanel()
@@ -249,7 +261,7 @@ export function UsersTab({ addToast }: Props) {
                         {u.roleCode}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-text-secondary">{u.primaryGroupName ?? <span className="text-text-muted">—</span>}</td>
+                    <td className="px-4 py-3 text-sm text-text-secondary">{u.groupNames ?? <span className="text-text-muted">—</span>}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${u.isActive ? 'bg-[#d1fae5] text-[#065f46]' : 'bg-subtle text-text-muted'}`}>
                         {u.isActive ? 'Active' : 'Inactive'}
@@ -338,21 +350,34 @@ export function UsersTab({ addToast }: Props) {
               </div>
             )}
 
-            {/* Row: Role + Primary Team */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={lbl}>Role</label>
-                <select value={form.roleId} onChange={e => setField('roleId', Number(e.target.value))} className={sel}>
-                  {roles.map(r => <option key={r.roleId} value={r.roleId}>{r.displayName}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={lbl}>Primary team</label>
-                <select value={form.primaryGroupId} onChange={e => setField('primaryGroupId', e.target.value === '' ? '' : Number(e.target.value))} className={sel}>
-                  <option value="">None</option>
-                  {groups.filter(g => g.isActive).map(g => <option key={g.groupId} value={g.groupId}>{g.name}</option>)}
-                </select>
-              </div>
+            {/* Role */}
+            <div>
+              <label className={lbl}>Role</label>
+              <select value={form.roleId} onChange={e => setField('roleId', Number(e.target.value))} className={sel}>
+                {roles.map(r => <option key={r.roleId} value={r.roleId}>{r.displayName}</option>)}
+              </select>
+            </div>
+
+            {/* Group memberships */}
+            <div>
+              <p className="text-xs font-medium text-text-secondary mb-2">Teams / Groups</p>
+              {groups.filter(g => g.isActive).length === 0 ? (
+                <p className="text-xs text-text-muted">No groups available.</p>
+              ) : (
+                <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
+                  {groups.filter(g => g.isActive).map(g => (
+                    <label key={g.groupId} className="flex items-center gap-2 cursor-pointer select-none group">
+                      <input
+                        type="checkbox"
+                        checked={form.groupIds.includes(g.groupId)}
+                        onChange={() => toggleGroup(g.groupId)}
+                        className="w-4 h-4 accent-accent shrink-0"
+                      />
+                      <span className="text-sm text-text-primary">{g.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Active toggle — edit only */}

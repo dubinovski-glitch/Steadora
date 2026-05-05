@@ -8,8 +8,12 @@ namespace ApertureITSM.Api.Controllers;
 public class UsersController(IUserRepository userRepo) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll()
-        => Ok(await userRepo.GetAllAsync());
+    public async Task<IActionResult> GetAll([FromQuery] string? groupSlug = null)
+    {
+        if (!string.IsNullOrEmpty(groupSlug))
+            return Ok(await userRepo.GetByGroupSlugAsync(groupSlug));
+        return Ok(await userRepo.GetAllAsync());
+    }
 
     [HttpGet("groups")]
     public async Task<IActionResult> GetGroups()

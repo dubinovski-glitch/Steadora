@@ -5,6 +5,7 @@ import { adminApi } from '../../api/admin'
 import { lookupsApi } from '../../api/lookups'
 import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
+import type { User as UserType } from '../../types'
 import type {
   User, Group, Service, AdminCategory, AdminSubCategory,
   Priority, ContactMethod, Severity, ResolutionCode,
@@ -15,6 +16,7 @@ type Tab = 'details' | 'resolution' | 'sla'
 
 const INCIDENT_STATUSES = [
   { code: 'new',      label: 'New' },
+  { code: 'open',     label: 'Open' },
   { code: 'progress', label: 'In Progress' },
   { code: 'pending',  label: 'Pending' },
   { code: 'resolved', label: 'Resolved' },
@@ -76,6 +78,7 @@ export function NewIncidentForm({ addToast }: Props) {
   const [severities, setSeverities] = useState<Severity[]>([])
   const [resolutionCodes, setResolutionCodes] = useState<ResolutionCode[]>([])
   const [priorities, setPriorities] = useState<Priority[]>([])
+  const [groupUsers, setGroupUsers] = useState<UserType[]>([])
   const [loadingData, setLoadingData] = useState(true)
 
   useEffect(() => {
@@ -117,6 +120,19 @@ export function NewIncidentForm({ addToast }: Props) {
   useEffect(() => {
     setForm(f => ({ ...f, categoryCode: '', subCategoryCode: '' }))
   }, [form.serviceSlug])
+
+  useEffect(() => {
+    if (!form.groupSlug) { setGroupUsers([]); setForm(f => ({ ...f, assigneeExtId: '' })); return }
+    api.get<UserType[]>(`/users?groupSlug=${encodeURIComponent(form.groupSlug)}`)
+      .then(us => {
+        setGroupUsers(us)
+        setForm(f => {
+          const stillValid = us.some(u => u.externalId === f.assigneeExtId)
+          return stillValid ? f : { ...f, assigneeExtId: '' }
+        })
+      })
+      .catch(() => setGroupUsers([]))
+  }, [form.groupSlug])
 
   const [validationErrors, setValidationErrors] = useState<string[]>([])
 
@@ -314,9 +330,9 @@ export function NewIncidentForm({ addToast }: Props) {
                   </select>
                 </Field>
                 <Field label="Assigned To">
-                  <select value={form.assigneeExtId} onChange={setField('assigneeExtId')} className={sml}>
-                    <option value="">— auto-assign —</option>
-                    {users.map(u => (
+                  <select value={form.assigneeExtId} onChange={setField('assigneeExtId')} disabled={!form.groupSlug} className={sml}>
+                    <option value="">— select group first —</option>
+                    {groupUsers.map(u => (
                       <option key={u.externalId} value={u.externalId}>{u.displayName}</option>
                     ))}
                   </select>
