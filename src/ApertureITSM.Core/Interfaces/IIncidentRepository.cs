@@ -26,6 +26,7 @@ public class IncidentFilter
     public bool OnlySlaAtRisk { get; init; }
     public bool OnlyUnassigned { get; init; }
     public bool IncludeResolved { get; init; }
+    public int[]? ServiceIds { get; init; }
     public string SortBy { get; init; } = "UpdatedAt";
     public bool SortDesc { get; init; } = true;
 }

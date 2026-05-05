@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { useAppStore } from './store/appStore'
+import { useAuthStore } from './store/authStore'
 import { useToast } from './hooks/useToast'
 import { useKeyboard } from './hooks/useKeyboard'
+import { LoginPage } from './features/auth/LoginPage'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { ToastStack } from './components/primitives/Toast'
@@ -16,7 +18,8 @@ import { AdminView } from './features/admin/AdminView'
 import { NewIncidentForm } from './features/incidents/NewIncidentForm'
 
 export default function App() {
-  const { view, openIncidentId, theme, density, showNewIncident } = useAppStore()
+  const { view, setView, openIncidentId, theme, density, showNewIncident } = useAppStore()
+  const { token, user } = useAuthStore()
   const { toasts, addToast } = useToast()
   useKeyboard(addToast)
 
@@ -24,6 +27,13 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     document.documentElement.setAttribute('data-density', density)
   }, [theme, density])
+
+  // Redirect non-admins away from the admin view
+  useEffect(() => {
+    if (view === 'admin' && user?.roleCode !== 'admin') setView('dashboard')
+  }, [view, user?.roleCode, setView])
+
+  if (!token) return <LoginPage />
 
   const counts = { incidents: 0, problems: 0, changes: 0 }
 

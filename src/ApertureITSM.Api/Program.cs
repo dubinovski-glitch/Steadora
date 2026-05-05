@@ -1,3 +1,6 @@
+using ApertureITSM.Api;
+using ApertureITSM.Api.Hubs;
+using ApertureITSM.Api.Services;
 using ApertureITSM.Core.Interfaces;
 using ApertureITSM.Features.Changes;
 using ApertureITSM.Features.Incidents;
@@ -7,11 +10,14 @@ using ApertureITSM.Features.Sla;
 using ApertureITSM.Features.Problems;
 using ApertureITSM.Infrastructure.Database;
 using ApertureITSM.Infrastructure.Repositories;
-using ApertureITSM.Api;
-using ApertureITSM.Api.Hubs;
 using log4net;
 using log4net.Config;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc.Authorization;
+using Microsoft.IdentityModel.Tokens;
 using System.Reflection;
+using System.Text;
 
 // Bootstrap log4net
 var logRepo = LogManager.GetRepository(Assembly.GetEntryAssembly()!);
@@ -29,8 +35,43 @@ startupLog.Info("ApertureITSM API starting up");
 var connStr = config.GetConnectionString("ApertureITSM")
     ?? throw new InvalidOperationException("Connection string 'ApertureITSM' is not configured.");
 
+// JWT authentication
+var jwtSection = config.GetSection("Jwt");
+var jwtSecret = jwtSection["Secret"]
+    ?? throw new InvalidOperationException("Jwt:Secret is not configured.");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(opt =>
+    {
+        opt.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSection["Issuer"],
+            ValidAudience = jwtSection["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ClockSkew = TimeSpan.FromMinutes(1),
+        };
+        // Support JWT via query string for SignalR WebSocket connections
+        opt.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = ctx =>
+            {
+                var token = ctx.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) && ctx.Request.Path.StartsWithSegments("/hubs"))
+                    ctx.Token = token;
+                return Task.CompletedTask;
+            }
+        };
+    });
+
 // Infrastructure
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IDbConnectionFactory>(_ => new SqlConnectionFactory(connStr));
+builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IIncidentRepository, IncidentRepository>();
 builder.Services.AddScoped<IProblemRepository, ProblemRepository>();
 builder.Services.AddScoped<IChangeRepository, ChangeRepository>();
@@ -71,7 +112,10 @@ if (features.GetValue<bool>("Sla"))
 if (builder.Environment.IsDevelopment())
     builder.Services.AddHostedService<ViteDevServerService>();
 
-builder.Services.AddControllers();
+// Require authentication on all controllers by default; individual actions may use [AllowAnonymous]
+builder.Services.AddControllers(options =>
+    options.Filters.Add(new AuthorizeFilter()));
+
 builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -93,6 +137,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");

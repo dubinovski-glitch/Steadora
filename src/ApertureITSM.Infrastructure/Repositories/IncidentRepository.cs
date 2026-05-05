@@ -298,6 +298,7 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
         if (!string.IsNullOrWhiteSpace(f.PriorityCode)) { clauses.Add("i.PriorityId=(SELECT PriorityId FROM lookup.Priority WHERE Code=@priorityCode)"); p.Add("@priorityCode", f.PriorityCode); }
         if (f.AssigneeUserId.HasValue) { clauses.Add("i.AssigneeUserId=@assigneeUserId"); p.Add("@assigneeUserId", f.AssigneeUserId); }
         if (f.GroupId.HasValue) { clauses.Add("i.GroupId=@groupId"); p.Add("@groupId", f.GroupId); }
+        if (f.ServiceIds is { Length: > 0 }) { clauses.Add("i.ServiceId IN @serviceIds"); p.Add("@serviceIds", f.ServiceIds); }
         if (f.OnlyUnassigned) clauses.Add("i.AssigneeUserId IS NULL");
         if (f.OnlySlaAtRisk) clauses.Add("(i.SlaBreachedAt IS NOT NULL OR (i.SlaTargetMinutes IS NOT NULL AND i.SlaStartedAt IS NOT NULL AND DATEDIFF(MINUTE,i.SlaStartedAt,SYSUTCDATETIME())-(i.SlaPausedSeconds/60) >= i.SlaTargetMinutes*80/100))");
         if (!f.IncludeResolved) clauses.Add("i.StatusId NOT IN (SELECT StatusId FROM lookup.IncidentStatus WHERE IsTerminal=1)");

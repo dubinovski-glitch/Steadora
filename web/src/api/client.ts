@@ -1,10 +1,21 @@
+import { useAuthStore } from '../store/authStore'
+
 const BASE = '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = useAuthStore.getState().token
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
     ...init,
   })
+  if (res.status === 401) {
+    useAuthStore.getState().logout()
+    throw new Error('Session expired. Please sign in again.')
+  }
   if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`)
   if (res.status === 204) return undefined as T
   return res.json()

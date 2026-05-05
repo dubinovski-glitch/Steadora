@@ -7,7 +7,10 @@ namespace ApertureITSM.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class IncidentsController(IIncidentService service, INotificationService? notifications) : ControllerBase
+public class IncidentsController(
+    IIncidentService service,
+    INotificationService? notifications,
+    ICurrentUserService currentUser) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetQueue(
@@ -21,6 +24,11 @@ public class IncidentsController(IIncidentService service, INotificationService?
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
+        // Agents and requesters with service assignments only see their services' incidents
+        int[]? serviceFilter = null;
+        if (currentUser.RoleCode is "agent" or "requester" && currentUser.ServiceIds.Length > 0)
+            serviceFilter = currentUser.ServiceIds;
+
         var filter = new IncidentFilter
         {
             Search = search,
@@ -29,7 +37,8 @@ public class IncidentsController(IIncidentService service, INotificationService?
             AssigneeUserId = assigneeUserId,
             OnlySlaAtRisk = slaAtRisk,
             OnlyUnassigned = unassigned,
-            IncludeResolved = includeResolved
+            IncludeResolved = includeResolved,
+            ServiceIds = serviceFilter,
         };
         var (items, total) = await service.GetQueueAsync(filter, page, pageSize);
         return Ok(new { items, total, page, pageSize });
