@@ -38,9 +38,9 @@
   --sb-border:       #1a3258;
   --sb-hover:        #162d52;
   --sb-active-bg:    #1c3768;
-  --sb-text:         #c5d8f0;
-  --sb-text-muted:   #5b7aa6;
-  --sb-text-label:   #3a5878;
+  --sb-text:         #e2eef9;
+  --sb-text-muted:   #8fb4d4;
+  --sb-text-label:   #6a8dae;
   --sb-accent:       #5b9cf8;
   --sb-accent-bg:    #173466;
   --sb-badge-bg:     #1a3a72;
@@ -190,3 +190,17 @@ body {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+/* ── Form control borders ─────────────────────────────────────── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+textarea,
+select {
+  border-width: 2px !important;
+  border-color: #9aa3b2 !important;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus,
+textarea:focus,
+select:focus {
+  border-color: var(--border-focus) !important;
+  outline: none !important;
+}
