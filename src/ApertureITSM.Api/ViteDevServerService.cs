@@ -1,25 +1,27 @@
 using System.Diagnostics;
+using System.Net.Sockets;
 
 namespace ApertureITSM.Api;
 
 public class ViteDevServerService : BackgroundService
 {
+    private const int VitePort = 5173;
     private Process? _process;
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var webDir = FindWebDirectory();
-        if (webDir is null) return Task.CompletedTask;
+        if (webDir is null) return;
 
         _process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName               = "cmd.exe",
-                Arguments              = "/k npm run dev",
-                WorkingDirectory       = webDir,
-                UseShellExecute        = true,
-                CreateNoWindow         = false,
+                FileName         = "cmd.exe",
+                Arguments        = "/k npm run dev",
+                WorkingDirectory = webDir,
+                UseShellExecute  = true,
+                CreateNoWindow   = false,
             }
         };
 
@@ -30,7 +32,7 @@ public class ViteDevServerService : BackgroundService
             try { _process?.Kill(entireProcessTree: true); } catch { }
         });
 
-        return Task.CompletedTask;
+        await WaitForPortAsync(VitePort, stoppingToken);
     }
 
     public override void Dispose()
@@ -38,6 +40,25 @@ public class ViteDevServerService : BackgroundService
         try { _process?.Kill(entireProcessTree: true); } catch { }
         _process?.Dispose();
         base.Dispose();
+    }
+
+    // Polls TCP port until Vite is accepting connections, then returns so the
+    // browser launch (triggered by launchSettings.json) lands on a ready server.
+    private static async Task WaitForPortAsync(int port, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                using var tcp = new TcpClient();
+                await tcp.ConnectAsync("127.0.0.1", port, ct);
+                return;
+            }
+            catch
+            {
+                await Task.Delay(200, ct).ConfigureAwait(false);
+            }
+        }
     }
 
     private static string? FindWebDirectory()
