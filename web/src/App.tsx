@@ -11,6 +11,8 @@ import { DashboardView } from './features/dashboard/DashboardView'
 import { IncidentsView } from './features/incidents/IncidentsView'
 import { IncidentDetailView } from './features/incidents/IncidentDetailView'
 import { ProblemsView } from './features/problems/ProblemsView'
+import { NewProblemForm } from './features/problems/NewProblemForm'
+import { ProblemDetailView } from './features/problems/ProblemDetailView'
 import { ChangesView } from './features/changes/ChangesView'
 import { KnowledgeView } from './features/knowledge/KnowledgeView'
 import { SlaView } from './features/sla/SlaView'
@@ -18,7 +20,7 @@ import { AdminView } from './features/admin/AdminView'
 import { NewIncidentForm } from './features/incidents/NewIncidentForm'
 
 export default function App() {
-  const { view, setView, openIncidentId, theme, density, showNewIncident } = useAppStore()
+  const { view, setView, openIncidentId, openProblemId, theme, density, showNewIncident, showNewProblem } = useAppStore()
   const { token, user } = useAuthStore()
   const { toasts, addToast } = useToast()
   useKeyboard(addToast)
@@ -47,7 +49,9 @@ export default function App() {
           {view === 'incidents' && !openIncidentId && !showNewIncident && <IncidentsView addToast={addToast} />}
           {view === 'incidents' && !openIncidentId && showNewIncident && <NewIncidentForm addToast={addToast} />}
           {view === 'incidents' && openIncidentId && <IncidentDetailView incidentId={openIncidentId} addToast={addToast} />}
-          {view === 'problems' && <ProblemsView />}
+          {view === 'problems' && !openProblemId && !showNewProblem && <ProblemsView addToast={addToast} />}
+          {view === 'problems' && !openProblemId && showNewProblem && <NewProblemForm addToast={addToast} />}
+          {view === 'problems' && openProblemId && <ProblemDetailView problemId={openProblemId} addToast={addToast} />}
           {view === 'changes' && <ChangesView addToast={addToast} />}
           {view === 'knowledge' && <KnowledgeView />}
           {view === 'sla' && <SlaView />}

@@ -102,13 +102,14 @@ body {
 }
 
 .sidebar {
-  width: 232px;
   flex-shrink: 0;
   background: var(--sb-bg);
   border-right: 1px solid var(--sb-border);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  position: relative;
+  /* overflow must stay visible so the collapse button can protrude */
+  overflow: visible;
 }
 
 .sidebar::-webkit-scrollbar-thumb { background: var(--sb-border); }

@@ -113,7 +113,7 @@ export function ServicesTab({ addToast }: Props) {
                       <td className="px-4 py-3">
                         {svc.owningGroupName ? (
                           <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-accent-subtle text-accent-text text-[10px] font-semibold flex items-center justify-center">
+                            <span className="w-6 h-6 rounded-full bg-accent-subtle text-accent-text text-[11px] font-semibold flex items-center justify-center">
                               {svc.owningGroupName.slice(0, 2).toUpperCase()}
                             </span>
                             <span className="text-text-secondary">{svc.owningGroupName}</span>

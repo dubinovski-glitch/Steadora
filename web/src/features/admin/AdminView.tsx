@@ -85,7 +85,7 @@ export function AdminView({ addToast }: Props) {
         <nav className="w-48 shrink-0 flex flex-col gap-4">
           {NAV_GROUPS.map(group => (
             <div key={group.title}>
-              <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider px-2 mb-1">{group.title}</div>
+              <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-2 mb-1">{group.title}</div>
               {group.items.map(item => {
                 const active = item.id === section
                 return item.implemented ? (

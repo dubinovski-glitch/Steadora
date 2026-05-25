@@ -213,7 +213,7 @@ export function NewIncidentModal({ addToast }: Props) {
 
               {/* Identification */}
               <section>
-                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">Reporter</h3>
+                <h3 className="text-sm font-bold text-text-muted uppercase tracking-wide mb-3">Reporter</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Caller / Affected User" required>
                     <select value={form.callerExtId} onChange={setField('callerExtId')} className={selectCls}>
@@ -237,7 +237,7 @@ export function NewIncidentModal({ addToast }: Props) {
 
               {/* Classification */}
               <section>
-                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">Classification</h3>
+                <h3 className="text-sm font-bold text-text-muted uppercase tracking-wide mb-3">Classification</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Service" required>
                     <select value={form.serviceSlug} onChange={setField('serviceSlug')} className={selectCls}>
@@ -267,7 +267,7 @@ export function NewIncidentModal({ addToast }: Props) {
 
               {/* Description */}
               <section>
-                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">Description</h3>
+                <h3 className="text-sm font-bold text-text-muted uppercase tracking-wide mb-3">Description</h3>
                 <div className="flex flex-col gap-3">
                   <Field label="Short Description / Title" required>
                     <input
@@ -295,7 +295,7 @@ export function NewIncidentModal({ addToast }: Props) {
 
               {/* Prioritization + Assignment */}
               <section>
-                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">Prioritization &amp; Assignment</h3>
+                <h3 className="text-sm font-bold text-text-muted uppercase tracking-wide mb-3">Prioritization &amp; Assignment</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Priority" required>
                     <select value={form.priorityCode} onChange={setField('priorityCode')} className={selectCls}>
@@ -387,7 +387,7 @@ export function NewIncidentModal({ addToast }: Props) {
               )}
 
               <div className="mt-2">
-                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">Auto-tracked fields</h3>
+                <h3 className="text-sm font-bold text-text-muted uppercase tracking-wide mb-3">Auto-tracked fields</h3>
                 <div className="flex flex-col gap-2">
                   {[
                     { label: 'First Response Date/Time', note: 'Stamped when first agent reply is recorded' },
@@ -441,8 +441,8 @@ const selectCls = `${inputCls} bg-surface`
 function Field({ label, required, children, className }: { label: string; required?: boolean; children: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <label className="block text-xs font-medium text-text-secondary mb-1">
-        {label}{required && <span className="text-[#c8252b] ml-0.5">*</span>}
+      <label className="block text-sm font-semibold text-text-secondary mb-1.5">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
       </label>
       {children}
     </div>

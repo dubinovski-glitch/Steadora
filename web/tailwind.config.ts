@@ -21,7 +21,7 @@ export default {
       },
       fontSize: {
         xs: ['11px', '16px'], sm: ['12px', '18px'], md: ['13px', '20px'], base: ['14px', '20px'],
-        lg: ['16px', '24px'], xl: ['20px', '28px'], '2xl': ['26px', '32px'], '3xl': ['34px', '40px'],
+        lg: ['16px', '24px'], xl: ['20px', '28px'], '2xl': ['24px', '32px'], '3xl': ['32px', '40px'],
       },
       boxShadow: {
         sm: '0 1px 2px rgba(15,23,42,0.04)',

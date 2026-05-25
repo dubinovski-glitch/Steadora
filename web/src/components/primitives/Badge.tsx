@@ -17,7 +17,7 @@ interface Props { children: ReactNode; variant?: Variant; className?: string }
 
 export function Badge({ children, variant = 'default', className = '' }: Props) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${styles[variant]} ${className}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${styles[variant]} ${className}`}>
       {children}
     </span>
   )
