@@ -173,6 +173,7 @@ export function IncidentsView({ addToast }: Props) {
         slaAtRisk: tab === 'sla',
         unassigned: tab === 'new',
         includeResolved: tab === 'resolved',
+        myGroupsOnly: true,
       })
       setIncidents(res.items)
       setTotal(res.total)
@@ -262,10 +263,10 @@ export function IncidentsView({ addToast }: Props) {
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-border-default">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Columns</span>
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted">Columns</span>
                   <button
                     onClick={() => setVisibleOrder([...DEFAULT_VISIBLE])}
-                    className="text-[10px] text-accent hover:underline"
+                    className="text-[11px] text-accent hover:underline"
                   >
                     Reset
                   </button>
@@ -274,7 +275,7 @@ export function IncidentsView({ addToast }: Props) {
                 {/* Visible (shown) columns — ordered */}
                 {visibleOrder.length > 0 && (
                   <>
-                    <p className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Shown</p>
+                    <p className="px-3 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Shown</p>
                     {visibleOrder.map((key, idx) => {
                       const col = COL_MAP[key]
                       if (!col) return null
@@ -312,7 +313,7 @@ export function IncidentsView({ addToast }: Props) {
                 {/* Hidden columns — available to add */}
                 {hiddenCols.length > 0 && (
                   <>
-                    <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted border-t border-border-default mt-2">Hidden</p>
+                    <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-t border-border-default mt-2">Hidden</p>
                     {hiddenCols.map(col => (
                       <div key={col.key} className="flex items-center gap-1 px-2 py-1 hover:bg-hover">
                         <input

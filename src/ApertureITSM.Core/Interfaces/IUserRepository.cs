@@ -8,6 +8,7 @@ public interface IUserRepository
     Task<IEnumerable<User>> GetByGroupSlugAsync(string groupSlug);
     Task<User?> GetByExternalIdAsync(string externalId);
     Task<IEnumerable<Group>> GetGroupsAsync();
+    Task<int[]> GetGroupIdsAsync(int userId);
     Task<IEnumerable<Service>> GetServicesAsync();
     Task<IEnumerable<ConfigurationItem>> GetConfigurationItemsAsync();
 }

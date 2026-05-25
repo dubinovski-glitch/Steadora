@@ -273,6 +273,21 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
         }
     }
 
+    public async Task<IEnumerable<Incident>> GetByProblemIdAsync(long problemId)
+    {
+        string sql = $"{BaseSelect} AND i.ParentProblemId = @problemId ORDER BY i.OpenedAt DESC";
+        try
+        {
+            using var conn = db.Create();
+            return await conn.QueryAsync<Incident>(sql, new { problemId });
+        }
+        catch (Exception ex)
+        {
+            SqlLogger.LogError(log, $"Failed to get incidents for problem {problemId}", sql, ex);
+            throw;
+        }
+    }
+
     public async Task SoftDeleteAsync(long incidentId, int? actorUserId)
     {
         string sql = "UPDATE itil.Incident SET DeletedAt=SYSUTCDATETIME(), UpdatedAt=SYSUTCDATETIME() WHERE IncidentId=@incidentId";
@@ -298,6 +313,7 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
         if (!string.IsNullOrWhiteSpace(f.PriorityCode)) { clauses.Add("i.PriorityId=(SELECT PriorityId FROM lookup.Priority WHERE Code=@priorityCode)"); p.Add("@priorityCode", f.PriorityCode); }
         if (f.AssigneeUserId.HasValue) { clauses.Add("i.AssigneeUserId=@assigneeUserId"); p.Add("@assigneeUserId", f.AssigneeUserId); }
         if (f.GroupId.HasValue) { clauses.Add("i.GroupId=@groupId"); p.Add("@groupId", f.GroupId); }
+        if (f.GroupIds is { Length: > 0 }) { clauses.Add("i.GroupId IN @groupIds"); p.Add("@groupIds", f.GroupIds); }
         if (f.ServiceIds is { Length: > 0 }) { clauses.Add("i.ServiceId IN @serviceIds"); p.Add("@serviceIds", f.ServiceIds); }
         if (f.OnlyUnassigned) clauses.Add("i.AssigneeUserId IS NULL");
         if (f.OnlySlaAtRisk) clauses.Add("(i.SlaBreachedAt IS NOT NULL OR (i.SlaTargetMinutes IS NOT NULL AND i.SlaStartedAt IS NOT NULL AND DATEDIFF(MINUTE,i.SlaStartedAt,SYSUTCDATETIME())-(i.SlaPausedSeconds/60) >= i.SlaTargetMinutes*80/100))");

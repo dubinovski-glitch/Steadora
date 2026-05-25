@@ -1,4 +1,5 @@
 using ApertureITSM.Core.Interfaces;
+using ApertureITSM.Features.Incidents;
 using ApertureITSM.Features.Notifications;
 using ApertureITSM.Features.Problems;
 using Microsoft.AspNetCore.Mvc;
@@ -7,12 +8,23 @@ namespace ApertureITSM.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class ProblemsController(IProblemService service, INotificationService? notifications) : ControllerBase
+public class ProblemsController(
+    IProblemService service,
+    INotificationService? notifications,
+    IIncidentService incidentService,
+    ICurrentUserService currentUser,
+    IUserRepository userRepository) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] bool includeResolved = false)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] bool includeResolved = false,
+        [FromQuery] bool myGroupsOnly = false)
     {
-        var problems = await service.GetAllAsync(includeResolved);
+        int[]? groupIds = null;
+        if (myGroupsOnly && currentUser.IsAuthenticated)
+            groupIds = await userRepository.GetGroupIdsAsync(currentUser.UserId);
+
+        var problems = await service.GetAllAsync(includeResolved, groupIds);
         return Ok(problems);
     }
 
@@ -28,6 +40,13 @@ public class ProblemsController(IProblemService service, INotificationService? n
     {
         var id = await service.CreateAsync(request);
         return CreatedAtAction(nameof(GetDetail), new { id }, new { id });
+    }
+
+    [HttpPut("{id:long}")]
+    public async Task<IActionResult> Update(long id, [FromBody] UpdateProblemRequest request)
+    {
+        await service.UpdateAsync(id, request);
+        return NoContent();
     }
 
     [HttpPatch("{id:long}/state")]
@@ -57,6 +76,13 @@ public class ProblemsController(IProblemService service, INotificationService? n
     {
         if (notifications is null) return StatusCode(503);
         return Ok(await notifications.GetTimelineAsync("PRB", id));
+    }
+
+    [HttpGet("{id:long}/incidents")]
+    public async Task<IActionResult> GetLinkedIncidents(long id)
+    {
+        var incidents = await incidentService.GetByProblemIdAsync(id);
+        return Ok(incidents);
     }
 }
 

@@ -6,9 +6,10 @@ namespace ApertureITSM.Features.Problems;
 
 public interface IProblemService
 {
-    Task<IEnumerable<Problem>> GetAllAsync(bool includeResolved);
+    Task<IEnumerable<Problem>> GetAllAsync(bool includeResolved, int[]? groupIds = null);
     Task<Problem?> GetDetailAsync(long problemId);
     Task<long> CreateAsync(CreateProblemRequest request);
+    Task UpdateAsync(long problemId, UpdateProblemRequest request);
     Task SetStateAsync(long problemId, string stateCode, int? actorUserId);
     Task UpdateFieldAsync(long problemId, string field, string? value, int? actorUserId);
 }
@@ -17,8 +18,8 @@ public class ProblemService(IProblemRepository repository) : IProblemService
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(ProblemService));
 
-    public Task<IEnumerable<Problem>> GetAllAsync(bool includeResolved)
-        => repository.GetAllAsync(includeResolved);
+    public Task<IEnumerable<Problem>> GetAllAsync(bool includeResolved, int[]? groupIds = null)
+        => repository.GetAllAsync(includeResolved, groupIds);
 
     public Task<Problem?> GetDetailAsync(long problemId)
         => repository.GetByIdAsync(problemId);
@@ -27,6 +28,12 @@ public class ProblemService(IProblemRepository repository) : IProblemService
     {
         log.Info($"Creating problem: {request.Title}");
         return repository.CreateAsync(request);
+    }
+
+    public Task UpdateAsync(long problemId, UpdateProblemRequest request)
+    {
+        log.Info($"Updating problem {problemId}: {request.Title}");
+        return repository.UpdateAsync(problemId, request);
     }
 
     public Task SetStateAsync(long problemId, string stateCode, int? actorUserId)

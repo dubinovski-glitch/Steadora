@@ -13,6 +13,7 @@ public interface IIncidentRepository
     Task UpdatePriorityAsync(long incidentId, string priorityCode, int? actorUserId);
     Task UpdateFieldAsync(long incidentId, string field, string? value, int? actorUserId);
     Task LinkToProblemAsync(long incidentId, long problemId, int? actorUserId);
+    Task<IEnumerable<Incident>> GetByProblemIdAsync(long problemId);
     Task SoftDeleteAsync(long incidentId, int? actorUserId);
 }
 
@@ -23,6 +24,7 @@ public class IncidentFilter
     public string? PriorityCode { get; init; }
     public int? AssigneeUserId { get; init; }
     public int? GroupId { get; init; }
+    public int[]? GroupIds { get; init; }
     public bool OnlySlaAtRisk { get; init; }
     public bool OnlyUnassigned { get; init; }
     public bool IncludeResolved { get; init; }

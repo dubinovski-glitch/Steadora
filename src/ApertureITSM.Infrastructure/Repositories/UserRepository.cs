@@ -79,6 +79,22 @@ public class UserRepository(IDbConnectionFactory db) : IUserRepository
         }
     }
 
+    public async Task<int[]> GetGroupIdsAsync(int userId)
+    {
+        const string sql = "SELECT GroupId FROM core.UserGroup WHERE UserId = @userId";
+        try
+        {
+            using var conn = db.Create();
+            var ids = await conn.QueryAsync<int>(sql, new { userId });
+            return ids.ToArray();
+        }
+        catch (Exception ex)
+        {
+            SqlLogger.LogError(log, $"Failed to get group ids for user {userId}", sql, ex);
+            throw;
+        }
+    }
+
     public async Task<IEnumerable<Group>> GetGroupsAsync()
     {
         string sql = """

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
+import { Plus } from 'lucide-react'
 import { problemApi } from '../../api/problems'
 import { Badge, priorityVariant } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
+import { useAppStore } from '../../store/appStore'
 import type { Problem } from '../../types'
 
 const STATE_STEPS = ['investigating', 'rca', 'workaround', 'implementing_fix', 'vendor_engaged', 'closed']
@@ -17,14 +19,19 @@ function StateProgress({ stateCode }: { stateCode: string }) {
   )
 }
 
-export function ProblemsView() {
+interface Props { addToast: (t: string) => void }
+
+export function ProblemsView({ addToast: _addToast }: Props) {
+  const { setShowNewProblem, openProblem } = useAppStore()
   const [problems, setProblems] = useState<Problem[]>([])
   const [loading, setLoading] = useState(true)
   const [includeResolved, setIncludeResolved] = useState(false)
 
   useEffect(() => {
     setLoading(true)
-    problemApi.getAll(includeResolved).then(setProblems).finally(() => setLoading(false))
+    problemApi.getAll(includeResolved, true)
+      .then(setProblems)
+      .finally(() => setLoading(false))
   }, [includeResolved])
 
   const active = problems.filter(p => p.resolvedAt === null)
@@ -34,10 +41,18 @@ export function ProblemsView() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Problem management</h1>
-        <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
-          <input type="checkbox" checked={includeResolved} onChange={e => setIncludeResolved(e.target.checked)} className="rounded" />
-          Show resolved
-        </label>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+            <input type="checkbox" checked={includeResolved} onChange={e => setIncludeResolved(e.target.checked)} className="rounded" />
+            Show resolved
+          </label>
+          <button
+            onClick={() => setShowNewProblem(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition-colors"
+          >
+            <Plus size={14} /> New Problem
+          </button>
+        </div>
       </div>
 
       {/* KPI strip */}
@@ -59,15 +74,15 @@ export function ProblemsView() {
         <div className="py-12 text-center text-text-muted">Loading…</div>
       ) : (
         <>
-          <ProblemGroup title="Active problems" items={active} />
-          {resolved.length > 0 && <ProblemGroup title="Recently resolved" items={resolved} />}
+          <ProblemGroup title="Active problems" items={active} onOpen={openProblem} />
+          {resolved.length > 0 && <ProblemGroup title="Recently resolved" items={resolved} onOpen={openProblem} />}
         </>
       )}
     </div>
   )
 }
 
-function ProblemGroup({ title, items }: { title: string; items: Problem[] }) {
+function ProblemGroup({ title, items, onOpen }: { title: string; items: Problem[]; onOpen: (id: number) => void }) {
   if (items.length === 0) return null
   return (
     <div className="bg-surface rounded-lg border border-border-default shadow-sm overflow-hidden">
@@ -76,7 +91,7 @@ function ProblemGroup({ title, items }: { title: string; items: Problem[] }) {
       </div>
       <div className="zebra-list">
       {items.map(p => (
-        <div key={p.problemId} className="grid grid-cols-5 gap-4 px-4 py-3 border-b border-border-default last:border-0 hover:bg-hover transition-colors items-start">
+        <div key={p.problemId} onClick={() => onOpen(p.problemId)} className="grid grid-cols-5 gap-4 px-4 py-3 border-b border-border-default last:border-0 hover:bg-hover transition-colors items-start cursor-pointer">
           <div className="flex items-center gap-2">
             <span className="font-mono text-text-primary">{p.number}</span>
             <Badge variant={priorityVariant(p.priorityCode)}>{p.priorityCode}</Badge>

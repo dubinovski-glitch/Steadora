@@ -28,15 +28,18 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
         WHERE p.DeletedAt IS NULL
         """;
 
-    public async Task<IEnumerable<Problem>> GetAllAsync(bool includeResolved = false)
+    public async Task<IEnumerable<Problem>> GetAllAsync(bool includeResolved = false, int[]? groupIds = null)
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
-            var where = includeResolved ? string.Empty : "AND st.IsTerminal = 0";
+            var clauses = new List<string>();
+            if (!includeResolved) clauses.Add("st.IsTerminal = 0");
+            if (groupIds is { Length: > 0 }) clauses.Add("p.GroupId IN @groupIds");
+            var where = clauses.Count > 0 ? "AND " + string.Join(" AND ", clauses) : string.Empty;
             sql = $"{BaseSelect} {where} ORDER BY p.OpenedAt DESC";
-            var problems = (await conn.QueryAsync<Problem>(sql)).ToList();
+            var problems = (await conn.QueryAsync<Problem>(sql, new { groupIds })).ToList();
 
             if (problems.Count > 0)
             {
@@ -102,6 +105,42 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
         catch (Exception ex)
         {
             SqlLogger.LogError(log, $"Failed to create problem: {request.Title}", sql, ex);
+            throw;
+        }
+    }
+
+    public async Task UpdateAsync(long problemId, UpdateProblemRequest request)
+    {
+        string sql = "";
+        try
+        {
+            using var conn = db.Create();
+            sql = "SELECT PriorityId FROM lookup.Priority WHERE Code=@c";
+            var priorityId = await conn.ExecuteScalarAsync<byte>(sql, new { c = request.PriorityCode });
+            sql = "SELECT UserId FROM core.[User] WHERE ExternalId=@e";
+            var assigneeId = request.AssigneeExtId is null ? (int?)null
+                : await conn.ExecuteScalarAsync<int?>(sql, new { e = request.AssigneeExtId });
+            sql = "SELECT GroupId FROM core.[Group] WHERE Slug=@s";
+            var groupId = request.GroupSlug is null ? (int?)null
+                : await conn.ExecuteScalarAsync<int?>(sql, new { s = request.GroupSlug });
+            sql = """
+                UPDATE itil.Problem
+                SET Title=@title, RootCause=@rootCause, Workaround=@workaround,
+                    PriorityId=@priorityId, AssigneeUserId=@assigneeId, GroupId=@groupId,
+                    IsKnownError=@isKnownError, UpdatedAt=SYSUTCDATETIME()
+                WHERE ProblemId=@problemId
+                """;
+            await conn.ExecuteAsync(sql, new
+            {
+                problemId, title = request.Title, rootCause = request.RootCause,
+                workaround = request.Workaround, priorityId, assigneeId, groupId,
+                isKnownError = request.IsKnownError
+            });
+            log.Info($"Updated problem {problemId}: {request.Title}");
+        }
+        catch (Exception ex)
+        {
+            SqlLogger.LogError(log, $"Failed to update problem {problemId}", sql, ex);
             throw;
         }
     }

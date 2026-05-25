@@ -10,7 +10,8 @@ namespace ApertureITSM.Api.Controllers;
 public class IncidentsController(
     IIncidentService service,
     INotificationService? notifications,
-    ICurrentUserService currentUser) : ControllerBase
+    ICurrentUserService currentUser,
+    IUserRepository userRepository) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetQueue(
@@ -21,6 +22,7 @@ public class IncidentsController(
         [FromQuery] bool slaAtRisk = false,
         [FromQuery] bool unassigned = false,
         [FromQuery] bool includeResolved = false,
+        [FromQuery] bool myGroupsOnly = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
@@ -28,6 +30,10 @@ public class IncidentsController(
         int[]? serviceFilter = null;
         if (currentUser.RoleCode is "agent" or "requester" && currentUser.ServiceIds.Length > 0)
             serviceFilter = currentUser.ServiceIds;
+
+        int[]? groupIds = null;
+        if (myGroupsOnly && currentUser.IsAuthenticated)
+            groupIds = await userRepository.GetGroupIdsAsync(currentUser.UserId);
 
         var filter = new IncidentFilter
         {
@@ -39,6 +45,7 @@ public class IncidentsController(
             OnlyUnassigned = unassigned,
             IncludeResolved = includeResolved,
             ServiceIds = serviceFilter,
+            GroupIds = groupIds,
         };
         var (items, total) = await service.GetQueueAsync(filter, page, pageSize);
         return Ok(new { items, total, page, pageSize });
