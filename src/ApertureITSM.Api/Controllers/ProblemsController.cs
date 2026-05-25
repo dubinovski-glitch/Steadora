@@ -87,6 +87,31 @@ public class ProblemsController(
         var incidents = await incidentService.GetByProblemIdAsync(id);
         return Ok(incidents);
     }
+
+    [HttpGet("{id:long}/watchers")]
+    public async Task<IActionResult> GetWatchers(long id)
+    {
+        if (notifications is null) return StatusCode(503);
+        return Ok(await notifications.GetWatchersAsync("PRB", id));
+    }
+
+    [HttpPost("{id:long}/watchers")]
+    public async Task<IActionResult> Watch(long id)
+    {
+        if (notifications is null) return StatusCode(503);
+        if (!currentUser.IsAuthenticated) return Unauthorized();
+        await notifications.WatchAsync("PRB", id, currentUser.UserId);
+        return NoContent();
+    }
+
+    [HttpDelete("{id:long}/watchers")]
+    public async Task<IActionResult> Unwatch(long id)
+    {
+        if (notifications is null) return StatusCode(503);
+        if (!currentUser.IsAuthenticated) return Unauthorized();
+        await notifications.UnwatchAsync("PRB", id, currentUser.UserId);
+        return NoContent();
+    }
 }
 
 public record SetStateRequest(string StateCode, int? ActorUserId);

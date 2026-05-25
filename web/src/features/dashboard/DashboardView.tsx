@@ -58,9 +58,25 @@ export function DashboardView() {
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#b6dcc4] bg-[#e6f4ec] text-[#1f8a4c] text-sm">
-          <CheckCircle size={14} /> All systems operational
-        </div>
+        {(() => {
+          const hasIncident = services.some(s => s.healthCode === 'incident')
+          const hasDegraded = services.some(s => s.healthCode === 'degraded')
+          if (hasIncident) return (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#f5c6c8] bg-[#fdecec] text-[#c8252b] text-sm">
+              <AlertCircle size={14} /> Active incidents
+            </div>
+          )
+          if (hasDegraded) return (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#f3d9a4] bg-[#fdf3e3] text-[#d97706] text-sm">
+              <Clock size={14} /> Service degradation
+            </div>
+          )
+          return (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#b6dcc4] bg-[#e6f4ec] text-[#1f8a4c] text-sm">
+              <CheckCircle size={14} /> All systems operational
+            </div>
+          )
+        })()}
       </div>
 
       {/* KPI strip */}

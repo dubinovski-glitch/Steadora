@@ -12,9 +12,9 @@ const labels: Record<View, string[]> = {
   admin: ['Administration'],
 }
 
-interface Props { unreadCount?: number }
+interface Props { unreadCount?: number; onMarkAllRead?: () => void }
 
-export function Topbar({ unreadCount = 0 }: Props) {
+export function Topbar({ unreadCount = 0, onMarkAllRead }: Props) {
   const { view, openIncidentId, closeIncident, setView } = useAppStore()
   const parts = openIncidentId
     ? [{ label: 'Incidents', onClick: closeIncident }, { label: `INC-${openIncidentId}`, onClick: null }]
@@ -39,9 +39,17 @@ export function Topbar({ unreadCount = 0 }: Props) {
         <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-hover text-text-secondary">
           <HelpCircle size={16} />
         </button>
-        <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-hover text-text-secondary relative">
+        <button
+          className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-hover text-text-secondary relative"
+          onClick={onMarkAllRead}
+          title={unreadCount > 0 ? `${unreadCount} unread — click to mark all read` : 'Notifications'}
+        >
           <Bell size={16} />
-          {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#dc2626]" />}
+          {unreadCount > 0 && (
+            <span className="absolute top-1 right-1 min-w-[14px] h-[14px] flex items-center justify-center text-[9px] font-bold rounded-full bg-[#dc2626] text-white px-0.5">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </button>
         <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-hover text-text-secondary">
           <Settings size={16} />

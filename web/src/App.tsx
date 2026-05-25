@@ -3,10 +3,12 @@ import { useAppStore } from './store/appStore'
 import { useAuthStore } from './store/authStore'
 import { useToast } from './hooks/useToast'
 import { useKeyboard } from './hooks/useKeyboard'
+import { useNotifications } from './hooks/useNotifications'
 import { LoginPage } from './features/auth/LoginPage'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { ToastStack } from './components/primitives/Toast'
+import { CommandPalette } from './components/CommandPalette'
 import { DashboardView } from './features/dashboard/DashboardView'
 import { IncidentsView } from './features/incidents/IncidentsView'
 import { IncidentDetailView } from './features/incidents/IncidentDetailView'
@@ -23,6 +25,7 @@ export default function App() {
   const { view, setView, openIncidentId, openProblemId, theme, density, showNewIncident, showNewProblem } = useAppStore()
   const { token, user } = useAuthStore()
   const { toasts, addToast } = useToast()
+  const { unreadCount, markAllRead } = useNotifications()
   useKeyboard(addToast)
 
   useEffect(() => {
@@ -41,9 +44,10 @@ export default function App() {
 
   return (
     <div className="app-shell" data-theme={theme} data-density={density}>
+      <CommandPalette />
       <Sidebar counts={counts} />
       <div className="main-content">
-        <Topbar />
+        <Topbar unreadCount={unreadCount} onMarkAllRead={markAllRead} />
         <div className="page-content">
           {view === 'dashboard' && <DashboardView />}
           {view === 'incidents' && !openIncidentId && !showNewIncident && <IncidentsView addToast={addToast} />}

@@ -154,6 +154,24 @@ public class IncidentsController(
         var watchers = await notifications.GetWatchersAsync("INC", id);
         return Ok(watchers);
     }
+
+    [HttpPost("{id:long}/watchers")]
+    public async Task<IActionResult> Watch(long id)
+    {
+        if (notifications is null) return StatusCode(503);
+        if (!currentUser.IsAuthenticated) return Unauthorized();
+        await notifications.WatchAsync("INC", id, currentUser.UserId);
+        return NoContent();
+    }
+
+    [HttpDelete("{id:long}/watchers")]
+    public async Task<IActionResult> Unwatch(long id)
+    {
+        if (notifications is null) return StatusCode(503);
+        if (!currentUser.IsAuthenticated) return Unauthorized();
+        await notifications.UnwatchAsync("INC", id, currentUser.UserId);
+        return NoContent();
+    }
 }
 
 public record SetStatusRequest(string StatusCode, int? ActorUserId);

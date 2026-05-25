@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, Star, Share2, Lock } from 'lucide-react'
+import { ArrowLeft, Star, Share2, Lock, Eye, EyeOff } from 'lucide-react'
 import { incidentApi } from '../../api/incidents'
 import { problemApi } from '../../api/problems'
 import { adminApi } from '../../api/admin'
@@ -65,10 +65,13 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
   const { user: authUser } = useAuthStore()
   const [incident, setIncident] = useState<Incident | null>(null)
   const [edit, setEdit] = useState<EditState | null>(null)
+  const [isDirty, setIsDirty] = useState(false)
   const [comments, setComments] = useState<Comment[]>([])
   const [timeline, setTimeline] = useState<ActivityEvent[]>([])
   const [noteBody, setNoteBody] = useState('')
   const [saving, setSaving] = useState(false)
+  const [watching, setWatching] = useState(false)
+  const [watcherCount, setWatcherCount] = useState(0)
 
   const [users, setUsers] = useState<User[]>([])
   const [groups, setGroups] = useState<Group[]>([])
@@ -94,16 +97,36 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
       lookupsApi.getSeverities().catch(() => []),
       lookupsApi.getResolutionCodes().catch(() => []),
       problemApi.getAllItems(false).catch(() => []),
-    ]).then(([inc, cmts, tl, svcs, cats, usrs, grps, cms, sevs, rcs, prbs]) => {
+      incidentApi.getWatchers(incidentId).catch(() => []),
+    ]).then(([inc, cmts, tl, svcs, cats, usrs, grps, cms, sevs, rcs, prbs, wtchs]) => {
       const i = inc as Incident
-      setIncident(i); setEdit(toEdit(i))
+      setIncident(i); setEdit(toEdit(i)); setIsDirty(false)
       setComments(cmts as Comment[]); setTimeline(tl as ActivityEvent[])
       setServices(svcs as Service[]); setCategories(cats as AdminCategory[])
       setUsers(usrs as User[]); setGroups(grps as Group[])
       setContactMethods(cms as ContactMethod[]); setSeverities(sevs as Severity[])
       setResolutionCodes(rcs as ResolutionCode[])
       setProblems(prbs as Problem[])
+      const watchers = wtchs as { userId: number; userName: string }[]
+      setWatcherCount(watchers.length)
+      if (authUser) setWatching(watchers.some(w => w.userId === authUser.userId))
     })
+  }, [incidentId])
+
+  // Auto-refresh data every 30s without resetting dirty form
+  useEffect(() => {
+    const id = setInterval(() => {
+      Promise.all([
+        incidentApi.getById(incidentId),
+        incidentApi.getComments(incidentId).catch(() => null),
+        incidentApi.getTimeline(incidentId).catch(() => null),
+      ]).then(([inc, cmts, tl]) => {
+        setIncident(inc as Incident)
+        if (cmts) setComments(cmts as Comment[])
+        if (tl) setTimeline(tl as ActivityEvent[])
+      }).catch(() => {})
+    }, 30_000)
+    return () => clearInterval(id)
   }, [incidentId])
 
   // Seed slug/code fields once lookups are available
@@ -146,9 +169,23 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
       .catch(() => setGroupUsers([]))
   }, [edit?.groupSlug])
 
+  // ⌘+S / Ctrl+S to save
+  useEffect(() => {
+    const handle = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+        if (!readOnly && incident?.statusCode !== 'closed') save()
+      }
+    }
+    window.addEventListener('keydown', handle)
+    return () => window.removeEventListener('keydown', handle)
+  }, [edit, incident, readOnly])
+
   const sf = <K extends keyof EditState>(k: K) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       setEdit(prev => prev ? { ...prev, [k]: e.target.value } : prev)
+      setIsDirty(true)
+    }
 
   const save = async () => {
     if (!edit || !incident) return
@@ -178,7 +215,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
       if (edit.linkedProblemId !== '' && edit.linkedProblemId !== (incident.parentProblemId ?? ''))
         await incidentApi.linkProblem(incidentId, Number(edit.linkedProblemId))
       const updated = await incidentApi.getById(incidentId)
-      setIncident(updated); setEdit(toEdit(updated))
+      setIncident(updated); setEdit(toEdit(updated)); setIsDirty(false)
       const updatedComments = await incidentApi.getComments(incidentId)
       setComments(updatedComments)
       const updatedTimeline = await incidentApi.getTimeline(incidentId)
@@ -200,6 +237,23 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     setTimeline(updatedTimeline)
   }
 
+  const toggleWatch = async () => {
+    if (!authUser) return
+    try {
+      if (watching) {
+        await incidentApi.unwatch(incidentId)
+        setWatching(false)
+        setWatcherCount(c => Math.max(0, c - 1))
+        addToast('Unsubscribed from incident')
+      } else {
+        await incidentApi.watch(incidentId)
+        setWatching(true)
+        setWatcherCount(c => c + 1)
+        addToast('Subscribed to incident')
+      }
+    } catch { addToast('Failed to update subscription') }
+  }
+
   const activityItems = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [
       ...comments.map(c => ({ type: 'comment' as const, at: c.createdAt, comment: c })),
@@ -217,6 +271,22 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
         return new Date(tb).getTime() - new Date(ta).getTime()
       }),
   [timeline])
+
+  // Time in current status
+  const timeInStatus = useMemo(() => {
+    const lastStatusChange = [...timeline]
+      .filter(e => e.kind === 'field_changed' && e.field === 'Status')
+      .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())[0]
+    const since = lastStatusChange
+      ? new Date((lastStatusChange.occurredAt.endsWith('Z') ? lastStatusChange.occurredAt : lastStatusChange.occurredAt + 'Z'))
+      : (incident ? new Date((incident.openedAt.endsWith('Z') ? incident.openedAt : incident.openedAt + 'Z')) : null)
+    if (!since) return null
+    const mins = Math.floor((Date.now() - since.getTime()) / 60000)
+    if (mins < 60) return `${mins}m`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h`
+    return `${Math.floor(hrs / 24)}d`
+  }, [timeline, incident])
 
   if (!incident || !edit) return <div className="flex items-center justify-center h-64 text-text-muted">Loading…</div>
 
@@ -238,7 +308,18 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     if (m < 60) return `${m}m ago`
     const h = Math.floor(m / 60)
     if (h < 24) return `${h}h ago`
-    return new Date(utc).toLocaleDateString()
+    return `${Math.floor(h / 24)}d ago`
+  }
+
+  const formatDate = (iso: string) => {
+    const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
+    const d = new Date(utc)
+    const sameYear = d.getFullYear() === new Date().getFullYear()
+    return d.toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric',
+      ...(sameYear ? {} : { year: 'numeric' }),
+      hour: 'numeric', minute: '2-digit',
+    })
   }
 
   const formatActivityTime = (iso: string) => {
@@ -283,6 +364,11 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant={priorityVariant(incident.priorityCode)}>{incident.priorityCode}</Badge>
             <Badge variant={statusVariant(incident.statusCode)}>{incident.statusCode}</Badge>
+            {timeInStatus && (
+              <span className="text-xs text-text-muted border border-border-default rounded px-1.5 py-0.5" title={`Time in ${incident.statusCode} status`}>
+                {timeInStatus} in {incident.statusCode}
+              </span>
+            )}
             {incident.assigneeName && (
               <span className="flex items-center gap-1 text-xs text-text-secondary">
                 <Avatar initials={incident.assigneeInitials} color={incident.assigneeColor} name={incident.assigneeName} size="sm" />
@@ -290,13 +376,15 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
               </span>
             )}
             {incident.ciAssetTag && <span className="text-xs text-text-muted font-mono">{incident.ciAssetTag}</span>}
-            <span className="text-xs text-text-muted">Opened {relative(incident.openedAt)}</span>
+            <span className="text-xs text-text-muted" title={relative(incident.openedAt)}>
+              Opened {formatDate(incident.openedAt)}
+            </span>
             <div className="ml-auto flex flex-col items-end gap-1">
               <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={edit.isMajorIncident}
-                  onChange={e => setEdit(prev => prev ? { ...prev, isMajorIncident: e.target.checked } : prev)}
+                  onChange={e => { setEdit(prev => prev ? { ...prev, isMajorIncident: e.target.checked } : prev); setIsDirty(true) }}
                   disabled={dis}
                   className="w-3.5 h-3.5 accent-accent disabled:opacity-50"
                 />
@@ -332,7 +420,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-text-primary">Description</h3>
-              <span className="text-xs text-text-muted">Updated {relative(incident.updatedAt)}</span>
+              <span className="text-xs text-text-muted">Updated {formatActivityTime(incident.updatedAt)}</span>
             </div>
             <textarea
               value={edit.description}
@@ -474,15 +562,40 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
       {/* ── RIGHT: properties sidebar ── */}
       <div className="w-80 shrink-0 border-l border-border-default overflow-y-auto bg-surface flex flex-col">
 
-        {/* Sticky save button */}
+        {/* Sticky save + watch buttons */}
         {!readOnly && !isClosed && (
-          <div className="sticky top-0 z-10 bg-surface border-b border-border-default p-3">
+          <div className="sticky top-0 z-10 bg-surface border-b border-border-default p-3 flex flex-col gap-2">
             <button
               onClick={save}
               disabled={saving}
-              className="w-full py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white text-sm font-semibold rounded-md transition-colors"
+              className={`w-full py-2 text-white text-sm font-semibold rounded-md transition-colors ${
+                isDirty
+                  ? 'bg-accent hover:bg-accent-hover ring-2 ring-accent/30'
+                  : 'bg-accent hover:bg-accent-hover disabled:opacity-40'
+              }`}
+              title={isDirty ? 'You have unsaved changes (⌘S)' : 'No changes (⌘S)'}
             >
-              {saving ? 'Saving…' : 'Save Changes'}
+              {saving ? 'Saving…' : isDirty ? 'Save Changes ●' : 'Save Changes'}
+            </button>
+            {authUser && (
+              <button
+                onClick={toggleWatch}
+                className="w-full py-1.5 flex items-center justify-center gap-1.5 text-xs font-medium border border-border-default rounded-md hover:bg-hover transition-colors text-text-secondary"
+              >
+                {watching ? <><EyeOff size={13} /> Unsubscribe</> : <><Eye size={13} /> Subscribe</>}
+                {watcherCount > 0 && <span className="text-text-muted">({watcherCount})</span>}
+              </button>
+            )}
+          </div>
+        )}
+        {(readOnly || isClosed) && authUser && (
+          <div className="p-3 border-b border-border-default">
+            <button
+              onClick={toggleWatch}
+              className="w-full py-1.5 flex items-center justify-center gap-1.5 text-xs font-medium border border-border-default rounded-md hover:bg-hover transition-colors text-text-secondary"
+            >
+              {watching ? <><EyeOff size={13} /> Unsubscribe</> : <><Eye size={13} /> Subscribe</>}
+              {watcherCount > 0 && <span className="text-text-muted">({watcherCount})</span>}
             </button>
           </div>
         )}
@@ -523,7 +636,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
               {readOnly ? (
                 <p className="text-sm font-medium text-text-primary py-1">{incident.parentProblemNumber ?? '—'}</p>
               ) : (
-                <select value={edit.linkedProblemId} onChange={e => setEdit(prev => prev ? { ...prev, linkedProblemId: e.target.value ? Number(e.target.value) : '' } : prev)} disabled={dis} className={sel}>
+                <select value={edit.linkedProblemId} onChange={e => { setEdit(prev => prev ? { ...prev, linkedProblemId: e.target.value ? Number(e.target.value) : '' } : prev); setIsDirty(true) }} disabled={dis} className={sel}>
                   <option value="">— none —</option>
                   {problems.map(p => <option key={p.problemId} value={p.problemId}>{p.number} – {p.title.slice(0, 50)}</option>)}
                 </select>
@@ -534,13 +647,13 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
           {/* Classification */}
           <div className="flex flex-col gap-2.5">
             <SbField label="Service">
-              <select value={edit.serviceSlug} onChange={e => setEdit(prev => prev ? { ...prev, serviceSlug: e.target.value, categoryCode: '', subCategoryCode: '' } : prev)} disabled={dis} className={sel}>
+              <select value={edit.serviceSlug} onChange={e => { setEdit(prev => prev ? { ...prev, serviceSlug: e.target.value, categoryCode: '', subCategoryCode: '' } : prev); setIsDirty(true) }} disabled={dis} className={sel}>
                 <option value="">— select —</option>
                 {services.map(s => <option key={s.slug} value={s.slug}>{s.name}</option>)}
               </select>
             </SbField>
             <SbField label="Category">
-              <select value={edit.categoryCode} onChange={e => setEdit(prev => prev ? { ...prev, categoryCode: e.target.value, subCategoryCode: '' } : prev)} disabled={dis || !edit.serviceSlug} className={sel}>
+              <select value={edit.categoryCode} onChange={e => { setEdit(prev => prev ? { ...prev, categoryCode: e.target.value, subCategoryCode: '' } : prev); setIsDirty(true) }} disabled={dis || !edit.serviceSlug} className={sel}>
                 <option value="">— select —</option>
                 {filteredCats.map(c => <option key={c.code} value={c.code}>{c.displayName}</option>)}
               </select>
@@ -597,10 +710,10 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
 
           {/* Dates (read-only) */}
           <div className="flex flex-col gap-2.5">
-            <SbInfo label="Opened"     value={incident.openedAt   ? new Date(incident.openedAt).toLocaleString()   : '—'} />
-            <SbInfo label="Resolved"   value={incident.resolvedAt ? new Date(incident.resolvedAt).toLocaleString() : '—'} />
-            <SbInfo label="Closed"     value={incident.closedAt   ? new Date(incident.closedAt).toLocaleString()   : '—'} />
-            <SbInfo label="1st Response" value={incident.firstResponseAt ? new Date(incident.firstResponseAt).toLocaleString() : '—'} />
+            <SbInfo label="Opened"     value={incident.openedAt   ? formatDate(incident.openedAt)   : '—'} />
+            <SbInfo label="Resolved"   value={incident.resolvedAt ? formatDate(incident.resolvedAt) : '—'} />
+            <SbInfo label="Closed"     value={incident.closedAt   ? formatDate(incident.closedAt)   : '—'} />
+            <SbInfo label="1st Response" value={incident.firstResponseAt ? formatDate(incident.firstResponseAt) : '—'} />
             <SbInfo label="Reopens"    value={String(incident.reopenCount ?? 0)} />
             <SbInfo label="Reassigns"  value={String(incident.reassignCount ?? 0)} />
           </div>

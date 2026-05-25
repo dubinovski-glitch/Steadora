@@ -18,4 +18,7 @@ export const problemApi = {
     api.post(`/problems/${id}/comments`, { authorExtId, body, isInternal }),
   getTimeline: (id: number) => api.get(`/problems/${id}/timeline`),
   getLinkedIncidents: (id: number) => api.get<Incident[]>(`/problems/${id}/incidents`),
+  getWatchers: (id: number) => api.get<{ userId: number; userName: string }[]>(`/problems/${id}/watchers`),
+  watch: (id: number) => api.post<void>(`/problems/${id}/watchers`, {}),
+  unwatch: (id: number) => api.delete<void>(`/problems/${id}/watchers`),
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, Star, Share2, Lock } from 'lucide-react'
+import { ArrowLeft, Star, Share2, Lock, Eye, EyeOff } from 'lucide-react'
 import { problemApi } from '../../api/problems'
 import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
@@ -56,12 +56,15 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
   const { user: authUser } = useAuthStore()
   const [problem, setProblem] = useState<Problem | null>(null)
   const [edit, setEdit] = useState<EditState | null>(null)
+  const [isDirty, setIsDirty] = useState(false)
   const [comments, setComments] = useState<Comment[]>([])
   const [timeline, setTimeline] = useState<ActivityEvent[]>([])
   const [linkedIncidents, setLinkedIncidents] = useState<Incident[]>([])
   const [noteBody, setNoteBody] = useState('')
   const [saving, setSaving] = useState(false)
   const [viewingIncidentId, setViewingIncidentId] = useState<number | null>(null)
+  const [watching, setWatching] = useState(false)
+  const [watcherCount, setWatcherCount] = useState(0)
 
   const [groups, setGroups] = useState<Group[]>([])
   const [groupUsers, setGroupUsers] = useState<User[]>([])
@@ -73,13 +76,33 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
       problemApi.getTimeline(problemId).catch(() => []),
       api.get<Group[]>('/users/groups').catch(() => []),
       problemApi.getLinkedIncidents(problemId).catch(() => []),
-    ]).then(([prb, cmts, tl, grps, incs]) => {
+      problemApi.getWatchers(problemId).catch(() => []),
+    ]).then(([prb, cmts, tl, grps, incs, wtchs]) => {
       const p = prb as Problem
-      setProblem(p); setEdit(toEdit(p))
+      setProblem(p); setEdit(toEdit(p)); setIsDirty(false)
       setComments(cmts as Comment[]); setTimeline(tl as ActivityEvent[])
       setGroups(grps as Group[])
       setLinkedIncidents(incs as Incident[])
+      const watchers = wtchs as { userId: number; userName: string }[]
+      setWatcherCount(watchers.length)
+      if (authUser) setWatching(watchers.some(w => w.userId === authUser.userId))
     })
+  }, [problemId])
+
+  // Auto-refresh data every 30s without resetting dirty form
+  useEffect(() => {
+    const id = setInterval(() => {
+      Promise.all([
+        problemApi.getById(problemId),
+        problemApi.getComments(problemId).catch(() => null),
+        problemApi.getTimeline(problemId).catch(() => null),
+      ]).then(([prb, cmts, tl]) => {
+        setProblem(prb as Problem)
+        if (cmts) setComments(cmts as Comment[])
+        if (tl) setTimeline(tl as ActivityEvent[])
+      }).catch(() => {})
+    }, 30_000)
+    return () => clearInterval(id)
   }, [problemId])
 
   // Seed group/assignee slugs once lookups are loaded
@@ -97,7 +120,6 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     api.get<User[]>(`/users?groupSlug=${encodeURIComponent(edit.groupSlug)}`)
       .then(us => {
         setGroupUsers(us)
-        // Seed assignee once group users are loaded
         if (problem?.assigneeName) {
           const match = us.find(u => u.displayName === problem.assigneeName)
           if (match) setEdit(prev => prev ? { ...prev, assigneeExtId: match.externalId } : prev)
@@ -106,9 +128,23 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
       .catch(() => setGroupUsers([]))
   }, [edit?.groupSlug])
 
+  // ⌘+S / Ctrl+S to save
+  useEffect(() => {
+    const handle = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+        if (problem?.stateCode !== 'closed') save()
+      }
+    }
+    window.addEventListener('keydown', handle)
+    return () => window.removeEventListener('keydown', handle)
+  }, [edit, problem])
+
   const sf = <K extends keyof EditState>(k: K) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       setEdit(prev => prev ? { ...prev, [k]: e.target.value } : prev)
+      setIsDirty(true)
+    }
 
   const save = async () => {
     if (!edit || !problem) return
@@ -127,7 +163,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
       if (edit.stateCode !== problem.stateCode)
         await problemApi.setState(problemId, edit.stateCode)
       const updated = await problemApi.getById(problemId)
-      setProblem(updated); setEdit(toEdit(updated))
+      setProblem(updated); setEdit(toEdit(updated)); setIsDirty(false)
       const updatedComments = await problemApi.getComments(problemId)
       setComments(updatedComments as Comment[])
       const updatedTimeline = await problemApi.getTimeline(problemId)
@@ -149,6 +185,23 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     setTimeline(updatedTimeline as ActivityEvent[])
   }
 
+  const toggleWatch = async () => {
+    if (!authUser) return
+    try {
+      if (watching) {
+        await problemApi.unwatch(problemId)
+        setWatching(false)
+        setWatcherCount(c => Math.max(0, c - 1))
+        addToast('Unsubscribed from problem')
+      } else {
+        await problemApi.watch(problemId)
+        setWatching(true)
+        setWatcherCount(c => c + 1)
+        addToast('Subscribed to problem')
+      }
+    } catch { addToast('Failed to update subscription') }
+  }
+
   const activityItems = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [
       ...comments.map(c => ({ type: 'comment' as const, at: c.createdAt, comment: c })),
@@ -156,6 +209,32 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     ]
     return items.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
   }, [comments, timeline])
+
+  const changeLog = useMemo(() =>
+    [...timeline]
+      .filter(e => e.kind === 'field_changed' && e.field)
+      .sort((a, b) => {
+        const ta = a.occurredAt.endsWith('Z') ? a.occurredAt : a.occurredAt + 'Z'
+        const tb = b.occurredAt.endsWith('Z') ? b.occurredAt : b.occurredAt + 'Z'
+        return new Date(tb).getTime() - new Date(ta).getTime()
+      }),
+  [timeline])
+
+  // Time in current state
+  const timeInState = useMemo(() => {
+    const lastStateChange = [...timeline]
+      .filter(e => e.kind === 'field_changed' && e.field === 'State')
+      .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())[0]
+    const since = lastStateChange
+      ? new Date((lastStateChange.occurredAt.endsWith('Z') ? lastStateChange.occurredAt : lastStateChange.occurredAt + 'Z'))
+      : (problem ? new Date((problem.openedAt.endsWith('Z') ? problem.openedAt : problem.openedAt + 'Z')) : null)
+    if (!since) return null
+    const mins = Math.floor((Date.now() - since.getTime()) / 60000)
+    if (mins < 60) return `${mins}m`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h`
+    return `${Math.floor(hrs / 24)}d`
+  }, [timeline, problem])
 
   if (!problem || !edit) return <div className="flex items-center justify-center h-64 text-text-muted">Loading…</div>
 
@@ -184,7 +263,18 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     if (m < 60) return `${m}m ago`
     const h = Math.floor(m / 60)
     if (h < 24) return `${h}h ago`
-    return new Date(utc).toLocaleDateString()
+    return `${Math.floor(h / 24)}d ago`
+  }
+
+  const formatDate = (iso: string) => {
+    const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
+    const d = new Date(utc)
+    const sameYear = d.getFullYear() === new Date().getFullYear()
+    return d.toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric',
+      ...(sameYear ? {} : { year: 'numeric' }),
+      hour: 'numeric', minute: '2-digit',
+    })
   }
 
   const formatActivityTime = (iso: string) => {
@@ -233,13 +323,20 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
             {problem.isKnownError && (
               <span className="text-xs bg-[#fdf3e3] text-[#d97706] border border-[#f3d9a4] px-2 py-0.5 rounded font-medium">Known Error</span>
             )}
+            {timeInState && (
+              <span className="text-xs text-text-muted border border-border-default rounded px-1.5 py-0.5" title={`Time in ${problem.stateCode} state`}>
+                {timeInState} in {problem.stateCode.replace(/_/g, ' ')}
+              </span>
+            )}
             {problem.assigneeName && (
               <span className="flex items-center gap-1 text-xs text-text-secondary">
                 <Avatar initials={problem.assigneeInitials} color={problem.assigneeColor} size="sm" />
                 {problem.assigneeName}
               </span>
             )}
-            <span className="text-xs text-text-muted">Opened {relative(problem.openedAt)}</span>
+            <span className="text-xs text-text-muted" title={relative(problem.openedAt)}>
+              Opened {formatDate(problem.openedAt)}
+            </span>
           </div>
 
           {/* State progress */}
@@ -268,7 +365,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-text-primary">Root Cause</h3>
-              <span className="text-xs text-text-muted">Updated {relative(problem.updatedAt)}</span>
+              <span className="text-xs text-text-muted">Updated {formatActivityTime(problem.updatedAt)}</span>
             </div>
             <textarea
               value={edit.rootCause}
@@ -313,6 +410,56 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Change Log */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="text-sm font-semibold text-text-primary">Change Log</h3>
+              <span className="text-xs text-text-muted">{changeLog.length} changes</span>
+            </div>
+            {changeLog.length === 0 ? (
+              <p className="text-sm text-text-muted">No field changes recorded yet.</p>
+            ) : (
+              <div className="rounded-lg border border-border-default overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-subtle border-b border-border-default">
+                      <th className="text-left px-3 py-2 font-medium text-text-muted">When</th>
+                      <th className="text-left px-3 py-2 font-medium text-text-muted">Who</th>
+                      <th className="text-left px-3 py-2 font-medium text-text-muted">Field</th>
+                      <th className="text-left px-3 py-2 font-medium text-text-muted">Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {changeLog.map((e, idx) => (
+                      <tr key={e.activityId ?? idx} className={`border-b border-border-default last:border-0 ${idx % 2 !== 0 ? 'bg-subtle/40' : ''}`}>
+                        <td className="px-3 py-2 text-text-muted whitespace-nowrap" title={relative(e.occurredAt)}>
+                          {formatActivityTime(e.occurredAt)}
+                        </td>
+                        <td className="px-3 py-2 font-medium text-text-secondary whitespace-nowrap">
+                          {e.actorName ?? 'System'}
+                        </td>
+                        <td className="px-3 py-2 font-medium text-text-primary whitespace-nowrap">
+                          {e.field}
+                        </td>
+                        <td className="px-3 py-2 text-text-secondary">
+                          {e.oldValue && e.newValue ? (
+                            <><span className="line-through text-text-muted mr-1">{e.oldValue}</span>→ <span className="font-medium text-text-primary ml-1">{e.newValue}</span></>
+                          ) : e.newValue ? (
+                            <span className="font-medium text-text-primary">→ {e.newValue}</span>
+                          ) : e.oldValue ? (
+                            <><span className="line-through text-text-muted">{e.oldValue}</span> → <span className="italic text-text-muted">cleared</span></>
+                          ) : (
+                            <span className="italic text-text-muted">updated</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Linked Incidents */}
@@ -402,11 +549,40 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
       {/* ── RIGHT: properties sidebar ── */}
       <div className="w-80 shrink-0 border-l border-border-default overflow-y-auto bg-surface flex flex-col">
 
-        {/* Sticky save button */}
+        {/* Sticky save + watch buttons */}
         {!isClosed && (
-          <div className="sticky top-0 z-10 bg-surface border-b border-border-default p-3">
-            <button onClick={save} disabled={saving} className="w-full py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white text-sm font-semibold rounded-md transition-colors">
-              {saving ? 'Saving…' : 'Save Changes'}
+          <div className="sticky top-0 z-10 bg-surface border-b border-border-default p-3 flex flex-col gap-2">
+            <button
+              onClick={save}
+              disabled={saving}
+              className={`w-full py-2 text-white text-sm font-semibold rounded-md transition-colors ${
+                isDirty
+                  ? 'bg-accent hover:bg-accent-hover ring-2 ring-accent/30'
+                  : 'bg-accent hover:bg-accent-hover disabled:opacity-40'
+              }`}
+              title={isDirty ? 'You have unsaved changes (⌘S)' : 'No changes (⌘S)'}
+            >
+              {saving ? 'Saving…' : isDirty ? 'Save Changes ●' : 'Save Changes'}
+            </button>
+            {authUser && (
+              <button
+                onClick={toggleWatch}
+                className="w-full py-1.5 flex items-center justify-center gap-1.5 text-xs font-medium border border-border-default rounded-md hover:bg-hover transition-colors text-text-secondary"
+              >
+                {watching ? <><EyeOff size={13} /> Unsubscribe</> : <><Eye size={13} /> Subscribe</>}
+                {watcherCount > 0 && <span className="text-text-muted">({watcherCount})</span>}
+              </button>
+            )}
+          </div>
+        )}
+        {isClosed && authUser && (
+          <div className="p-3 border-b border-border-default">
+            <button
+              onClick={toggleWatch}
+              className="w-full py-1.5 flex items-center justify-center gap-1.5 text-xs font-medium border border-border-default rounded-md hover:bg-hover transition-colors text-text-secondary"
+            >
+              {watching ? <><EyeOff size={13} /> Unsubscribe</> : <><Eye size={13} /> Subscribe</>}
+              {watcherCount > 0 && <span className="text-text-muted">({watcherCount})</span>}
             </button>
           </div>
         )}
@@ -430,7 +606,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
                 <input
                   type="checkbox"
                   checked={edit.isKnownError}
-                  onChange={e => setEdit(prev => prev ? { ...prev, isKnownError: e.target.checked } : prev)}
+                  onChange={e => { setEdit(prev => prev ? { ...prev, isKnownError: e.target.checked } : prev); setIsDirty(true) }}
                   disabled={dis}
                   className="w-4 h-4 accent-accent disabled:opacity-50"
                 />
@@ -457,8 +633,8 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
 
           {/* Stats (read-only) */}
           <div className="flex flex-col gap-2.5">
-            <SbInfo label="Opened"          value={new Date(problem.openedAt).toLocaleString()} />
-            <SbInfo label="Resolved"        value={problem.resolvedAt ? new Date(problem.resolvedAt).toLocaleString() : '—'} />
+            <SbInfo label="Opened"          value={formatDate(problem.openedAt)} />
+            <SbInfo label="Resolved"        value={problem.resolvedAt ? formatDate(problem.resolvedAt) : '—'} />
             <SbInfo label="Linked incidents" value={String(problem.linkedIncidentCount)} />
           </div>
 

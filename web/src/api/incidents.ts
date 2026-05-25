@@ -49,5 +49,7 @@ export const incidentApi = {
   postComment: (id: number, authorExtId: string, body: string, isInternal = false) =>
     api.post(`/incidents/${id}/comments`, { authorExtId, body, isInternal }),
   getTimeline: (id: number) => api.get<ActivityEvent[]>(`/incidents/${id}/timeline`),
-  getWatchers: (id: number) => api.get(`/incidents/${id}/watchers`),
+  getWatchers: (id: number) => api.get<{ userId: number; userName: string }[]>(`/incidents/${id}/watchers`),
+  watch: (id: number) => api.post<void>(`/incidents/${id}/watchers`, {}),
+  unwatch: (id: number) => api.delete<void>(`/incidents/${id}/watchers`),
 }
