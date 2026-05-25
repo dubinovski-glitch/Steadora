@@ -23,8 +23,11 @@ public class IncidentsController(
         [FromQuery] bool unassigned = false,
         [FromQuery] bool includeResolved = false,
         [FromQuery] bool myGroupsOnly = false,
+        [FromQuery] int? groupId = null,
+        [FromQuery] string sortBy = "UpdatedAt",
+        [FromQuery] bool sortDesc = true,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery] int pageSize = 25)
     {
         // Agents and requesters with service assignments only see their services' incidents
         int[]? serviceFilter = null;
@@ -46,6 +49,9 @@ public class IncidentsController(
             IncludeResolved = includeResolved,
             ServiceIds = serviceFilter,
             GroupIds = groupIds,
+            GroupId = groupId,
+            SortBy = sortBy,
+            SortDesc = sortDesc,
         };
         var (items, total) = await service.GetQueueAsync(filter, page, pageSize);
         return Ok(new { items, total, page, pageSize });

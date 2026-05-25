@@ -28,7 +28,7 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
         WHERE p.DeletedAt IS NULL
         """;
 
-    public async Task<IEnumerable<Problem>> GetAllAsync(bool includeResolved = false, int[]? groupIds = null)
+    public async Task<(IEnumerable<Problem> Items, int Total)> GetAllAsync(bool includeResolved = false, int[]? groupIds = null, int page = 1, int pageSize = 25)
     {
         string sql = "";
         try
@@ -38,7 +38,12 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
             if (!includeResolved) clauses.Add("st.IsTerminal = 0");
             if (groupIds is { Length: > 0 }) clauses.Add("p.GroupId IN @groupIds");
             var where = clauses.Count > 0 ? "AND " + string.Join(" AND ", clauses) : string.Empty;
-            sql = $"{BaseSelect} {where} ORDER BY p.OpenedAt DESC";
+            var offset = (page - 1) * pageSize;
+
+            sql = $"SELECT COUNT(*) FROM itil.Problem p LEFT JOIN lookup.ProblemState st ON st.StateId=p.StateId WHERE p.DeletedAt IS NULL {where}";
+            var total = await conn.ExecuteScalarAsync<int>(sql, new { groupIds });
+
+            sql = $"{BaseSelect} {where} ORDER BY p.OpenedAt DESC OFFSET {offset} ROWS FETCH NEXT {pageSize} ROWS ONLY";
             var problems = (await conn.QueryAsync<Problem>(sql, new { groupIds })).ToList();
 
             if (problems.Count > 0)
@@ -49,7 +54,7 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
                 var lookup = svcLinks.ToLookup(x => x.ProblemId, x => x.Slug);
                 foreach (var p in problems) p.AffectedServiceSlugs = lookup[p.ProblemId].ToList();
             }
-            return problems;
+            return (problems, total);
         }
         catch (Exception ex)
         {

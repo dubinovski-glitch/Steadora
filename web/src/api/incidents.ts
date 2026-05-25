@@ -7,7 +7,8 @@ export interface IncidentFilter {
   search?: string; status?: string; priority?: string
   assigneeUserId?: number; slaAtRisk?: boolean
   unassigned?: boolean; includeResolved?: boolean
-  myGroupsOnly?: boolean
+  myGroupsOnly?: boolean; groupId?: number
+  sortBy?: string; sortDesc?: boolean
   page?: number; pageSize?: number
 }
 
@@ -21,8 +22,11 @@ function qs(f: IncidentFilter) {
   if (f.unassigned) p.set('unassigned', 'true')
   if (f.includeResolved) p.set('includeResolved', 'true')
   if (f.myGroupsOnly) p.set('myGroupsOnly', 'true')
+  if (f.groupId) p.set('groupId', String(f.groupId))
+  if (f.sortBy) p.set('sortBy', f.sortBy)
+  if (f.sortDesc !== undefined) p.set('sortDesc', String(f.sortDesc))
   p.set('page', String(f.page ?? 1))
-  p.set('pageSize', String(f.pageSize ?? 50))
+  p.set('pageSize', String(f.pageSize ?? 25))
   return p.toString()
 }
 

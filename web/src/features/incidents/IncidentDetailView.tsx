@@ -1,20 +1,27 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ArrowLeft, Star, Share2, Lock } from 'lucide-react'
 import { incidentApi } from '../../api/incidents'
+import { problemApi } from '../../api/problems'
 import { adminApi } from '../../api/admin'
 import { lookupsApi } from '../../api/lookups'
 import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
+import { useAuthStore } from '../../store/authStore'
 import { Badge, priorityVariant, statusVariant } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
 import { SlaBar } from '../../components/primitives/SlaBar'
 import type {
   Incident, Comment, ActivityEvent,
   User, Group, Service, AdminCategory, AdminSubCategory,
-  ContactMethod, Severity, ResolutionCode,
+  ContactMethod, Severity, ResolutionCode, Problem,
 } from '../../types'
 
-interface Props { incidentId: number; addToast: (t: string) => void }
+interface Props {
+  incidentId: number
+  addToast: (t: string) => void
+  readOnly?: boolean
+  onBack?: () => void
+}
 
 const STATUSES = [
   { code: 'new',      label: 'New' },
@@ -32,6 +39,7 @@ interface EditState {
   priorityCode: string; severityCode: string
   isMajorIncident: boolean; groupSlug: string; assigneeExtId: string; statusCode: string
   resolutionCodeCode: string; resolutionNotes: string
+  linkedProblemId: number | ''
 }
 
 function toEdit(i: Incident): EditState {
@@ -43,6 +51,7 @@ function toEdit(i: Incident): EditState {
     isMajorIncident: i.isMajorIncident, groupSlug: '', assigneeExtId: '',
     statusCode: i.statusCode ?? 'new', resolutionCodeCode: i.resolutionCode ?? '',
     resolutionNotes: i.resolutionNotes ?? '',
+    linkedProblemId: i.parentProblemId ?? '',
   }
 }
 
@@ -51,8 +60,9 @@ type ActivityItem = { at: string } & (
   | { type: 'event'; event: ActivityEvent }
 )
 
-export function IncidentDetailView({ incidentId, addToast }: Props) {
+export function IncidentDetailView({ incidentId, addToast, readOnly = false, onBack }: Props) {
   const { closeIncident } = useAppStore()
+  const { user: authUser } = useAuthStore()
   const [incident, setIncident] = useState<Incident | null>(null)
   const [edit, setEdit] = useState<EditState | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
@@ -69,6 +79,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
   const [severities, setSeverities] = useState<Severity[]>([])
   const [resolutionCodes, setResolutionCodes] = useState<ResolutionCode[]>([])
   const [groupUsers, setGroupUsers] = useState<User[]>([])
+  const [problems, setProblems] = useState<Problem[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -82,7 +93,8 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
       lookupsApi.getContactMethods().catch(() => []),
       lookupsApi.getSeverities().catch(() => []),
       lookupsApi.getResolutionCodes().catch(() => []),
-    ]).then(([inc, cmts, tl, svcs, cats, usrs, grps, cms, sevs, rcs]) => {
+      problemApi.getAllItems(false).catch(() => []),
+    ]).then(([inc, cmts, tl, svcs, cats, usrs, grps, cms, sevs, rcs, prbs]) => {
       const i = inc as Incident
       setIncident(i); setEdit(toEdit(i))
       setComments(cmts as Comment[]); setTimeline(tl as ActivityEvent[])
@@ -90,6 +102,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
       setUsers(usrs as User[]); setGroups(grps as Group[])
       setContactMethods(cms as ContactMethod[]); setSeverities(sevs as Severity[])
       setResolutionCodes(rcs as ResolutionCode[])
+      setProblems(prbs as Problem[])
     })
   }, [incidentId])
 
@@ -162,6 +175,8 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
       })
       if (edit.statusCode !== prevStatus)
         await incidentApi.setStatus(incidentId, edit.statusCode)
+      if (edit.linkedProblemId !== '' && edit.linkedProblemId !== (incident.parentProblemId ?? ''))
+        await incidentApi.linkProblem(incidentId, Number(edit.linkedProblemId))
       const updated = await incidentApi.getById(incidentId)
       setIncident(updated); setEdit(toEdit(updated))
       const updatedComments = await incidentApi.getComments(incidentId)
@@ -174,7 +189,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
 
   const submitNote = async () => {
     if (!noteBody.trim()) return
-    await incidentApi.postComment(incidentId, 'me', noteBody, true)
+    await incidentApi.postComment(incidentId, authUser?.externalId ?? '', noteBody, true)
     addToast('Note added')
     setNoteBody('')
     const [updatedComments, updatedTimeline] = await Promise.all([
@@ -196,7 +211,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
   if (!incident || !edit) return <div className="flex items-center justify-center h-64 text-text-muted">Loading…</div>
 
   const isClosed = incident.statusCode === 'closed'
-  const dis = isClosed || saving
+  const dis = readOnly || isClosed || saving
 
   const filteredCats = edit.serviceSlug
     ? categories.filter(c => { const s = services.find(x => x.slug === edit.serviceSlug); return s ? c.serviceId === s.serviceId : true })
@@ -206,13 +221,14 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
   const inp = `w-full text-sm font-medium text-text-primary bg-surface border border-border-default rounded px-2 py-1.5 focus:outline-none focus:border-border-focus disabled:opacity-50 disabled:cursor-not-allowed`
 
   const relative = (iso: string) => {
-    const diff = Date.now() - new Date(iso).getTime()
+    const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
+    const diff = Date.now() - new Date(utc).getTime()
     const m = Math.floor(diff / 60000)
     if (m < 1) return 'just now'
     if (m < 60) return `${m}m ago`
     const h = Math.floor(m / 60)
     if (h < 24) return `${h}h ago`
-    return new Date(iso).toLocaleDateString()
+    return new Date(utc).toLocaleDateString()
   }
 
   return (
@@ -224,8 +240,8 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
         {/* Sticky header */}
         <div className="sticky top-0 z-10 bg-surface border-b border-border-default px-6 pt-4 pb-3">
           <div className="flex items-center gap-2 text-xs text-text-muted mb-2">
-            <button onClick={closeIncident} className="flex items-center gap-1 hover:text-text-primary transition-colors">
-              <ArrowLeft size={12} /> Back to queue
+            <button onClick={onBack ?? closeIncident} className="flex items-center gap-1 hover:text-text-primary transition-colors">
+              <ArrowLeft size={12} /> {readOnly ? 'Back to problem' : 'Back to queue'}
             </button>
             <span>·</span>
             <span className="font-mono font-medium text-text-secondary">{incident.number}</span>
@@ -278,7 +294,13 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
         {/* Scrollable body */}
         <div className="px-6 py-5 flex flex-col gap-6 flex-1">
 
-          {isClosed && (
+          {readOnly && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
+              <Lock size={14} className="shrink-0" />
+              <span>Viewing in <strong>read-only</strong> mode. Changes are not allowed.</span>
+            </div>
+          )}
+          {!readOnly && isClosed && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-gray-100 border border-gray-300 text-gray-600 text-sm">
               <Lock size={14} className="shrink-0" />
               <span>This incident is <strong>closed</strong>. No further changes can be made.</span>
@@ -302,7 +324,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
           </div>
 
           {/* Notes input */}
-          <div>
+          {!readOnly && <div>
             <h3 className="text-sm font-semibold text-text-primary mb-2">Add Note</h3>
             <div className={`border border-border-default rounded-lg overflow-hidden ${isClosed ? 'opacity-50 pointer-events-none' : ''}`}>
               <textarea
@@ -325,7 +347,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
                 </button>
               </div>
             </div>
-          </div>
+          </div>}
 
           {/* Activity */}
           <div>
@@ -344,7 +366,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
                     <div className="flex-1 rounded-lg p-3 text-sm bg-[#fdf8e6] border border-[#f3d9a4]">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-text-primary text-xs">{item.comment.authorName ?? 'Unknown'}</span>
-                        <span className="text-[10px] text-[#b45309] bg-[#fdf3e3] px-1.5 py-0.5 rounded font-medium">NOTE</span>
+                        <span className="text-[9px] text-[#b45309] bg-[#fdf3e3] px-1.5 py-0.5 rounded font-medium">NOTE</span>
                         <span className="text-xs text-text-muted ml-auto">{relative(item.comment.createdAt)}</span>
                       </div>
                       <p className="text-text-secondary whitespace-pre-wrap">{item.comment.body}</p>
@@ -382,7 +404,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
       <div className="w-80 shrink-0 border-l border-border-default overflow-y-auto bg-surface flex flex-col">
 
         {/* Sticky save button */}
-        {!isClosed && (
+        {!readOnly && !isClosed && (
           <div className="sticky top-0 z-10 bg-surface border-b border-border-default p-3">
             <button
               onClick={save}
@@ -425,6 +447,16 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
                 <option value="">— unassigned —</option>
                 {groupUsers.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
               </select>
+            </SbField>
+            <SbField label="Problem">
+              {readOnly ? (
+                <p className="text-sm font-medium text-text-primary py-1">{incident.parentProblemNumber ?? '—'}</p>
+              ) : (
+                <select value={edit.linkedProblemId} onChange={e => setEdit(prev => prev ? { ...prev, linkedProblemId: e.target.value ? Number(e.target.value) : '' } : prev)} disabled={dis} className={sel}>
+                  <option value="">— none —</option>
+                  {problems.map(p => <option key={p.problemId} value={p.problemId}>{p.number} – {p.title.slice(0, 50)}</option>)}
+                </select>
+              )}
             </SbField>
           </div>
 
@@ -513,7 +545,7 @@ export function IncidentDetailView({ incidentId, addToast }: Props) {
 function SbField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-xs font-medium text-text-muted mb-1">{label}</p>
+      <p className="text-sm font-semibold text-text-muted mb-1.5">{label}</p>
       {children}
     </div>
   )
@@ -522,7 +554,7 @@ function SbField({ label, children }: { label: string; children: React.ReactNode
 function SbInfo({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-0.5">
-      <span className="text-xs text-text-muted">{label}</span>
+      <span className="text-sm font-semibold text-text-muted">{label}</span>
       <span className="text-sm font-medium text-text-primary">{value}</span>
     </div>
   )

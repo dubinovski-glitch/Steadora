@@ -39,7 +39,7 @@ public class AuthRepository(IDbConnectionFactory db) : IAuthRepository
     public async Task<AuthUser?> GetUserByIdAsync(int userId)
     {
         const string userSql = """
-            SELECT u.UserId, u.Username, u.Email, u.DisplayName,
+            SELECT u.UserId, u.ExternalId, u.Username, u.Email, u.DisplayName,
                    u.AvatarInitials, u.AvatarColor,
                    r.Code AS RoleCode, r.DisplayName AS RoleDisplayName
             FROM core.[User] u

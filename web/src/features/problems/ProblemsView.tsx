@@ -3,8 +3,11 @@ import { Plus } from 'lucide-react'
 import { problemApi } from '../../api/problems'
 import { Badge, priorityVariant } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
+import { Pagination } from '../../components/primitives/Pagination'
 import { useAppStore } from '../../store/appStore'
 import type { Problem } from '../../types'
+
+const PAGE_SIZE = 25
 
 const STATE_STEPS = ['investigating', 'rca', 'workaround', 'implementing_fix', 'vendor_engaged', 'closed']
 
@@ -24,15 +27,19 @@ interface Props { addToast: (t: string) => void }
 export function ProblemsView({ addToast: _addToast }: Props) {
   const { setShowNewProblem, openProblem } = useAppStore()
   const [problems, setProblems] = useState<Problem[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [includeResolved, setIncludeResolved] = useState(false)
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     setLoading(true)
-    problemApi.getAll(includeResolved, true)
-      .then(setProblems)
+    problemApi.getAll(includeResolved, true, page, PAGE_SIZE)
+      .then(res => { setProblems(res.items); setTotal(res.total) })
       .finally(() => setLoading(false))
-  }, [includeResolved])
+  }, [includeResolved, page])
+
+  const resetPage = (checked: boolean) => { setIncludeResolved(checked); setPage(1) }
 
   const active = problems.filter(p => p.resolvedAt === null)
   const resolved = problems.filter(p => p.resolvedAt !== null)
@@ -43,7 +50,7 @@ export function ProblemsView({ addToast: _addToast }: Props) {
         <h1 className="text-xl font-semibold text-text-primary">Problem management</h1>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
-            <input type="checkbox" checked={includeResolved} onChange={e => setIncludeResolved(e.target.checked)} className="rounded" />
+            <input type="checkbox" checked={includeResolved} onChange={e => resetPage(e.target.checked)} className="rounded" />
             Show resolved
           </label>
           <button
@@ -58,7 +65,7 @@ export function ProblemsView({ addToast: _addToast }: Props) {
       {/* KPI strip */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          ['Open problems', active.length],
+          ['Open problems', total],
           ['Linked incidents', active.reduce((s, p) => s + p.linkedIncidentCount, 0)],
           ['Known errors', active.filter(p => p.isKnownError).length],
           ['Avg age (days)', active.length ? Math.round(active.reduce((s, p) => s + (Date.now() - new Date(p.openedAt).getTime()) / 86400000, 0) / active.length) : 0],
@@ -76,6 +83,9 @@ export function ProblemsView({ addToast: _addToast }: Props) {
         <>
           <ProblemGroup title="Active problems" items={active} onOpen={openProblem} />
           {resolved.length > 0 && <ProblemGroup title="Recently resolved" items={resolved} onOpen={openProblem} />}
+          {total > PAGE_SIZE && (
+            <Pagination total={total} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
+          )}
         </>
       )}
     </div>

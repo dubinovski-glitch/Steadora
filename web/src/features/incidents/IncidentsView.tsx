@@ -1,12 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
-import { RefreshCw, Plus, Trash2, Download, Columns3, ChevronUp, ChevronDown } from 'lucide-react'
+import { RefreshCw, Plus, Trash2, Download, Columns3, ChevronUp, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
 import { incidentApi } from '../../api/incidents'
+import { lookupsApi } from '../../api/lookups'
+import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
 import { Badge, priorityVariant, statusVariant } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
 import { SlaBar } from '../../components/primitives/SlaBar'
+import { Pagination } from '../../components/primitives/Pagination'
 import { exportIncidentsToCsv } from '../../utils/exportCsv'
-import type { Incident } from '../../types'
+import type { Incident, Priority, Group } from '../../types'
+
+const PAGE_SIZE = 25
+const COL_STORAGE_KEY = 'inc-columns'
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
   { key: '', label: 'All' },
@@ -16,7 +24,7 @@ const TABS = [
   { key: 'resolved', label: 'Resolved' },
 ]
 
-// ── Column definitions ──────────────────────────────────────────────────────
+// ── Column definitions ────────────────────────────────────────────────────────
 
 type ColKey =
   | 'priority' | 'title' | 'status' | 'assignee' | 'service' | 'sla' | 'updated'
@@ -27,14 +35,13 @@ interface ColDef {
   key: ColKey
   label: string
   thClass: string
+  sortKey?: string
   renderCell: (inc: Incident) => React.ReactNode
 }
 
 const ALL_COLUMNS: ColDef[] = [
   {
-    key: 'priority',
-    label: 'Priority',
-    thClass: 'w-28',
+    key: 'priority', label: 'Priority', thClass: 'w-28', sortKey: 'PriorityId',
     renderCell: inc => (
       <Badge variant={priorityVariant(inc.priorityCode)}>
         {inc.priorityId}-{inc.priorityCode.charAt(0).toUpperCase() + inc.priorityCode.slice(1)}
@@ -42,21 +49,15 @@ const ALL_COLUMNS: ColDef[] = [
     ),
   },
   {
-    key: 'title',
-    label: 'Title',
-    thClass: '',
+    key: 'title', label: 'Title', thClass: '', sortKey: 'Title',
     renderCell: inc => <span className="text-text-primary font-medium">{inc.title}</span>,
   },
   {
-    key: 'status',
-    label: 'Status',
-    thClass: 'w-28',
+    key: 'status', label: 'Status', thClass: 'w-28', sortKey: 'StatusId',
     renderCell: inc => <Badge variant={statusVariant(inc.statusCode)}>{inc.statusCode}</Badge>,
   },
   {
-    key: 'assignee',
-    label: 'Assignee',
-    thClass: 'w-32',
+    key: 'assignee', label: 'Assignee', thClass: 'w-32',
     renderCell: inc => inc.assigneeName ? (
       <div className="flex items-center gap-1.5">
         <Avatar initials={inc.assigneeInitials} color={inc.assigneeColor} size="sm" />
@@ -65,78 +66,54 @@ const ALL_COLUMNS: ColDef[] = [
     ) : <span className="text-text-muted">—</span>,
   },
   {
-    key: 'service',
-    label: 'Service',
-    thClass: 'w-28',
+    key: 'service', label: 'Service', thClass: 'w-28', sortKey: 'ServiceName',
     renderCell: inc => <span className="text-text-secondary truncate">{inc.serviceName ?? '—'}</span>,
   },
   {
-    key: 'sla',
-    label: 'SLA',
-    thClass: 'w-28',
+    key: 'sla', label: 'SLA', thClass: 'w-28',
     renderCell: inc => (
       <SlaBar percent={inc.slaPercent} breachedAt={inc.slaBreachedAt} targetMinutes={inc.slaTargetMinutes}
         startedAt={inc.slaStartedAt} pausedSeconds={inc.slaPausedSeconds} compact />
     ),
   },
   {
-    key: 'updated',
-    label: 'Updated',
-    thClass: 'w-28',
+    key: 'updated', label: 'Updated', thClass: 'w-28', sortKey: 'UpdatedAt',
     renderCell: inc => <span className="text-text-tertiary tabular">{new Date(inc.updatedAt).toLocaleDateString()}</span>,
   },
   {
-    key: 'severity',
-    label: 'Severity',
-    thClass: 'w-24',
+    key: 'severity', label: 'Severity', thClass: 'w-24',
     renderCell: inc => <span className="text-text-secondary">{inc.severityCode ?? '—'}</span>,
   },
   {
-    key: 'category',
-    label: 'Category',
-    thClass: 'w-32',
+    key: 'category', label: 'Category', thClass: 'w-32',
     renderCell: inc => <span className="text-text-secondary truncate">{inc.categoryName ?? '—'}</span>,
   },
   {
-    key: 'group',
-    label: 'Group',
-    thClass: 'w-32',
+    key: 'group', label: 'Group', thClass: 'w-32',
     renderCell: inc => <span className="text-text-secondary truncate">{inc.groupName ?? '—'}</span>,
   },
   {
-    key: 'caller',
-    label: 'Caller',
-    thClass: 'w-32',
+    key: 'caller', label: 'Caller', thClass: 'w-32',
     renderCell: inc => <span className="text-text-secondary truncate">{inc.callerName ?? '—'}</span>,
   },
   {
-    key: 'location',
-    label: 'Location',
-    thClass: 'w-32',
+    key: 'location', label: 'Location', thClass: 'w-32',
     renderCell: inc => <span className="text-text-secondary truncate">{inc.location ?? '—'}</span>,
   },
   {
-    key: 'contactMethod',
-    label: 'Contact',
-    thClass: 'w-24',
+    key: 'contactMethod', label: 'Contact', thClass: 'w-24',
     renderCell: inc => <span className="text-text-secondary">{inc.contactMethodCode ?? '—'}</span>,
   },
   {
-    key: 'openedAt',
-    label: 'Opened',
-    thClass: 'w-28',
+    key: 'openedAt', label: 'Opened', thClass: 'w-28', sortKey: 'OpenedAt',
     renderCell: inc => <span className="text-text-tertiary tabular">{new Date(inc.openedAt).toLocaleDateString()}</span>,
   },
   {
-    key: 'comments',
-    label: 'Comments',
-    thClass: 'w-20',
+    key: 'comments', label: 'Comments', thClass: 'w-20',
     renderCell: inc => <span className="text-text-secondary tabular">{inc.commentCount}</span>,
   },
   {
-    key: 'majorIncident',
-    label: 'Major',
-    thClass: 'w-16',
+    key: 'majorIncident', label: 'Major', thClass: 'w-16',
     renderCell: inc => inc.isMajorIncident
       ? <span className="text-xs font-medium text-red-600">Yes</span>
       : <span className="text-text-muted">—</span>,
@@ -146,43 +123,145 @@ const ALL_COLUMNS: ColDef[] = [
 const COL_MAP = Object.fromEntries(ALL_COLUMNS.map(c => [c.key, c])) as Record<ColKey, ColDef>
 const DEFAULT_VISIBLE: ColKey[] = ['priority', 'title', 'status', 'assignee', 'service', 'sla', 'updated']
 
-// ── Component ───────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function loadSavedColumns(): ColKey[] {
+  try {
+    const raw = localStorage.getItem(COL_STORAGE_KEY)
+    if (!raw) return DEFAULT_VISIBLE
+    const parsed = JSON.parse(raw) as ColKey[]
+    const valid = parsed.filter(k => k in COL_MAP)
+    return valid.length > 0 ? valid : DEFAULT_VISIBLE
+  } catch {
+    return DEFAULT_VISIBLE
+  }
+}
+
+function readUrl() {
+  const p = new URLSearchParams(window.location.search)
+  return {
+    tab:      p.get('tab') ?? '',
+    search:   p.get('q') ?? '',
+    page:     Math.max(1, parseInt(p.get('page') ?? '1', 10)),
+    sortBy:   p.get('sort') ?? 'UpdatedAt',
+    sortDesc: p.get('dir') !== 'asc',
+    priority: p.get('priority') ?? '',
+    groupId:  p.get('group') ? parseInt(p.get('group')!, 10) : ('' as number | ''),
+  }
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props { addToast: (t: string) => void }
 
 export function IncidentsView({ addToast }: Props) {
   const { openIncident, setShowNewIncident } = useAppStore()
-  const [incidents, setIncidents] = useState<Incident[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('')
-  const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<Set<number>>(new Set())
 
-  // visibleOrder = ordered list of visible column keys
-  const [visibleOrder, setVisibleOrder] = useState<ColKey[]>([...DEFAULT_VISIBLE])
+  // Filter state — initialised from URL on mount
+  const [tab,           setTabRaw]       = useState(() => readUrl().tab)
+  const [searchInput,   setSearchInput]  = useState(() => readUrl().search)
+  const [debouncedSearch, setDebounced]  = useState(() => readUrl().search)
+  const [page,          setPage]         = useState(() => readUrl().page)
+  const [sortBy,        setSortBy]       = useState(() => readUrl().sortBy)
+  const [sortDesc,      setSortDesc]     = useState(() => readUrl().sortDesc)
+  const [filterPriority, setFilterPriority] = useState(() => readUrl().priority)
+  const [filterGroupId,  setFilterGroupId]  = useState<number | ''>(() => readUrl().groupId)
+
+  // Data
+  const [incidents,     setIncidents]    = useState<Incident[]>([])
+  const [total,         setTotal]        = useState(0)
+  const [loading,       setLoading]      = useState(true)
+  const [selected,      setSelected]     = useState<Set<number>>(new Set())
+  const [refreshTick,   setRefreshTick]  = useState(0)
+  const [lastRefreshed, setLastRefreshed] = useState(new Date())
+
+  // Lookup data for quick filters
+  const [priorities, setPriorities] = useState<Priority[]>([])
+  const [groups,     setGroups]     = useState<Group[]>([])
+
+  // Column picker
+  const [visibleOrder,  setVisibleOrder]  = useState<ColKey[]>(loadSavedColumns)
   const [showColPicker, setShowColPicker] = useState(false)
   const colPickerRef = useRef<HTMLDivElement>(null)
+  const skipFirstDebounce = useRef(true)
 
-  const load = async () => {
-    setLoading(true)
-    try {
-      const res = await incidentApi.getQueue({
-        search: search || undefined,
-        status: tab && tab !== 'sla' ? tab : undefined,
-        slaAtRisk: tab === 'sla',
-        unassigned: tab === 'new',
-        includeResolved: tab === 'resolved',
-        myGroupsOnly: true,
-      })
-      setIncidents(res.items)
-      setTotal(res.total)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // ── Lookups ───────────────────────────────────────────────────────────────
 
-  useEffect(() => { load() }, [tab, search])
+  useEffect(() => {
+    lookupsApi.getPriorities().then(setPriorities).catch(() => {})
+    api.get<Group[]>('/users/groups').then(setGroups).catch(() => {})
+  }, [])
+
+  // ── Search debounce ───────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (skipFirstDebounce.current) { skipFirstDebounce.current = false; return }
+    const t = setTimeout(() => { setDebounced(searchInput); setPage(1) }, 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  // ── Main fetch ────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await incidentApi.getQueue({
+          search:         debouncedSearch || undefined,
+          status:         tab && tab !== 'sla' ? tab : undefined,
+          slaAtRisk:      tab === 'sla',
+          unassigned:     tab === 'new',
+          includeResolved: tab === 'resolved',
+          myGroupsOnly:   true,
+          priority:       filterPriority || undefined,
+          groupId:        filterGroupId || undefined,
+          sortBy,
+          sortDesc,
+          page,
+          pageSize:       PAGE_SIZE,
+        })
+        if (!cancelled) {
+          setIncidents(res.items)
+          setTotal(res.total)
+          setLastRefreshed(new Date())
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [tab, debouncedSearch, page, sortBy, sortDesc, filterPriority, filterGroupId, refreshTick])
+
+  // ── Auto-refresh every 30s ────────────────────────────────────────────────
+
+  useEffect(() => {
+    const id = setInterval(() => setRefreshTick(t => t + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // ── URL sync ──────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const p = new URLSearchParams()
+    if (tab)            p.set('tab',      tab)
+    if (debouncedSearch) p.set('q',       debouncedSearch)
+    if (page > 1)       p.set('page',     String(page))
+    if (sortBy !== 'UpdatedAt') p.set('sort', sortBy)
+    if (!sortDesc)      p.set('dir',      'asc')
+    if (filterPriority) p.set('priority', filterPriority)
+    if (filterGroupId)  p.set('group',    String(filterGroupId))
+    const qs = p.toString()
+    history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+  }, [tab, debouncedSearch, page, sortBy, sortDesc, filterPriority, filterGroupId])
+
+  // ── Save column prefs ─────────────────────────────────────────────────────
+
+  useEffect(() => {
+    localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(visibleOrder))
+  }, [visibleOrder])
+
+  // ── Col-picker click-outside ──────────────────────────────────────────────
 
   useEffect(() => {
     if (!showColPicker) return
@@ -194,30 +273,30 @@ export function IncidentsView({ addToast }: Props) {
     return () => document.removeEventListener('mousedown', handler)
   }, [showColPicker])
 
-  const toggleSelect = (id: number) => {
-    setSelected(s => {
-      const next = new Set(s)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const setTab = (t: string) => { setTabRaw(t); setPage(1) }
+
+  const toggleSort = (key: string) => {
+    if (sortBy === key) { setSortDesc(d => !d); setPage(1) }
+    else { setSortBy(key); setSortDesc(true); setPage(1) }
   }
+
+  const toggleSelect = (id: number) =>
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const bulkClose = async () => {
     await incidentApi.bulkClose([...selected])
     addToast(`Closed ${selected.size} incident${selected.size !== 1 ? 's' : ''}`)
     setSelected(new Set())
-    load()
+    setRefreshTick(t => t + 1)
   }
 
-  // Add a hidden column → append to end of visible list
-  const showCol = (key: ColKey) =>
-    setVisibleOrder(prev => [...prev, key])
+  const clearFilters = () => { setFilterPriority(''); setFilterGroupId(''); setPage(1) }
+  const hasActiveFilters = !!(filterPriority || filterGroupId)
 
-  // Remove a visible column → remove from list
-  const hideCol = (key: ColKey) =>
-    setVisibleOrder(prev => prev.filter(k => k !== key))
-
-  // Move a visible column up or down
+  const showCol = (key: ColKey) => setVisibleOrder(prev => [...prev, key])
+  const hideCol = (key: ColKey) => setVisibleOrder(prev => prev.filter(k => k !== key))
   const moveCol = (key: ColKey, dir: -1 | 1) => {
     setVisibleOrder(prev => {
       const idx = prev.indexOf(key)
@@ -230,10 +309,12 @@ export function IncidentsView({ addToast }: Props) {
     })
   }
 
-  const visibleSet = new Set(visibleOrder)
-  const hiddenCols = ALL_COLUMNS.filter(c => !visibleSet.has(c.key))
-  const activeCols = visibleOrder.map(k => COL_MAP[k]).filter(Boolean)
-  const totalCols = activeCols.length + 2  // +2 for checkbox + ID
+  const visibleSet  = new Set(visibleOrder)
+  const hiddenCols  = ALL_COLUMNS.filter(c => !visibleSet.has(c.key))
+  const activeCols  = visibleOrder.map(k => COL_MAP[k]).filter(Boolean)
+  const totalCols   = activeCols.length + 2
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full">
@@ -243,10 +324,18 @@ export function IncidentsView({ addToast }: Props) {
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold text-text-primary">Incidents</h1>
           <span className="text-xs bg-[#e7eefc] text-[#2563c9] px-2 py-0.5 rounded-full font-medium">Live</span>
+          {!loading && <span className="text-sm text-text-muted">{total} total</span>}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={load} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-hover text-text-secondary">
-            <RefreshCw size={14} />
+          <span className="text-xs text-text-muted hidden sm:block">
+            {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <button
+            onClick={() => setRefreshTick(t => t + 1)}
+            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-hover text-text-secondary"
+            title="Refresh"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
 
           {/* Column picker */}
@@ -260,19 +349,10 @@ export function IncidentsView({ addToast }: Props) {
 
             {showColPicker && (
               <div className="absolute right-0 top-full mt-1 z-30 bg-surface border border-border-default rounded-lg shadow-lg w-56 py-2 max-h-[480px] overflow-y-auto">
-
-                {/* Header */}
                 <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-border-default">
                   <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted">Columns</span>
-                  <button
-                    onClick={() => setVisibleOrder([...DEFAULT_VISIBLE])}
-                    className="text-[11px] text-accent hover:underline"
-                  >
-                    Reset
-                  </button>
+                  <button onClick={() => setVisibleOrder([...DEFAULT_VISIBLE])} className="text-[11px] text-accent hover:underline">Reset</button>
                 </div>
-
-                {/* Visible (shown) columns — ordered */}
                 {visibleOrder.length > 0 && (
                   <>
                     <p className="px-3 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Shown</p>
@@ -281,53 +361,28 @@ export function IncidentsView({ addToast }: Props) {
                       if (!col) return null
                       return (
                         <div key={key} className="flex items-center gap-1 px-2 py-1 hover:bg-hover group">
-                          <input
-                            type="checkbox"
-                            checked
-                            onChange={() => hideCol(key)}
-                            className="w-3.5 h-3.5 accent-accent shrink-0"
-                          />
+                          <input type="checkbox" checked onChange={() => hideCol(key)} className="w-3.5 h-3.5 accent-accent shrink-0" />
                           <span className="flex-1 text-sm text-text-primary ml-1 truncate">{col.label}</span>
                           <div className="flex flex-col shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => moveCol(key, -1)}
-                              disabled={idx === 0}
-                              className="p-0.5 rounded hover:bg-border-default disabled:opacity-30 text-text-muted hover:text-text-primary"
-                            >
-                              <ChevronUp size={11} />
-                            </button>
-                            <button
-                              onClick={() => moveCol(key, 1)}
-                              disabled={idx === visibleOrder.length - 1}
-                              className="p-0.5 rounded hover:bg-border-default disabled:opacity-30 text-text-muted hover:text-text-primary"
-                            >
-                              <ChevronDown size={11} />
-                            </button>
+                            <button onClick={() => moveCol(key, -1)} disabled={idx === 0} className="p-0.5 rounded hover:bg-border-default disabled:opacity-30 text-text-muted hover:text-text-primary"><ChevronUp size={11} /></button>
+                            <button onClick={() => moveCol(key, 1)} disabled={idx === visibleOrder.length - 1} className="p-0.5 rounded hover:bg-border-default disabled:opacity-30 text-text-muted hover:text-text-primary"><ChevronDown size={11} /></button>
                           </div>
                         </div>
                       )
                     })}
                   </>
                 )}
-
-                {/* Hidden columns — available to add */}
                 {hiddenCols.length > 0 && (
                   <>
                     <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-t border-border-default mt-2">Hidden</p>
                     {hiddenCols.map(col => (
                       <div key={col.key} className="flex items-center gap-1 px-2 py-1 hover:bg-hover">
-                        <input
-                          type="checkbox"
-                          checked={false}
-                          onChange={() => showCol(col.key)}
-                          className="w-3.5 h-3.5 accent-accent shrink-0"
-                        />
+                        <input type="checkbox" checked={false} onChange={() => showCol(col.key)} className="w-3.5 h-3.5 accent-accent shrink-0" />
                         <span className="flex-1 text-sm text-text-muted ml-1 truncate">{col.label}</span>
                       </div>
                     ))}
                   </>
                 )}
-
               </div>
             )}
           </div>
@@ -357,9 +412,7 @@ export function IncidentsView({ addToast }: Props) {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`px-3 py-2 text-sm -mb-px border-b-2 transition-colors ${
-              tab === t.key
-                ? 'border-accent text-accent-text font-medium'
-                : 'border-transparent text-text-secondary hover:text-text-primary'
+              tab === t.key ? 'border-accent text-accent-text font-medium' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             {t.label}
@@ -367,15 +420,44 @@ export function IncidentsView({ addToast }: Props) {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="mb-3">
+      {/* Search + quick filters */}
+      <div className="flex gap-2 mb-3 flex-wrap">
         <input
           type="text"
           placeholder="Search incidents..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full px-3 py-2 rounded-md border border-border-default bg-surface text-sm focus:outline-none focus:border-border-focus"
+          value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
+          className="flex-1 min-w-[180px] px-3 py-2 rounded-md border border-border-default bg-surface text-sm focus:outline-none focus:border-border-focus"
         />
+        <select
+          value={filterPriority}
+          onChange={e => { setFilterPriority(e.target.value); setPage(1) }}
+          className="px-2 py-2 rounded-md border border-border-default bg-surface text-sm focus:outline-none focus:border-border-focus text-text-secondary"
+        >
+          <option value="">All priorities</option>
+          {priorities.map(p => (
+            <option key={p.priorityId} value={p.code}>{p.priorityId} – {p.displayName}</option>
+          ))}
+        </select>
+        <select
+          value={filterGroupId}
+          onChange={e => { setFilterGroupId(e.target.value ? parseInt(e.target.value, 10) : ''); setPage(1) }}
+          className="px-2 py-2 rounded-md border border-border-default bg-surface text-sm focus:outline-none focus:border-border-focus text-text-secondary"
+        >
+          <option value="">All groups</option>
+          {groups.map(g => (
+            <option key={g.groupId} value={g.groupId}>{g.name}</option>
+          ))}
+        </select>
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            className="px-2 py-2 rounded-md border border-border-default hover:bg-hover text-text-muted text-sm flex items-center gap-1"
+            title="Clear filters"
+          >
+            <X size={14} /> Clear
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -392,8 +474,21 @@ export function IncidentsView({ addToast }: Props) {
               </th>
               <th className="px-3 py-2 text-left font-medium text-text-tertiary text-xs w-36">ID</th>
               {activeCols.map(col => (
-                <th key={col.key} className={`px-3 py-2 text-left font-medium text-text-tertiary text-xs ${col.thClass}`}>
-                  {col.label}
+                <th
+                  key={col.key}
+                  className={`px-3 py-2 text-left text-xs ${col.thClass} ${col.sortKey ? 'cursor-pointer select-none hover:text-text-primary text-text-tertiary' : 'font-medium text-text-tertiary'}`}
+                  onClick={() => col.sortKey && toggleSort(col.sortKey)}
+                >
+                  <span className="flex items-center gap-1 font-medium">
+                    {col.label}
+                    {col.sortKey && (
+                      sortBy === col.sortKey
+                        ? sortDesc
+                          ? <ArrowDown size={11} className="text-accent shrink-0" />
+                          : <ArrowUp size={11} className="text-accent shrink-0" />
+                        : <ArrowUpDown size={11} className="opacity-30 shrink-0" />
+                    )}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -410,24 +505,22 @@ export function IncidentsView({ addToast }: Props) {
                 onClick={() => openIncident(inc.incidentId)}
               >
                 <td className="px-3" onClick={e => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    className="rounded"
-                    checked={selected.has(inc.incidentId)}
-                    onChange={() => toggleSelect(inc.incidentId)}
-                  />
+                  <input type="checkbox" className="rounded" checked={selected.has(inc.incidentId)} onChange={() => toggleSelect(inc.incidentId)} />
                 </td>
                 <td className="px-3 text-text-primary font-mono text-sm whitespace-nowrap">{inc.number}</td>
                 {activeCols.map(col => (
-                  <td key={col.key} className="px-3">
-                    {col.renderCell(inc)}
-                  </td>
+                  <td key={col.key} className="px-3">{col.renderCell(inc)}</td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {total > PAGE_SIZE && (
+        <Pagination total={total} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
+      )}
 
       {/* Bulk action bar */}
       {selected.size > 0 && (

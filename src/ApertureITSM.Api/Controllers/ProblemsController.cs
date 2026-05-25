@@ -18,14 +18,16 @@ public class ProblemsController(
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] bool includeResolved = false,
-        [FromQuery] bool myGroupsOnly = false)
+        [FromQuery] bool myGroupsOnly = false,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
     {
         int[]? groupIds = null;
         if (myGroupsOnly && currentUser.IsAuthenticated)
             groupIds = await userRepository.GetGroupIdsAsync(currentUser.UserId);
 
-        var problems = await service.GetAllAsync(includeResolved, groupIds);
-        return Ok(problems);
+        var (items, total) = await service.GetAllAsync(includeResolved, groupIds, page, pageSize);
+        return Ok(new { items, total, page, pageSize });
     }
 
     [HttpGet("{id:long}")]

@@ -4,7 +4,7 @@ namespace ApertureITSM.Core.Interfaces;
 
 public interface IProblemRepository
 {
-    Task<IEnumerable<Problem>> GetAllAsync(bool includeResolved = false, int[]? groupIds = null);
+    Task<(IEnumerable<Problem> Items, int Total)> GetAllAsync(bool includeResolved = false, int[]? groupIds = null, int page = 1, int pageSize = 25);
     Task<Problem?> GetByIdAsync(long problemId);
     Task<long> CreateAsync(CreateProblemRequest request);
     Task UpdateAsync(long problemId, UpdateProblemRequest request);

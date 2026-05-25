@@ -14,6 +14,7 @@ public interface IIncidentService
     Task AssignAsync(long incidentId, string? assigneeExtId, int? actorUserId);
     Task SetPriorityAsync(long incidentId, string priorityCode, int? actorUserId);
     Task LinkToProblemAsync(long incidentId, long problemId, int? actorUserId);
+    Task<IEnumerable<Incident>> GetByProblemIdAsync(long problemId);
     Task CloseAsync(long incidentId, int? actorUserId);
     Task BulkCloseAsync(IEnumerable<long> incidentIds, int? actorUserId);
 }
@@ -51,6 +52,9 @@ public class IncidentService(IIncidentRepository repository) : IIncidentService
 
     public Task LinkToProblemAsync(long incidentId, long problemId, int? actorUserId)
         => repository.LinkToProblemAsync(incidentId, problemId, actorUserId);
+
+    public Task<IEnumerable<Incident>> GetByProblemIdAsync(long problemId)
+        => repository.GetByProblemIdAsync(problemId);
 
     public Task CloseAsync(long incidentId, int? actorUserId)
         => repository.UpdateStatusAsync(incidentId, "closed", actorUserId);

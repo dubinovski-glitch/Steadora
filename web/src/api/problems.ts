@@ -1,9 +1,13 @@
 import { api } from './client'
 import type { Incident, Problem } from '../types'
 
+export interface ProblemPage { items: Problem[]; total: number; page: number; pageSize: number }
+
 export const problemApi = {
-  getAll: (includeResolved = false, myGroupsOnly = false) =>
-    api.get<Problem[]>(`/problems?includeResolved=${includeResolved}&myGroupsOnly=${myGroupsOnly}`),
+  getAll: (includeResolved = false, myGroupsOnly = false, page = 1, pageSize = 25) =>
+    api.get<ProblemPage>(`/problems?includeResolved=${includeResolved}&myGroupsOnly=${myGroupsOnly}&page=${page}&pageSize=${pageSize}`),
+  getAllItems: (includeResolved = false) =>
+    api.get<ProblemPage>(`/problems?includeResolved=${includeResolved}&myGroupsOnly=false&page=1&pageSize=1000`).then(r => r.items),
   getById: (id: number) => api.get<Problem>(`/problems/${id}`),
   create: (body: object) => api.post<{ id: number }>('/problems', body),
   update: (id: number, body: object) => api.put<void>(`/problems/${id}`, body),

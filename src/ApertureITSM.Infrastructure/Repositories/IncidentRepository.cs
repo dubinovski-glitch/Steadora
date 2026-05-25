@@ -69,7 +69,16 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
             using var conn = db.Create();
             var where = BuildWhere(filter, out var p);
             var offset = (page - 1) * pageSize;
-            var sortCol = filter.SortBy switch { "OpenedAt" => "i.OpenedAt", "PriorityId" => "i.PriorityId", _ => "i.UpdatedAt" };
+            var sortCol = filter.SortBy switch
+            {
+                "OpenedAt"    => "i.OpenedAt",
+                "PriorityId"  => "i.PriorityId",
+                "Title"       => "i.Title",
+                "StatusId"    => "i.StatusId",
+                "ServiceName" => "svc.Name",
+                "AssigneeName"=> "asgn.DisplayName",
+                _             => "i.UpdatedAt"
+            };
             var dir = filter.SortDesc ? "DESC" : "ASC";
 
             sql = $"SELECT COUNT(*) FROM itil.Incident i WHERE i.DeletedAt IS NULL {where}";

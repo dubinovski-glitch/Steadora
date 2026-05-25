@@ -44,6 +44,7 @@ export interface Incident {
   openedAt: string
   resolvedAt?: string
   closedAt?: string
+  parentProblemId?: number
   parentProblemNumber?: string
   relatedChangeId?: number
   relatedKbArticleId?: number  // BIGINT — safe as JS number up to 2^53
@@ -409,6 +410,7 @@ export interface CategoryLookup {
 
 export interface CurrentUser {
   userId: number
+  externalId: string
   username: string
   email: string
   displayName: string
