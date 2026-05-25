@@ -4,6 +4,7 @@ import { dashboardApi } from '../../api/dashboard'
 import { Badge, priorityVariant, statusVariant } from '../../components/primitives/Badge'
 import { SlaBar } from '../../components/primitives/SlaBar'
 import { useAppStore } from '../../store/appStore'
+import { useAuthStore } from '../../store/authStore'
 import type { SlaStats, Incident, Service } from '../../types'
 
 function KpiCard({ label, value, sub, icon, onClick }: { label: string; value: string | number; sub?: string; icon: React.ReactNode; onClick?: () => void }) {
@@ -21,9 +22,17 @@ function KpiCard({ label, value, sub, icon, onClick }: { label: string; value: s
 
 export function DashboardView() {
   const { setView } = useAppStore()
+  const { user: authUser } = useAuthStore()
   const [stats, setStats] = useState<SlaStats | null>(null)
   const [atRisk, setAtRisk] = useState<Incident[]>([])
   const [services, setServices] = useState<Service[]>([])
+
+  const greeting = (() => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  })()
 
   useEffect(() => {
     dashboardApi.getKpis().then(setStats).catch(console.error)
@@ -32,7 +41,7 @@ export function DashboardView() {
   }, [])
 
   const healthColor = (code: string) => ({
-    healthy: 'text-[#1f8a4c] bg-[#e6f4ec]',
+    healthy:  'text-[#1f8a4c] bg-[#e6f4ec]',
     degraded: 'text-[#d97706] bg-[#fdf3e3]',
     incident: 'text-[#c8252b] bg-[#fdecec]',
   }[code] ?? 'text-text-muted bg-subtle')
@@ -43,7 +52,7 @@ export function DashboardView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">
-            Good morning, Alex 👋
+            {greeting}, {authUser?.displayName ?? 'there'} 👋
           </h1>
           <p className="text-sm text-text-secondary mt-0.5">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}

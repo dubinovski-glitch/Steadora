@@ -54,7 +54,8 @@ public class ProblemsController(
     [HttpPatch("{id:long}/state")]
     public async Task<IActionResult> SetState(long id, [FromBody] SetStateRequest request)
     {
-        await service.SetStateAsync(id, request.StateCode, request.ActorUserId);
+        int? actorId = currentUser.IsAuthenticated ? currentUser.UserId : (int?)null;
+        await service.SetStateAsync(id, request.StateCode, actorId);
         return NoContent();
     }
 

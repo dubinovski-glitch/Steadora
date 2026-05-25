@@ -114,12 +114,36 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
         }
     }
 
+    private record ProblemSnapshot(
+        string Title, string? PriorityCode, string? GroupName,
+        string? AssigneeName, bool IsKnownError, string? RootCause, string? Workaround);
+
     public async Task UpdateAsync(long problemId, UpdateProblemRequest request)
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
+
+            // Resolve actor
+            sql = "SELECT UserId FROM core.[User] WHERE ExternalId=@e";
+            var actorId = request.ActorExtId is null ? (int?)null
+                : await conn.ExecuteScalarAsync<int?>(sql, new { e = request.ActorExtId });
+
+            // Read old values for change detection
+            sql = """
+                SELECT p.Title, pr.Code AS PriorityCode, grp.Name AS GroupName,
+                       asgn.DisplayName AS AssigneeName, p.IsKnownError,
+                       p.RootCause, p.Workaround
+                FROM itil.Problem p
+                LEFT JOIN lookup.Priority pr   ON pr.PriorityId  = p.PriorityId
+                LEFT JOIN core.[Group]    grp  ON grp.GroupId    = p.GroupId
+                LEFT JOIN core.[User]     asgn ON asgn.UserId    = p.AssigneeUserId
+                WHERE p.ProblemId = @problemId
+                """;
+            var old = await conn.QueryFirstAsync<ProblemSnapshot>(sql, new { problemId });
+
+            // Resolve lookup IDs
             sql = "SELECT PriorityId FROM lookup.Priority WHERE Code=@c";
             var priorityId = await conn.ExecuteScalarAsync<byte>(sql, new { c = request.PriorityCode });
             sql = "SELECT UserId FROM core.[User] WHERE ExternalId=@e";
@@ -128,6 +152,15 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
             sql = "SELECT GroupId FROM core.[Group] WHERE Slug=@s";
             var groupId = request.GroupSlug is null ? (int?)null
                 : await conn.ExecuteScalarAsync<int?>(sql, new { s = request.GroupSlug });
+
+            // Resolve new display names
+            sql = "SELECT Name FROM core.[Group] WHERE GroupId=@groupId";
+            var newGroupName = groupId is null ? (string?)null
+                : await conn.ExecuteScalarAsync<string?>(sql, new { groupId });
+            sql = "SELECT DisplayName FROM core.[User] WHERE UserId=@assigneeId";
+            var newAssigneeName = assigneeId is null ? (string?)null
+                : await conn.ExecuteScalarAsync<string?>(sql, new { assigneeId });
+
             sql = """
                 UPDATE itil.Problem
                 SET Title=@title, RootCause=@rootCause, Workaround=@workaround,
@@ -135,12 +168,35 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
                     IsKnownError=@isKnownError, UpdatedAt=SYSUTCDATETIME()
                 WHERE ProblemId=@problemId
                 """;
-            await conn.ExecuteAsync(sql, new
-            {
+            await conn.ExecuteAsync(sql, new {
                 problemId, title = request.Title, rootCause = request.RootCause,
                 workaround = request.Workaround, priorityId, assigneeId, groupId,
                 isKnownError = request.IsKnownError
             });
+
+            // Record each field that changed
+            var changes = new List<(string Field, string? OldVal, string? NewVal)>();
+            if (old.Title != request.Title)
+                changes.Add(("Title", old.Title, request.Title));
+            if (old.PriorityCode != request.PriorityCode)
+                changes.Add(("Priority", old.PriorityCode, request.PriorityCode));
+            if (old.GroupName != newGroupName)
+                changes.Add(("Assignment Team", old.GroupName, newGroupName));
+            if (old.AssigneeName != newAssigneeName)
+                changes.Add(("Assignee", old.AssigneeName, newAssigneeName));
+            if (old.IsKnownError != request.IsKnownError)
+                changes.Add(("Known Error", old.IsKnownError ? "Yes" : "No", request.IsKnownError ? "Yes" : "No"));
+            if (old.RootCause != request.RootCause)
+                changes.Add(("Root Cause", null, null));
+            if (old.Workaround != request.Workaround)
+                changes.Add(("Workaround", null, null));
+
+            foreach (var (field, oldVal, newVal) in changes)
+            {
+                sql = "INSERT INTO audit.ActivityEvent (ParentType,ParentId,ActorUserId,Kind,Field,OldValue,NewValue) VALUES ('PRB',@problemId,@actorId,'field_changed',@field,@oldVal,@newVal)";
+                await conn.ExecuteAsync(sql, new { problemId, actorId, field, oldVal, newVal });
+            }
+
             log.Info($"Updated problem {problemId}: {request.Title}");
         }
         catch (Exception ex)
@@ -157,8 +213,19 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
         {
             using var conn = db.Create();
             var stateId = await conn.ExecuteScalarAsync<byte>(sql, new { stateCode });
+
+            sql = "SELECT st.Code FROM itil.Problem p JOIN lookup.ProblemState st ON st.StateId=p.StateId WHERE p.ProblemId=@problemId";
+            var oldCode = await conn.ExecuteScalarAsync<string?>(sql, new { problemId });
+
             sql = "UPDATE itil.Problem SET StateId=@stateId, ResolvedAt=CASE WHEN @stateCode='closed' THEN SYSUTCDATETIME() ELSE ResolvedAt END, UpdatedAt=SYSUTCDATETIME() WHERE ProblemId=@problemId";
             await conn.ExecuteAsync(sql, new { problemId, stateId, stateCode });
+
+            if (oldCode != stateCode)
+            {
+                sql = "INSERT INTO audit.ActivityEvent (ParentType,ParentId,ActorUserId,Kind,Field,OldValue,NewValue) VALUES ('PRB',@problemId,@actorUserId,'field_changed','State',@oldCode,@stateCode)";
+                await conn.ExecuteAsync(sql, new { problemId, actorUserId, oldCode, stateCode });
+            }
+
             log.Info($"Problem {problemId} state changed to {stateCode}");
         }
         catch (Exception ex)

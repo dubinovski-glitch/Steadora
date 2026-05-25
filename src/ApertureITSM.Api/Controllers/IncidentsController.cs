@@ -81,7 +81,8 @@ public class IncidentsController(
     [HttpPatch("{id:long}/status")]
     public async Task<IActionResult> SetStatus(long id, [FromBody] SetStatusRequest request)
     {
-        await service.SetStatusAsync(id, request.StatusCode, request.ActorUserId);
+        int? actorId = currentUser.IsAuthenticated ? currentUser.UserId : (int?)null;
+        await service.SetStatusAsync(id, request.StatusCode, actorId);
         return NoContent();
     }
 
@@ -107,16 +108,18 @@ public class IncidentsController(
     }
 
     [HttpDelete("{id:long}")]
-    public async Task<IActionResult> Close(long id, [FromQuery] int? actorUserId)
+    public async Task<IActionResult> Close(long id)
     {
-        await service.CloseAsync(id, actorUserId);
+        int? actorId = currentUser.IsAuthenticated ? currentUser.UserId : (int?)null;
+        await service.CloseAsync(id, actorId);
         return NoContent();
     }
 
     [HttpPost("bulk/close")]
     public async Task<IActionResult> BulkClose([FromBody] BulkCloseRequest request)
     {
-        await service.BulkCloseAsync(request.IncidentIds, request.ActorUserId);
+        int? actorId = currentUser.IsAuthenticated ? currentUser.UserId : (int?)null;
+        await service.BulkCloseAsync(request.IncidentIds, actorId);
         return NoContent();
     }
 

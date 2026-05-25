@@ -122,7 +122,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
         groupSlug: edit.groupSlug || undefined,
         assigneeExtId: edit.assigneeExtId || undefined,
         isKnownError: edit.isKnownError,
-        actorExtId: 'me',
+        actorExtId: authUser?.externalId ?? '',
       })
       if (edit.stateCode !== problem.stateCode)
         await problemApi.setState(problemId, edit.stateCode)
@@ -185,6 +185,17 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     const h = Math.floor(m / 60)
     if (h < 24) return `${h}h ago`
     return new Date(utc).toLocaleDateString()
+  }
+
+  const formatActivityTime = (iso: string) => {
+    const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
+    const d = new Date(utc)
+    const sameYear = d.getFullYear() === new Date().getFullYear()
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    const date = sameYear
+      ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    return `${date}, ${time}`
   }
 
   const currentStateIdx = STATE_STEPS.findIndex(s => s.code === edit.stateCode)
@@ -356,7 +367,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-text-primary text-xs">{item.comment.authorName ?? 'Unknown'}</span>
                         <span className="text-[9px] text-[#b45309] bg-[#fdf3e3] px-1.5 py-0.5 rounded font-medium">NOTE</span>
-                        <span className="text-xs text-text-muted ml-auto">{relative(item.comment.createdAt)}</span>
+                        <span className="text-xs text-text-muted ml-auto" title={relative(item.comment.createdAt)}>{formatActivityTime(item.comment.createdAt)}</span>
                       </div>
                       <p className="text-text-secondary whitespace-pre-wrap">{item.comment.body}</p>
                     </div>
@@ -378,7 +389,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
                           <> → <span className="font-medium">{item.event.newValue}</span></>
                         )}
                       </span>
-                      <span className="text-xs text-text-muted ml-2">{relative(item.event.occurredAt)}</span>
+                      <span className="text-xs text-text-muted ml-2" title={relative(item.event.occurredAt)}>{formatActivityTime(item.event.occurredAt)}</span>
                     </div>
                   </div>
                 )

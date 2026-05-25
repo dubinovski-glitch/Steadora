@@ -751,7 +751,7 @@ SELECT
             100.0 *
             (DATEDIFF(MINUTE, i.SlaStartedAt, COALESCE(i.ResolvedAt, SYSUTCDATETIME())) - (i.SlaPausedSeconds / 60))
             / NULLIF(i.SlaTargetMinutes, 0)
-        AS DECIMAL(5,1))
+        AS DECIMAL(10,1))
     END AS SlaPercent,
     a.DisplayName               AS AssigneeName,
     r.DisplayName               AS ReporterName,
@@ -985,15 +985,17 @@ END
 GO
 
 CREATE OR ALTER PROCEDURE itil.usp_AssignIncident
-    @IncidentId   BIGINT,
+    @IncidentId    BIGINT,
     @AssigneeExtId VARCHAR(64),
-    @ActorExtId   VARCHAR(64) = NULL
+    @ActorExtId    VARCHAR(64) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @AssigneeId INT = (SELECT UserId FROM core.[User] WHERE ExternalId = @AssigneeExtId);
-    DECLARE @ActorId    INT = (SELECT UserId FROM core.[User] WHERE ExternalId = @ActorExtId);
-    DECLARE @OldId      INT = (SELECT AssigneeUserId FROM itil.Incident WHERE IncidentId = @IncidentId);
+    DECLARE @AssigneeId      INT           = (SELECT UserId      FROM core.[User] WHERE ExternalId = @AssigneeExtId);
+    DECLARE @ActorId         INT           = (SELECT UserId      FROM core.[User] WHERE ExternalId = @ActorExtId);
+    DECLARE @OldId           INT           = (SELECT AssigneeUserId FROM itil.Incident WHERE IncidentId = @IncidentId);
+    DECLARE @OldAssigneeName NVARCHAR(256) = (SELECT DisplayName FROM core.[User] WHERE UserId = @OldId);
+    DECLARE @NewAssigneeName NVARCHAR(256) = (SELECT DisplayName FROM core.[User] WHERE UserId = @AssigneeId);
 
     BEGIN TRAN;
         UPDATE itil.Incident
@@ -1002,8 +1004,7 @@ BEGIN
         WHERE IncidentId = @IncidentId;
 
         INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, Field, OldValue, NewValue)
-        VALUES ('INC', @IncidentId, @ActorId, 'assigned', 'AssigneeUserId',
-                CAST(@OldId AS VARCHAR(20)), CAST(@AssigneeId AS VARCHAR(20)));
+        VALUES ('INC', @IncidentId, @ActorId, 'field_changed', 'Assignee', @OldAssigneeName, @NewAssigneeName);
     COMMIT;
 END
 GO
@@ -1020,14 +1021,18 @@ BEGIN
     DECLARE @StatusId TINYINT = (SELECT StatusId FROM lookup.IncidentStatus WHERE Code = @StatusCode);
     IF @StatusId IS NULL THROW 50002, 'Invalid status code', 1;
 
-    DECLARE @ActorId INT = (SELECT UserId FROM core.[User] WHERE ExternalId = @ActorExtId);
-    DECLARE @OldStatusId TINYINT, @PausesSla BIT, @PausedAt DATETIME2(3);
-    DECLARE @WasPaused BIT, @NewPausesSla BIT;
+    DECLARE @ActorId     INT          = (SELECT UserId FROM core.[User] WHERE ExternalId = @ActorExtId);
+    DECLARE @OldStatusId TINYINT;
+    DECLARE @PausedAt    DATETIME2(3);
+    DECLARE @WasPaused   BIT;
+    DECLARE @OldCode     VARCHAR(16);
+    DECLARE @NewPausesSla BIT;
 
     SELECT @OldStatusId = StatusId, @PausedAt = SlaPausedAt
       FROM itil.Incident WHERE IncidentId = @IncidentId;
 
-    SELECT @WasPaused    = PausesSla FROM lookup.IncidentStatus WHERE StatusId = @OldStatusId;
+    SELECT @WasPaused = PausesSla, @OldCode = Code
+      FROM lookup.IncidentStatus WHERE StatusId = @OldStatusId;
     SELECT @NewPausesSla = PausesSla FROM lookup.IncidentStatus WHERE StatusId = @StatusId;
 
     DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
@@ -1053,8 +1058,7 @@ BEGIN
         WHERE IncidentId = @IncidentId;
 
         INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, Field, OldValue, NewValue, OccurredAt)
-        VALUES ('INC', @IncidentId, @ActorId, 'status_changed', 'StatusId',
-                CAST(@OldStatusId AS VARCHAR(8)), CAST(@StatusId AS VARCHAR(8)), @Now);
+        VALUES ('INC', @IncidentId, @ActorId, 'field_changed', 'Status', @OldCode, @StatusCode, @Now);
     COMMIT;
 END
 GO
@@ -1085,63 +1089,112 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    DECLARE @CallerUserId     INT     = (SELECT UserId          FROM core.[User]             WHERE ExternalId    = @CallerExtId);
-    DECLARE @ContactMethodId  TINYINT = (SELECT ContactMethodId FROM lookup.ContactMethod    WHERE Code          = @ContactMethodCode);
-    DECLARE @ServiceId        INT     = (SELECT ServiceId       FROM core.Service            WHERE Slug          = @ServiceSlug);
-    DECLARE @CategoryId       INT     = (SELECT CategoryId      FROM lookup.Category         WHERE Code          = @CategoryCode);
-    DECLARE @SubCategoryId    INT     = (SELECT SubCategoryId   FROM lookup.SubCategory      WHERE Code          = @SubCategoryCode);
-    DECLARE @CiId             INT     = (SELECT CiId            FROM core.ConfigurationItem  WHERE AssetTag      = @CiAssetTag);
-    DECLARE @PriorityId       TINYINT = (SELECT PriorityId      FROM lookup.Priority         WHERE Code          = @PriorityCode);
-    DECLARE @ImpactId         TINYINT = (SELECT ImpactId        FROM lookup.Impact           WHERE Code          = @ImpactCode);
-    DECLARE @UrgencyId        TINYINT = (SELECT UrgencyId       FROM lookup.Urgency          WHERE Code          = @UrgencyCode);
-    DECLARE @SeverityId       TINYINT = (SELECT SeverityId      FROM lookup.Severity         WHERE Code          = @SeverityCode);
-    DECLARE @GroupId          INT     = (SELECT GroupId         FROM core.[Group]            WHERE Slug          = @GroupSlug);
-    DECLARE @AssigneeUserId   INT     = (SELECT UserId          FROM core.[User]             WHERE ExternalId    = @AssigneeExtId);
-    DECLARE @ResolutionCodeId TINYINT = (SELECT ResolutionCodeId FROM lookup.ResolutionCode  WHERE Code          = @ResolutionCodeCode);
-    DECLARE @ActorUserId      INT     = (SELECT UserId          FROM core.[User]             WHERE ExternalId    = @ActorExtId);
+    DECLARE @CallerUserId     INT     = (SELECT UserId           FROM core.[User]            WHERE ExternalId   = @CallerExtId);
+    DECLARE @ContactMethodId  TINYINT = (SELECT ContactMethodId  FROM lookup.ContactMethod   WHERE Code         = @ContactMethodCode);
+    DECLARE @ServiceId        INT     = (SELECT ServiceId        FROM core.Service           WHERE Slug         = @ServiceSlug);
+    DECLARE @CategoryId       INT     = (SELECT CategoryId       FROM lookup.Category        WHERE Code         = @CategoryCode);
+    DECLARE @SubCategoryId    INT     = (SELECT SubCategoryId    FROM lookup.SubCategory     WHERE Code         = @SubCategoryCode);
+    DECLARE @CiId             INT     = (SELECT CiId             FROM core.ConfigurationItem WHERE AssetTag     = @CiAssetTag);
+    DECLARE @PriorityId       TINYINT = (SELECT PriorityId       FROM lookup.Priority        WHERE Code         = @PriorityCode);
+    DECLARE @ImpactId         TINYINT = (SELECT ImpactId         FROM lookup.Impact          WHERE Code         = @ImpactCode);
+    DECLARE @UrgencyId        TINYINT = (SELECT UrgencyId        FROM lookup.Urgency         WHERE Code         = @UrgencyCode);
+    DECLARE @SeverityId       TINYINT = (SELECT SeverityId       FROM lookup.Severity        WHERE Code         = @SeverityCode);
+    DECLARE @GroupId          INT     = (SELECT GroupId          FROM core.[Group]           WHERE Slug         = @GroupSlug);
+    DECLARE @AssigneeUserId   INT     = (SELECT UserId           FROM core.[User]            WHERE ExternalId   = @AssigneeExtId);
+    DECLARE @ResolutionCodeId TINYINT = (SELECT ResolutionCodeId FROM lookup.ResolutionCode  WHERE Code         = @ResolutionCodeCode);
+    DECLARE @ActorUserId      INT     = (SELECT UserId           FROM core.[User]            WHERE ExternalId   = @ActorExtId);
 
-    -- Capture status before the update for auto-transition check
-    DECLARE @PrevStatusCode VARCHAR(16);
-    SELECT @PrevStatusCode = s.Code
+    -- Capture old field values before the update
+    DECLARE @PrevStatusCode  VARCHAR(16);
+    DECLARE @OldTitle        NVARCHAR(256);
+    DECLARE @OldPriorityCode VARCHAR(16);
+    DECLARE @OldSeverityCode VARCHAR(32);
+    DECLARE @OldGroupName    NVARCHAR(128);
+    DECLARE @OldAssigneeName NVARCHAR(256);
+    DECLARE @OldServiceName  NVARCHAR(128);
+    DECLARE @OldCategoryName NVARCHAR(128);
+    DECLARE @OldIsMajor      BIT;
+
+    SELECT
+        @PrevStatusCode  = st.Code,
+        @OldTitle        = i.Title,
+        @OldPriorityCode = pr.Code,
+        @OldSeverityCode = sev.Code,
+        @OldGroupName    = grp.Name,
+        @OldAssigneeName = asgn.DisplayName,
+        @OldServiceName  = svc.Name,
+        @OldCategoryName = cat.DisplayName,
+        @OldIsMajor      = i.IsMajorIncident
     FROM itil.Incident i
-    JOIN lookup.IncidentStatus s ON s.StatusId = i.StatusId
+    LEFT JOIN lookup.IncidentStatus st   ON st.StatusId    = i.StatusId
+    LEFT JOIN lookup.Priority       pr   ON pr.PriorityId  = i.PriorityId
+    LEFT JOIN lookup.Severity       sev  ON sev.SeverityId = i.SeverityId
+    LEFT JOIN core.[Group]          grp  ON grp.GroupId    = i.GroupId
+    LEFT JOIN core.[User]           asgn ON asgn.UserId    = i.AssigneeUserId
+    LEFT JOIN core.Service          svc  ON svc.ServiceId  = i.ServiceId
+    LEFT JOIN lookup.Category       cat  ON cat.CategoryId = i.CategoryId
     WHERE i.IncidentId = @IncidentId;
 
     DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
 
-    UPDATE itil.Incident SET
-        Title             = @Title,
-        Description       = NULLIF(@Description,     ''),
-        CallerUserId      = @CallerUserId,
-        ContactMethodId   = @ContactMethodId,
-        Location          = NULLIF(@Location,        ''),
-        ServiceId         = @ServiceId,
-        CategoryId        = @CategoryId,
-        SubCategoryId     = @SubCategoryId,
-        CiId              = @CiId,
-        PriorityId        = ISNULL(@PriorityId,      PriorityId),
-        ImpactId          = @ImpactId,
-        UrgencyId         = @UrgencyId,
-        SeverityId        = @SeverityId,
-        IsMajorIncident   = @IsMajorIncident,
-        GroupId           = @GroupId,
-        AssigneeUserId    = @AssigneeUserId,
-        ResolutionCodeId  = @ResolutionCodeId,
-        ResolutionNotes   = NULLIF(@ResolutionNotes, ''),
-        UpdatedAt         = @Now
-    WHERE IncidentId = @IncidentId;
+    -- Resolve new display names for comparison
+    DECLARE @NewGroupName    NVARCHAR(128) = (SELECT Name        FROM core.[Group]    WHERE GroupId    = @GroupId);
+    DECLARE @NewAssigneeName NVARCHAR(256) = (SELECT DisplayName FROM core.[User]     WHERE UserId     = @AssigneeUserId);
+    DECLARE @NewServiceName  NVARCHAR(128) = (SELECT Name        FROM core.Service    WHERE ServiceId  = @ServiceId);
+    DECLARE @NewCategoryName NVARCHAR(128) = (SELECT DisplayName FROM lookup.Category WHERE CategoryId = @CategoryId);
 
-    INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, OccurredAt)
-    VALUES ('INC', @IncidentId, @ActorUserId, 'updated', @Now);
+    BEGIN TRAN;
+        UPDATE itil.Incident SET
+            Title             = @Title,
+            Description       = NULLIF(@Description,     ''),
+            CallerUserId      = @CallerUserId,
+            ContactMethodId   = @ContactMethodId,
+            Location          = NULLIF(@Location,        ''),
+            ServiceId         = @ServiceId,
+            CategoryId        = @CategoryId,
+            SubCategoryId     = @SubCategoryId,
+            CiId              = @CiId,
+            PriorityId        = ISNULL(@PriorityId,      PriorityId),
+            ImpactId          = @ImpactId,
+            UrgencyId         = @UrgencyId,
+            SeverityId        = @SeverityId,
+            IsMajorIncident   = @IsMajorIncident,
+            GroupId           = @GroupId,
+            AssigneeUserId    = @AssigneeUserId,
+            ResolutionCodeId  = @ResolutionCodeId,
+            ResolutionNotes   = NULLIF(@ResolutionNotes, ''),
+            UpdatedAt         = @Now
+        WHERE IncidentId = @IncidentId;
 
-    -- Auto-transition: 'new' → 'open' when an assignee is first set
-    IF @AssigneeUserId IS NOT NULL AND @PrevStatusCode = 'new'
-    BEGIN
-        DECLARE @OpenStatusId TINYINT = (SELECT StatusId FROM lookup.IncidentStatus WHERE Code = 'open');
-        UPDATE itil.Incident SET StatusId = @OpenStatusId WHERE IncidentId = @IncidentId;
+        -- Insert one row per field that actually changed
         INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, Field, OldValue, NewValue, OccurredAt)
-        VALUES ('INC', @IncidentId, @ActorUserId, 'status_changed', 'status', 'new', 'open', @Now);
-    END
+        SELECT 'INC', @IncidentId, @ActorUserId, 'field_changed', v.Field, v.OldVal, v.NewVal, @Now
+        FROM (VALUES
+            ('Title',           @OldTitle,        @Title),
+            ('Priority',        @OldPriorityCode, @PriorityCode),
+            ('Severity',        @OldSeverityCode, @SeverityCode),
+            ('Assignment Team', @OldGroupName,    @NewGroupName),
+            ('Assignee',        @OldAssigneeName, @NewAssigneeName),
+            ('Service',         @OldServiceName,  @NewServiceName),
+            ('Category',        @OldCategoryName, @NewCategoryName)
+        ) AS v(Field, OldVal, NewVal)
+        WHERE ISNULL(v.OldVal, '') <> ISNULL(v.NewVal, '');
+
+        IF @OldIsMajor <> @IsMajorIncident
+            INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, Field, OldValue, NewValue, OccurredAt)
+            VALUES ('INC', @IncidentId, @ActorUserId, 'field_changed', 'Major Incident',
+                    CASE @OldIsMajor      WHEN 1 THEN 'Yes' ELSE 'No' END,
+                    CASE @IsMajorIncident WHEN 1 THEN 'Yes' ELSE 'No' END, @Now);
+
+        -- Auto-transition: 'new' → 'open' when an assignee is first set
+        IF @AssigneeUserId IS NOT NULL AND @PrevStatusCode = 'new'
+        BEGIN
+            DECLARE @OpenStatusId TINYINT = (SELECT StatusId FROM lookup.IncidentStatus WHERE Code = 'open');
+            UPDATE itil.Incident SET StatusId = @OpenStatusId WHERE IncidentId = @IncidentId;
+            INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, Field, OldValue, NewValue, OccurredAt)
+            VALUES ('INC', @IncidentId, @ActorUserId, 'field_changed', 'Status', 'new', 'open', @Now);
+        END
+    COMMIT;
 END
 GO
 
