@@ -127,7 +127,7 @@ export function SlaPoliciesTab({ addToast }: Props) {
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-medium text-sm text-text-primary">{tier.name}</span>
-                <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${tier.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-subtle text-text-muted'}`}>
+                <span className={`text-[17px] px-1.5 py-0.5 rounded-full font-medium ${tier.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-subtle text-text-muted'}`}>
                   {tier.isActive ? 'Active' : 'Inactive'}
                 </span>
               </div>

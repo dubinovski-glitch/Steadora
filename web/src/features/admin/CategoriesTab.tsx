@@ -73,7 +73,7 @@ export function CategoriesTab({ addToast }: Props) {
           {assignedGroups.map(({ service, cats }) => (
             <div key={service.serviceId} className="bg-surface rounded-lg border border-border-default shadow-sm overflow-hidden">
               <div className="flex items-center gap-3 px-4 py-3 bg-subtle border-b border-border-default">
-                <span className="w-6 h-6 rounded-full bg-accent-subtle text-accent-text text-[11px] font-semibold flex items-center justify-center shrink-0">
+                <span className="w-6 h-6 rounded-full bg-accent-subtle text-accent-text text-[17px] font-semibold flex items-center justify-center shrink-0">
                   {service.name.slice(0, 2).toUpperCase()}
                 </span>
                 <h3 className="text-sm font-semibold text-text-primary">{service.name}</h3>

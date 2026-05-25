@@ -86,7 +86,7 @@
 
 body {
   font-family: "Inter Tight", system-ui, sans-serif;
-  font-size: 14px;
+  font-size: 21px;
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--bg-canvas);
@@ -175,17 +175,17 @@ body {
 .bulk-enter { animation: bulk-up 180ms ease-out forwards; }
 
 /* ── Zebra striping ───────────────────────────────────────────── */
-.zebra-table { font-size: 13px; }
+.zebra-table { font-size: 20px; }
 .zebra-table tbody tr:nth-child(even) { background-color: var(--bg-subtle); }
 .zebra-table tbody tr:nth-child(even):hover { background-color: var(--bg-hover); }
 .zebra-table tbody tr.row-selected,
 .zebra-table tbody tr.row-selected:hover { background-color: var(--accent-subtle); }
 
-.zebra-list { font-size: 13px; }
+.zebra-list { font-size: 20px; }
 .zebra-list > *:nth-child(even) { background-color: var(--bg-subtle); }
 .zebra-list > *:nth-child(even):hover { background-color: var(--bg-hover); }
 
-.list-font { font-size: 13px; }
+.list-font { font-size: 20px; }
 
 /* ── Scrollbar ────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

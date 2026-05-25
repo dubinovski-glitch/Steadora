@@ -46,7 +46,7 @@ export function Topbar({ unreadCount = 0, onMarkAllRead }: Props) {
         >
           <Bell size={16} />
           {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 min-w-[14px] h-[14px] flex items-center justify-center text-[9px] font-bold rounded-full bg-[#dc2626] text-white px-0.5">
+            <span className="absolute top-1 right-1 min-w-[14px] h-[14px] flex items-center justify-center text-[14px] font-bold rounded-full bg-[#dc2626] text-white px-0.5">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}

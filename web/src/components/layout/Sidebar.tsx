@@ -133,7 +133,7 @@ export function Sidebar({ counts }: Props) {
           <div key={group.title}>
             {collapsed
               ? gi > 0 && <div className="h-px mx-1 mb-2" style={{ background: 'var(--sb-border)' }} />
-              : <div className="text-[11px] font-semibold uppercase tracking-wider px-3 mb-1 whitespace-nowrap" style={{ color: 'var(--sb-text-label)' }}>
+              : <div className="text-[17px] font-semibold uppercase tracking-wider px-3 mb-1 whitespace-nowrap" style={{ color: 'var(--sb-text-label)' }}>
                   {group.title}
                 </div>
             }

@@ -155,7 +155,7 @@ export function NewProblemForm({ addToast }: Props) {
                   onChange={sf('rootCause')}
                   rows={7}
                   placeholder="Describe the root cause of the problem…"
-                  className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[15px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus resize-none leading-relaxed"
+                  className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[23px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus resize-none leading-relaxed"
                 />
               </div>
               <div>
@@ -165,7 +165,7 @@ export function NewProblemForm({ addToast }: Props) {
                   onChange={sf('workaround')}
                   rows={5}
                   placeholder="Describe any available workaround…"
-                  className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[15px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus resize-none leading-relaxed"
+                  className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[23px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus resize-none leading-relaxed"
                 />
               </div>
             </>

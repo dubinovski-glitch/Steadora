@@ -77,10 +77,10 @@ export function WorkflowTab({ addToast: _addToast }: Props) {
                   <span className="text-sm font-semibold">{status.displayName}</span>
                   <div className="flex gap-1">
                     {status.isTerminal && (
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 font-medium">terminal</span>
+                      <span className="text-[14px] px-1 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 font-medium">terminal</span>
                     )}
                     {status.pausesSla && (
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-medium">pauses SLA</span>
+                      <span className="text-[14px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-medium">pauses SLA</span>
                     )}
                   </div>
                 </div>

@@ -20,8 +20,8 @@ export default {
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       fontSize: {
-        xs: ['11px', '16px'], sm: ['12px', '18px'], md: ['13px', '20px'], base: ['14px', '20px'],
-        lg: ['16px', '24px'], xl: ['20px', '28px'], '2xl': ['24px', '32px'], '3xl': ['32px', '40px'],
+        xs: ['17px', '24px'], sm: ['18px', '27px'], md: ['20px', '30px'], base: ['21px', '30px'],
+        lg: ['24px', '36px'], xl: ['30px', '42px'], '2xl': ['36px', '48px'], '3xl': ['48px', '60px'],
       },
       boxShadow: {
         sm: '0 1px 2px rgba(15,23,42,0.04)',

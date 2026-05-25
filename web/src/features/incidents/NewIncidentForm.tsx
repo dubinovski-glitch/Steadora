@@ -253,7 +253,7 @@ export function NewIncidentForm({ addToast }: Props) {
                 onChange={sf('description')}
                 rows={14}
                 placeholder="Steps to reproduce, impact, additional context, what the user already tried…"
-                className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[15px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus resize-none leading-relaxed"
+                className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[23px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus resize-none leading-relaxed"
               />
             </div>
           )}

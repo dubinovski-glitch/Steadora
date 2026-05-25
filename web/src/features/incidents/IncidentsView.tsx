@@ -350,12 +350,12 @@ export function IncidentsView({ addToast }: Props) {
             {showColPicker && (
               <div className="absolute right-0 top-full mt-1 z-30 bg-surface border border-border-default rounded-lg shadow-lg w-56 py-2 max-h-[480px] overflow-y-auto">
                 <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-border-default">
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-text-muted">Columns</span>
-                  <button onClick={() => setVisibleOrder([...DEFAULT_VISIBLE])} className="text-[11px] text-accent hover:underline">Reset</button>
+                  <span className="text-[17px] font-bold uppercase tracking-widest text-text-muted">Columns</span>
+                  <button onClick={() => setVisibleOrder([...DEFAULT_VISIBLE])} className="text-[17px] text-accent hover:underline">Reset</button>
                 </div>
                 {visibleOrder.length > 0 && (
                   <>
-                    <p className="px-3 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Shown</p>
+                    <p className="px-3 pt-1 pb-1 text-[17px] font-semibold uppercase tracking-wider text-text-muted">Shown</p>
                     {visibleOrder.map((key, idx) => {
                       const col = COL_MAP[key]
                       if (!col) return null
@@ -374,7 +374,7 @@ export function IncidentsView({ addToast }: Props) {
                 )}
                 {hiddenCols.length > 0 && (
                   <>
-                    <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-t border-border-default mt-2">Hidden</p>
+                    <p className="px-3 pt-3 pb-1 text-[17px] font-semibold uppercase tracking-wider text-text-muted border-t border-border-default mt-2">Hidden</p>
                     {hiddenCols.map(col => (
                       <div key={col.key} className="flex items-center gap-1 px-2 py-1 hover:bg-hover">
                         <input type="checkbox" checked={false} onChange={() => showCol(col.key)} className="w-3.5 h-3.5 accent-accent shrink-0" />

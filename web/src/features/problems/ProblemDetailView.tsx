@@ -373,7 +373,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
               disabled={dis}
               rows={6}
               placeholder="Describe the root cause of the problem…"
-              className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[15px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus disabled:opacity-60 disabled:cursor-not-allowed resize-none leading-relaxed"
+              className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[23px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus disabled:opacity-60 disabled:cursor-not-allowed resize-none leading-relaxed"
             />
           </div>
 
@@ -386,7 +386,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
               disabled={dis}
               rows={4}
               placeholder="Describe any available workaround…"
-              className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[15px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus disabled:opacity-60 disabled:cursor-not-allowed resize-none leading-relaxed"
+              className="w-full px-3 py-2.5 border border-border-default rounded-lg text-[23px] text-text-primary bg-transparent focus:outline-none focus:border-border-focus disabled:opacity-60 disabled:cursor-not-allowed resize-none leading-relaxed"
             />
           </div>
 
@@ -513,7 +513,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
                     <div className="flex-1 rounded-lg p-3 text-sm bg-[#fdf8e6] border border-[#f3d9a4]">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-text-primary text-xs">{item.comment.authorName ?? 'Unknown'}</span>
-                        <span className="text-[9px] text-[#b45309] bg-[#fdf3e3] px-1.5 py-0.5 rounded font-medium">NOTE</span>
+                        <span className="text-[14px] text-[#b45309] bg-[#fdf3e3] px-1.5 py-0.5 rounded font-medium">NOTE</span>
                         <span className="text-xs text-text-muted ml-auto" title={relative(item.comment.createdAt)}>{formatActivityTime(item.comment.createdAt)}</span>
                       </div>
                       <p className="text-text-secondary whitespace-pre-wrap">{item.comment.body}</p>
@@ -522,7 +522,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
                 ) : (
                   <div key={`e-${item.event.activityId ?? idx}`} className="flex gap-3 items-start">
                     <div className="w-6 h-6 rounded-full bg-subtle border border-border-default flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[9px] text-text-muted">⚡</span>
+                      <span className="text-[14px] text-text-muted">⚡</span>
                     </div>
                     <div className="flex-1 pt-0.5">
                       <span className="text-xs text-text-secondary">
