@@ -152,7 +152,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
   const activityItems = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [
       ...comments.map(c => ({ type: 'comment' as const, at: c.createdAt, comment: c })),
-      ...timeline.map(e => ({ type: 'event' as const, at: e.occurredAt, event: e })),
+      ...timeline.filter(e => e.kind !== 'commented').map(e => ({ type: 'event' as const, at: e.occurredAt, event: e })),
     ]
     return items.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
   }, [comments, timeline])

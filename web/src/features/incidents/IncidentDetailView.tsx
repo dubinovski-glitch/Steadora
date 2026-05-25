@@ -203,10 +203,20 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
   const activityItems = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [
       ...comments.map(c => ({ type: 'comment' as const, at: c.createdAt, comment: c })),
-      ...timeline.map(e => ({ type: 'event' as const, at: e.occurredAt, event: e })),
+      ...timeline.filter(e => e.kind !== 'commented').map(e => ({ type: 'event' as const, at: e.occurredAt, event: e })),
     ]
     return items.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
   }, [comments, timeline])
+
+  const changeLog = useMemo(() =>
+    [...timeline]
+      .filter(e => e.kind === 'field_changed' && e.field)
+      .sort((a, b) => {
+        const ta = a.occurredAt.endsWith('Z') ? a.occurredAt : a.occurredAt + 'Z'
+        const tb = b.occurredAt.endsWith('Z') ? b.occurredAt : b.occurredAt + 'Z'
+        return new Date(tb).getTime() - new Date(ta).getTime()
+      }),
+  [timeline])
 
   if (!incident || !edit) return <div className="flex items-center justify-center h-64 text-text-muted">Loading…</div>
 
@@ -359,6 +369,56 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
               </div>
             </div>
           </div>}
+
+          {/* Change Log */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="text-sm font-semibold text-text-primary">Change Log</h3>
+              <span className="text-xs text-text-muted">{changeLog.length} changes</span>
+            </div>
+            {changeLog.length === 0 ? (
+              <p className="text-sm text-text-muted">No field changes recorded yet.</p>
+            ) : (
+              <div className="rounded-lg border border-border-default overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-subtle border-b border-border-default">
+                      <th className="text-left px-3 py-2 font-medium text-text-muted">When</th>
+                      <th className="text-left px-3 py-2 font-medium text-text-muted">Who</th>
+                      <th className="text-left px-3 py-2 font-medium text-text-muted">Field</th>
+                      <th className="text-left px-3 py-2 font-medium text-text-muted">Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {changeLog.map((e, idx) => (
+                      <tr key={e.activityId ?? idx} className={`border-b border-border-default last:border-0 ${idx % 2 !== 0 ? 'bg-subtle/40' : ''}`}>
+                        <td className="px-3 py-2 text-text-muted whitespace-nowrap" title={relative(e.occurredAt)}>
+                          {formatActivityTime(e.occurredAt)}
+                        </td>
+                        <td className="px-3 py-2 font-medium text-text-secondary whitespace-nowrap">
+                          {e.actorName ?? 'System'}
+                        </td>
+                        <td className="px-3 py-2 font-medium text-text-primary whitespace-nowrap">
+                          {e.field}
+                        </td>
+                        <td className="px-3 py-2 text-text-secondary">
+                          {e.oldValue && e.newValue ? (
+                            <><span className="line-through text-text-muted mr-1">{e.oldValue}</span>→ <span className="font-medium text-text-primary ml-1">{e.newValue}</span></>
+                          ) : e.newValue ? (
+                            <span className="font-medium text-text-primary">→ {e.newValue}</span>
+                          ) : e.oldValue ? (
+                            <><span className="line-through text-text-muted">{e.oldValue}</span> → <span className="italic text-text-muted">cleared</span></>
+                          ) : (
+                            <span className="italic text-text-muted">updated</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           {/* Activity */}
           <div>
