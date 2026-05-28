@@ -686,7 +686,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
             var calendars = (await conn.QueryAsync<BusinessCalendar>(sql)).ToList();
 
             sql = """
-                SELECT DayId, CalendarId, DayOfWeek,
+                SELECT DayId, CalendarId, CAST(DayOfWeek AS INT) AS DayOfWeek,
                        CONVERT(VARCHAR(5), StartTime, 108) AS StartTime,
                        CONVERT(VARCHAR(5), EndTime,   108) AS EndTime
                 FROM admin.BusinessDay
