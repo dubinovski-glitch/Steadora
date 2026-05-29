@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { RefreshCw, Plus, Trash2, Download, Columns3, ChevronUp, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react'
+import { RefreshCw, Plus, Trash2, Download, Columns3, ChevronUp, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, X, Inbox, Flame } from 'lucide-react'
 import { incidentApi } from '../../api/incidents'
 import { lookupsApi } from '../../api/lookups'
 import { api } from '../../api/client'
@@ -13,6 +13,23 @@ import type { Incident, Priority, Group } from '../../types'
 
 const PAGE_SIZE = 25
 const COL_STORAGE_KEY = 'inc-columns'
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60_000)
+  if (m < 1)  return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `${d}d ago`
+  return new Date(iso).toLocaleDateString()
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  new: 'New', progress: 'In Progress', pending: 'Pending',
+  resolved: 'Resolved', closed: 'Closed',
+}
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
@@ -41,29 +58,42 @@ interface ColDef {
 
 const ALL_COLUMNS: ColDef[] = [
   {
-    key: 'priority', label: 'Priority', thClass: 'w-28', sortKey: 'PriorityId',
+    key: 'priority', label: 'Priority', thClass: 'w-24', sortKey: 'PriorityId',
     renderCell: inc => (
       <Badge variant={priorityVariant(inc.priorityCode)}>
-        {inc.priorityId}-{inc.priorityCode.charAt(0).toUpperCase() + inc.priorityCode.slice(1)}
+        {inc.priorityCode.charAt(0).toUpperCase() + inc.priorityCode.slice(1)}
       </Badge>
     ),
   },
   {
     key: 'title', label: 'Title', thClass: '', sortKey: 'Title',
-    renderCell: inc => <span className="text-text-primary font-medium">{inc.title}</span>,
+    renderCell: inc => (
+      <div className="flex items-center gap-1.5 min-w-0">
+        {inc.isMajorIncident && (
+          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-[#fdecec] text-[#c8252b] border border-[#f5c2c4] shrink-0">
+            <Flame size={10} /> MI
+          </span>
+        )}
+        <span className="text-text-primary font-medium truncate">{inc.title}</span>
+      </div>
+    ),
   },
   {
     key: 'status', label: 'Status', thClass: 'w-28', sortKey: 'StatusId',
-    renderCell: inc => <Badge variant={statusVariant(inc.statusCode)}>{inc.statusCode}</Badge>,
+    renderCell: inc => (
+      <Badge variant={statusVariant(inc.statusCode)}>
+        {STATUS_LABEL[inc.statusCode] ?? inc.statusCode}
+      </Badge>
+    ),
   },
   {
-    key: 'assignee', label: 'Assignee', thClass: 'w-32',
+    key: 'assignee', label: 'Assignee', thClass: 'w-36',
     renderCell: inc => inc.assigneeName ? (
       <div className="flex items-center gap-1.5">
         <Avatar initials={inc.assigneeInitials} color={inc.assigneeColor} size="sm" />
         <span className="text-text-secondary truncate">{inc.assigneeName.split(' ')[0]}</span>
       </div>
-    ) : <span className="text-text-muted">—</span>,
+    ) : <span className="text-xs text-text-muted italic">Unassigned</span>,
   },
   {
     key: 'service', label: 'Service', thClass: 'w-28', sortKey: 'ServiceName',
@@ -77,8 +107,12 @@ const ALL_COLUMNS: ColDef[] = [
     ),
   },
   {
-    key: 'updated', label: 'Updated', thClass: 'w-28', sortKey: 'UpdatedAt',
-    renderCell: inc => <span className="text-text-tertiary tabular">{new Date(inc.updatedAt).toLocaleDateString()}</span>,
+    key: 'updated', label: 'Updated', thClass: 'w-24', sortKey: 'UpdatedAt',
+    renderCell: inc => (
+      <span className="text-text-tertiary tabular" title={new Date(inc.updatedAt).toLocaleString()}>
+        {relativeTime(inc.updatedAt)}
+      </span>
+    ),
   },
   {
     key: 'severity', label: 'Severity', thClass: 'w-24',
@@ -105,8 +139,12 @@ const ALL_COLUMNS: ColDef[] = [
     renderCell: inc => <span className="text-text-secondary">{inc.contactMethodCode ?? '—'}</span>,
   },
   {
-    key: 'openedAt', label: 'Opened', thClass: 'w-28', sortKey: 'OpenedAt',
-    renderCell: inc => <span className="text-text-tertiary tabular">{new Date(inc.openedAt).toLocaleDateString()}</span>,
+    key: 'openedAt', label: 'Opened', thClass: 'w-24', sortKey: 'OpenedAt',
+    renderCell: inc => (
+      <span className="text-text-tertiary tabular" title={new Date(inc.openedAt).toLocaleString()}>
+        {relativeTime(inc.openedAt)}
+      </span>
+    ),
   },
   {
     key: 'comments', label: 'Comments', thClass: 'w-20',
@@ -115,7 +153,7 @@ const ALL_COLUMNS: ColDef[] = [
   {
     key: 'majorIncident', label: 'Major', thClass: 'w-16',
     renderCell: inc => inc.isMajorIncident
-      ? <span className="text-xs font-medium text-red-600">Yes</span>
+      ? <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-[#c8252b]"><Flame size={12} /> Yes</span>
       : <span className="text-text-muted">—</span>,
   },
 ]
@@ -472,7 +510,7 @@ export function IncidentsView({ addToast }: Props) {
                   onChange={e => setSelected(e.target.checked ? new Set(incidents.map(i => i.incidentId)) : new Set())}
                 />
               </th>
-              <th className="px-3 py-2 text-left font-medium text-text-tertiary text-xs w-36">ID</th>
+              <th className="px-3 py-2 text-left font-medium text-text-tertiary text-xs w-32">Number</th>
               {activeCols.map(col => (
                 <th
                   key={col.key}
@@ -495,9 +533,23 @@ export function IncidentsView({ addToast }: Props) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={totalCols} className="px-3 py-8 text-center text-text-muted">Loading…</td></tr>
+              <tr>
+                <td colSpan={totalCols} className="px-3 py-12 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <RefreshCw size={20} className="animate-spin text-text-muted" />
+                    <span className="text-text-muted text-sm">Loading incidents…</span>
+                  </div>
+                </td>
+              </tr>
             ) : incidents.length === 0 ? (
-              <tr><td colSpan={totalCols} className="px-3 py-8 text-center text-text-muted">No incidents found</td></tr>
+              <tr>
+                <td colSpan={totalCols} className="px-3 py-12 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <Inbox size={24} className="text-text-muted" />
+                    <span className="text-text-muted text-sm">No incidents found</span>
+                  </div>
+                </td>
+              </tr>
             ) : incidents.map(inc => (
               <tr
                 key={inc.incidentId}
@@ -507,7 +559,9 @@ export function IncidentsView({ addToast }: Props) {
                 <td className="px-3" onClick={e => e.stopPropagation()}>
                   <input type="checkbox" className="rounded" checked={selected.has(inc.incidentId)} onChange={() => toggleSelect(inc.incidentId)} />
                 </td>
-                <td className="px-3 text-text-primary font-mono text-sm whitespace-nowrap">{inc.number}</td>
+                <td className="px-3 whitespace-nowrap">
+                  <span className="font-mono text-sm text-text-tertiary bg-subtle px-1.5 py-0.5 rounded">#{inc.number}</span>
+                </td>
                 {activeCols.map(col => (
                   <td key={col.key} className="px-3">{col.renderCell(inc)}</td>
                 ))}
