@@ -162,7 +162,6 @@ export function ServicesTab({ addToast }: Props) {
                                     {expandedCats.has(cat.categoryId) ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                   </button>
                                   <span className="flex-1 font-medium text-text-primary">{cat.displayName}</span>
-                                  <code className="text-text-muted bg-subtle px-1.5 py-0.5 rounded text-xs">{cat.code}</code>
                                   <span className="text-text-muted text-xs">{cat.subCategories.length} sub</span>
                                   {cat.ticketCount > 0 && <span className="text-text-muted text-xs">{cat.ticketCount} tickets</span>}
                                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -176,7 +175,6 @@ export function ServicesTab({ addToast }: Props) {
                                 {expandedCats.has(cat.categoryId) && cat.subCategories.map(sub => (
                                   <div key={sub.subCategoryId} className="flex items-center gap-2 pl-20 pr-4 py-2 bg-subtle hover:bg-hover transition-colors group border-t border-border-default">
                                     <span className="flex-1 text-text-secondary">{sub.displayName}</span>
-                                    <code className="text-text-muted bg-surface px-1.5 py-0.5 rounded border border-border-default text-xs">{sub.code}</code>
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button onClick={() => setSubModal({ sub, defaultCategoryId: cat.categoryId })} className="p-1.5 rounded hover:bg-hover text-text-muted hover:text-text-primary transition-colors"><Pencil size={13} /></button>
                                       <button onClick={() => handleDeleteSubCategory(sub)} disabled={deletingSub === sub.subCategoryId} className="p-1.5 rounded hover:bg-hover text-text-muted hover:text-[#c8252b] transition-colors disabled:opacity-50"><Trash2 size={13} /></button>
@@ -286,14 +284,14 @@ function ServiceModal({ svc, groups, slaTiers, onClose, onSaved }: ServiceModalP
 // CategoryModal — with Service dropdown
 interface CategoryModalProps { cat?: AdminCategory; defaultServiceId?: number; services: AdminService[]; onClose: () => void; onSaved: (msg: string) => void }
 function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: CategoryModalProps) {
-  const [form, setForm] = useState({ serviceId: String(cat?.serviceId ?? defaultServiceId ?? ''), code: cat?.code ?? '', displayName: cat?.displayName ?? '' })
+  const [form, setForm] = useState({ serviceId: String(cat?.serviceId ?? defaultServiceId ?? ''), displayName: cat?.displayName ?? '' })
   const [saving, setSaving] = useState(false)
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
   const submit = async () => {
-    if (!form.code.trim() || !form.displayName.trim()) return
+    if (!form.displayName.trim()) return
     setSaving(true)
     try {
-      const body = { code: form.code, displayName: form.displayName, serviceId: form.serviceId ? Number(form.serviceId) : undefined }
+      const body = { displayName: form.displayName, serviceId: form.serviceId ? Number(form.serviceId) : undefined }
       if (cat) { await adminApi.updateCategory(cat.categoryId, body); onSaved(`Updated category "${form.displayName}"`) }
       else { await adminApi.createCategory(body); onSaved(`Created category "${form.displayName}"`) }
     } finally { setSaving(false) }
@@ -318,14 +316,10 @@ function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: Ca
             <label className="block text-xs font-medium text-text-secondary mb-1">Display name <span className="text-[#c8252b]">*</span></label>
             <input value={form.displayName} onChange={set('displayName')} autoFocus className="w-full px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">Code <span className="text-[#c8252b]">*</span></label>
-            <input value={form.code} onChange={set('code')} placeholder="e.g. email" className="w-full px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus font-mono" />
-          </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border-default bg-subtle">
           <button onClick={onClose} className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-hover rounded-md transition-colors">Cancel</button>
-          <button onClick={submit} disabled={saving || !form.code.trim() || !form.displayName.trim()} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors">{saving ? 'Saving…' : cat ? 'Save changes' : 'Create'}</button>
+          <button onClick={submit} disabled={saving || !form.displayName.trim()} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors">{saving ? 'Saving…' : cat ? 'Save changes' : 'Create'}</button>
         </div>
       </div>
     </div>
@@ -335,14 +329,14 @@ function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: Ca
 // SubCategoryModal — category dropdown
 interface SubCategoryModalProps { sub?: AdminSubCategory; defaultCategoryId?: number; categories: AdminCategory[]; onClose: () => void; onSaved: (msg: string) => void }
 function SubCategoryModal({ sub, defaultCategoryId, categories, onClose, onSaved }: SubCategoryModalProps) {
-  const [form, setForm] = useState({ categoryId: String(sub?.categoryId ?? defaultCategoryId ?? categories[0]?.categoryId ?? ''), code: sub?.code ?? '', displayName: sub?.displayName ?? '' })
+  const [form, setForm] = useState({ categoryId: String(sub?.categoryId ?? defaultCategoryId ?? categories[0]?.categoryId ?? ''), displayName: sub?.displayName ?? '' })
   const [saving, setSaving] = useState(false)
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
   const submit = async () => {
-    if (!form.code.trim() || !form.displayName.trim() || !form.categoryId) return
+    if (!form.displayName.trim() || !form.categoryId) return
     setSaving(true)
     try {
-      const body = { categoryId: Number(form.categoryId), code: form.code, displayName: form.displayName }
+      const body = { categoryId: Number(form.categoryId), displayName: form.displayName }
       if (sub) { await adminApi.updateSubCategory(sub.subCategoryId, body); onSaved(`Updated subcategory "${form.displayName}"`) }
       else { await adminApi.createSubCategory(body); onSaved(`Created subcategory "${form.displayName}"`) }
     } finally { setSaving(false) }
@@ -366,14 +360,10 @@ function SubCategoryModal({ sub, defaultCategoryId, categories, onClose, onSaved
             <label className="block text-xs font-medium text-text-secondary mb-1">Display name <span className="text-[#c8252b]">*</span></label>
             <input value={form.displayName} onChange={set('displayName')} autoFocus className="w-full px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">Code <span className="text-[#c8252b]">*</span></label>
-            <input value={form.code} onChange={set('code')} className="w-full px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus font-mono" />
-          </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border-default bg-subtle">
           <button onClick={onClose} className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-hover rounded-md transition-colors">Cancel</button>
-          <button onClick={submit} disabled={saving || !form.code.trim() || !form.displayName.trim()} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors">{saving ? 'Saving…' : sub ? 'Save changes' : 'Create'}</button>
+          <button onClick={submit} disabled={saving || !form.displayName.trim()} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors">{saving ? 'Saving…' : sub ? 'Save changes' : 'Create'}</button>
         </div>
       </div>
     </div>

@@ -274,38 +274,41 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task<int> CreateCategoryAsync(string code, string displayName, int? serviceId)
+    public async Task<int> CreateCategoryAsync(string displayName, int? serviceId)
     {
-        string sql = """
-            INSERT INTO lookup.Category (ServiceId, Code, DisplayName)
-            VALUES (@serviceId, @code, @displayName);
-            SELECT SCOPE_IDENTITY();
-            """;
+        string sql = "";
         try
         {
             using var conn = db.Create();
+            var code = await MakeUniqueCodeAsync(conn, "lookup.Category", displayName);
+            sql = """
+                INSERT INTO lookup.Category (ServiceId, Code, DisplayName)
+                VALUES (@serviceId, @code, @displayName);
+                SELECT SCOPE_IDENTITY();
+                """;
             var id = await conn.ExecuteScalarAsync<int>(sql, new { serviceId, code, displayName });
             log.Info($"Created category '{displayName}' (code: {code}, serviceId: {serviceId})");
             return id;
         }
         catch (Exception ex)
         {
-            SqlLogger.LogError(log, $"Failed to create category '{code}'", sql, ex);
+            SqlLogger.LogError(log, $"Failed to create category '{displayName}'", sql, ex);
             throw;
         }
     }
 
-    public async Task UpdateCategoryAsync(int categoryId, string code, string displayName, int? serviceId)
+    public async Task UpdateCategoryAsync(int categoryId, string displayName, int? serviceId)
     {
+        // Code is an immutable lookup key (referenced by incidents) — never changed on update.
         string sql = """
             UPDATE lookup.Category
-            SET ServiceId = @serviceId, Code = @code, DisplayName = @displayName
+            SET ServiceId = @serviceId, DisplayName = @displayName
             WHERE CategoryId = @categoryId
             """;
         try
         {
             using var conn = db.Create();
-            await conn.ExecuteAsync(sql, new { categoryId, serviceId, code, displayName });
+            await conn.ExecuteAsync(sql, new { categoryId, serviceId, displayName });
             log.Info($"Updated category {categoryId}");
         }
         catch (Exception ex)
@@ -339,16 +342,18 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task<int> CreateSubCategoryAsync(int categoryId, string code, string displayName)
+    public async Task<int> CreateSubCategoryAsync(int categoryId, string displayName)
     {
-        string sql = """
-            INSERT INTO lookup.SubCategory (CategoryId, Code, DisplayName)
-            VALUES (@categoryId, @code, @displayName);
-            SELECT SCOPE_IDENTITY();
-            """;
+        string sql = "";
         try
         {
             using var conn = db.Create();
+            var code = await MakeUniqueCodeAsync(conn, "lookup.SubCategory", displayName);
+            sql = """
+                INSERT INTO lookup.SubCategory (CategoryId, Code, DisplayName)
+                VALUES (@categoryId, @code, @displayName);
+                SELECT SCOPE_IDENTITY();
+                """;
             var id = await conn.ExecuteScalarAsync<int>(sql, new { categoryId, code, displayName });
             log.Info($"Created subcategory '{displayName}' under category {categoryId}");
             return id;
@@ -360,17 +365,18 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task UpdateSubCategoryAsync(int subCategoryId, int categoryId, string code, string displayName)
+    public async Task UpdateSubCategoryAsync(int subCategoryId, int categoryId, string displayName)
     {
+        // Code is an immutable lookup key — never changed on update.
         string sql = """
             UPDATE lookup.SubCategory
-            SET CategoryId = @categoryId, Code = @code, DisplayName = @displayName
+            SET CategoryId = @categoryId, DisplayName = @displayName
             WHERE SubCategoryId = @subCategoryId
             """;
         try
         {
             using var conn = db.Create();
-            await conn.ExecuteAsync(sql, new { subCategoryId, categoryId, code, displayName });
+            await conn.ExecuteAsync(sql, new { subCategoryId, categoryId, displayName });
             log.Info($"Updated subcategory {subCategoryId}");
         }
         catch (Exception ex)
@@ -378,6 +384,26 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
             SqlLogger.LogError(log, $"Failed to update subcategory {subCategoryId}", sql, ex);
             throw;
         }
+    }
+
+    // Generates a URL-safe, unique code (≤32 chars) from a display name.
+    private static async Task<string> MakeUniqueCodeAsync(System.Data.IDbConnection conn, string table, string displayName)
+    {
+        var slug = System.Text.RegularExpressions.Regex
+            .Replace(displayName.ToLowerInvariant(), @"[^a-z0-9]+", "-")
+            .Trim('-');
+        if (string.IsNullOrEmpty(slug)) slug = "item";
+        if (slug.Length > 32) slug = slug[..32];
+
+        var candidate = slug;
+        var suffix = 1;
+        while (await conn.ExecuteScalarAsync<int>(
+                   $"SELECT COUNT(1) FROM {table} WHERE Code = @candidate", new { candidate }) > 0)
+        {
+            var tag = $"-{++suffix}";
+            candidate = slug.Length + tag.Length > 32 ? slug[..(32 - tag.Length)] + tag : slug + tag;
+        }
+        return candidate;
     }
 
     public async Task DeleteSubCategoryAsync(int subCategoryId)

@@ -25,15 +25,15 @@ export const adminApi = {
 
   // Categories
   getCategories: () => api.get<AdminCategory[]>('/admin/categories'),
-  createCategory: (body: { code: string; displayName: string; serviceId?: number }) =>
+  createCategory: (body: { displayName: string; serviceId?: number }) =>
     api.post<{ id: number }>('/admin/categories', body),
-  updateCategory: (id: number, body: { code: string; displayName: string; serviceId?: number }) =>
+  updateCategory: (id: number, body: { displayName: string; serviceId?: number }) =>
     api.put<void>(`/admin/categories/${id}`, body),
   deleteCategory: (id: number) =>
     api.delete<void>(`/admin/categories/${id}`),
-  createSubCategory: (body: { categoryId: number; code: string; displayName: string }) =>
+  createSubCategory: (body: { categoryId: number; displayName: string }) =>
     api.post<{ id: number }>('/admin/subcategories', body),
-  updateSubCategory: (id: number, body: { categoryId: number; code: string; displayName: string }) =>
+  updateSubCategory: (id: number, body: { categoryId: number; displayName: string }) =>
     api.put<void>(`/admin/subcategories/${id}`, body),
   deleteSubCategory: (id: number) =>
     api.delete<void>(`/admin/subcategories/${id}`),

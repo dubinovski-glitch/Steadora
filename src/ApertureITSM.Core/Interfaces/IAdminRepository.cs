@@ -20,11 +20,11 @@ public interface IAdminRepository
 
     // ── Categories ───────────────────────────────────────────────────────────
     Task<IEnumerable<CategoryWithSubs>> GetCategoriesAsync();
-    Task<int> CreateCategoryAsync(string code, string displayName, int? serviceId);
-    Task UpdateCategoryAsync(int categoryId, string code, string displayName, int? serviceId);
+    Task<int> CreateCategoryAsync(string displayName, int? serviceId);
+    Task UpdateCategoryAsync(int categoryId, string displayName, int? serviceId);
     Task DeleteCategoryAsync(int categoryId);
-    Task<int> CreateSubCategoryAsync(int categoryId, string code, string displayName);
-    Task UpdateSubCategoryAsync(int subCategoryId, int categoryId, string code, string displayName);
+    Task<int> CreateSubCategoryAsync(int categoryId, string displayName);
+    Task UpdateSubCategoryAsync(int subCategoryId, int categoryId, string displayName);
     Task DeleteSubCategoryAsync(int subCategoryId);
 
     // ── Roles ────────────────────────────────────────────────────────────────
