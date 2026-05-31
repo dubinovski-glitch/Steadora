@@ -625,48 +625,6 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    // ── Priority Matrix ───────────────────────────────────────────────────────
-
-    public async Task<IEnumerable<PriorityMatrixRow>> GetPriorityMatrixAsync()
-    {
-        string sql = "SELECT ImpactId, UrgencyId, PriorityId FROM lookup.PriorityMatrix ORDER BY ImpactId, UrgencyId";
-        try
-        {
-            using var conn = db.Create();
-            return await conn.QueryAsync<PriorityMatrixRow>(sql);
-        }
-        catch (Exception ex)
-        {
-            SqlLogger.LogError(log, "Failed to get priority matrix", sql, ex);
-            throw;
-        }
-    }
-
-    public async Task SavePriorityMatrixAsync(IEnumerable<PriorityMatrixRow> matrix)
-    {
-        string sql = """
-            MERGE lookup.PriorityMatrix AS target
-            USING (SELECT @impactId AS ImpactId, @urgencyId AS UrgencyId) AS src
-            ON target.ImpactId = src.ImpactId AND target.UrgencyId = src.UrgencyId
-            WHEN MATCHED THEN
-                UPDATE SET PriorityId = @priorityId
-            WHEN NOT MATCHED THEN
-                INSERT (ImpactId, UrgencyId, PriorityId)
-                VALUES (@impactId, @urgencyId, @priorityId);
-            """;
-        try
-        {
-            using var conn = db.Create();
-            foreach (var row in matrix)
-                await conn.ExecuteAsync(sql, new { row.ImpactId, row.UrgencyId, row.PriorityId });
-            log.Info("Saved priority matrix");
-        }
-        catch (Exception ex)
-        {
-            SqlLogger.LogError(log, "Failed to save priority matrix", sql, ex);
-            throw;
-        }
-    }
 
     // ── Business Hours ────────────────────────────────────────────────────────
 

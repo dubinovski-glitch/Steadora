@@ -304,12 +304,6 @@ export interface Automation {
   runCount30d: number
 }
 
-export interface PriorityMatrixRow {
-  impactId: number
-  urgencyId: number
-  priorityId: number
-}
-
 export interface Comment {
   commentId: number
   authorName?: string
@@ -357,7 +351,7 @@ export interface WorkspaceField {
 }
 
 export type View = 'dashboard' | 'incidents' | 'problems' | 'changes' | 'knowledge' | 'sla' | 'admin'
-export type AdminSection = 'users' | 'teams' | 'categories' | 'roles' | 'services' | 'priority-matrix' | 'sla-policies' | 'business-hours' | 'workflow' | 'automations' | 'workspaces'
+export type AdminSection = 'users' | 'teams' | 'categories' | 'roles' | 'services' | 'sla-policies' | 'business-hours' | 'workflow' | 'automations' | 'workspaces'
 
 export interface IncidentStatus {
   statusId: number

@@ -1,7 +1,7 @@
 import { api } from './client'
 import type {
   User, Group, AdminCategory, Role, AdminService,
-  SlaTier, BusinessCalendar, Automation, PriorityMatrixRow,
+  SlaTier, BusinessCalendar, Automation,
 } from '../types'
 
 export const adminApi = {
@@ -58,11 +58,6 @@ export const adminApi = {
     api.put<void>(`/admin/sla-tiers/${id}`, body),
   saveSlaTierTargets: (id: number, targets: { priorityId: number; responseMinutes: number; resolutionMinutes: number }[]) =>
     api.put<void>(`/admin/sla-tiers/${id}/targets`, targets),
-
-  // Priority Matrix
-  getPriorityMatrix: () => api.get<PriorityMatrixRow[]>('/admin/priority-matrix'),
-  savePriorityMatrix: (matrix: PriorityMatrixRow[]) =>
-    api.put<void>('/admin/priority-matrix', matrix),
 
   // Business Calendars
   getBusinessCalendars: () => api.get<BusinessCalendar[]>('/admin/business-calendars'),

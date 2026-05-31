@@ -42,9 +42,6 @@ public interface IAdminRepository
     Task UpdateSlaTierAsync(int tierId, string name, string? description, bool isActive, bool calculate247, bool autoEscalate);
     Task SaveSlaTierTargetsAsync(int tierId, IEnumerable<(byte priorityId, int responseMinutes, int resolutionMinutes)> targets);
 
-    // ── Priority Matrix ──────────────────────────────────────────────────────
-    Task<IEnumerable<PriorityMatrixRow>> GetPriorityMatrixAsync();
-    Task SavePriorityMatrixAsync(IEnumerable<PriorityMatrixRow> matrix);
 
     // ── Business Hours ───────────────────────────────────────────────────────
     Task<IEnumerable<BusinessCalendar>> GetBusinessCalendarsAsync();

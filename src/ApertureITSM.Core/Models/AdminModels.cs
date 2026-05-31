@@ -47,4 +47,3 @@ public class BusinessCalendar
 public record BusinessDay(int DayId, int CalendarId, int DayOfWeek, string? StartTime, string? EndTime);
 public record BusinessHoliday(int HolidayId, int CalendarId, string HolidayDate, string Name);
 public record Automation(int AutomationId, string Name, string WhenDescription, string ThenDescription, bool IsEnabled, int RunCount30d);
-public record PriorityMatrixRow(byte ImpactId, byte UrgencyId, byte PriorityId);

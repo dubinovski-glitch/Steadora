@@ -197,19 +197,6 @@ public class AdminController(IAdminRepository repo) : ControllerBase
         return NoContent();
     }
 
-    // ── Priority Matrix ────────────────────────────────────────────────────
-
-    [HttpGet("priority-matrix")]
-    public async Task<IActionResult> GetPriorityMatrix() =>
-        Ok(await repo.GetPriorityMatrixAsync());
-
-    [HttpPut("priority-matrix")]
-    public async Task<IActionResult> SavePriorityMatrix([FromBody] List<PriorityMatrixRowRequest> matrix)
-    {
-        await repo.SavePriorityMatrixAsync(matrix.Select(r => new PriorityMatrixRow((byte)r.ImpactId, (byte)r.UrgencyId, (byte)r.PriorityId)));
-        return NoContent();
-    }
-
     // ── Business Calendars ─────────────────────────────────────────────────
 
     [HttpGet("business-calendars")]
@@ -293,7 +280,6 @@ public record UpdateServiceRequest(string Name, int? OwningGroupId, string Healt
 public record CreateSlaTierRequest(string Name, string? Description, bool Calculate247, bool AutoEscalate);
 public record UpdateSlaTierRequest(string Name, string? Description, bool IsActive, bool Calculate247, bool AutoEscalate);
 public record SlaTierTargetRequest(int PriorityId, int ResponseMinutes, int ResolutionMinutes);
-public record PriorityMatrixRowRequest(int ImpactId, int UrgencyId, int PriorityId);
 public record CreateBusinessCalendarRequest(string Name, string Timezone);
 public record BusinessDayRequest(int DayOfWeek, string? StartTime, string? EndTime);
 public record AddHolidayRequest(string HolidayDate, string Name);

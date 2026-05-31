@@ -1,14 +1,13 @@
 import { useState } from 'react'
 import {
   Users, UsersRound, Folder, Shield, Server, Clock,
-  GitBranch, Zap, LayoutGrid, Layers,
+  GitBranch, Zap, Layers,
 } from 'lucide-react'
 import { UsersTab }         from './UsersTab'
 import { TeamsTab }         from './TeamsTab'
 import { CategoriesTab }    from './CategoriesTab'
 import { RolesTab }         from './RolesTab'
 import { ServicesTab }      from './ServicesTab'
-import { PriorityMatrixTab } from './PriorityMatrixTab'
 import { SlaPoliciesTab }   from './SlaPoliciesTab'
 import { BusinessHoursTab } from './BusinessHoursTab'
 import { WorkflowTab }      from './WorkflowTab'
@@ -85,12 +84,6 @@ const NAV_GROUPS: NavGroup[] = [
         label: 'Services & CIs',
         icon: <Server size={15} />,
         description: 'Configure IT services and configuration items',
-      },
-      {
-        id: 'priority-matrix',
-        label: 'Priority matrix',
-        icon: <LayoutGrid size={15} />,
-        description: 'Map impact × urgency combinations to priority levels',
       },
     ],
   },
@@ -227,7 +220,6 @@ export function AdminView({ addToast }: Props) {
           {section === 'categories'       && <CategoriesTab    addToast={addToast} />}
           {section === 'roles'            && <RolesTab         addToast={addToast} />}
           {section === 'services'         && <ServicesTab      addToast={addToast} />}
-          {section === 'priority-matrix'  && <PriorityMatrixTab addToast={addToast} />}
           {section === 'sla-policies'     && <SlaPoliciesTab   addToast={addToast} />}
           {section === 'business-hours'   && <BusinessHoursTab addToast={addToast} />}
           {section === 'workflow'         && <WorkflowTab      addToast={addToast} />}
