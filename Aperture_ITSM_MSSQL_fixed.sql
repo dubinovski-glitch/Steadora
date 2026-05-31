@@ -1,4 +1,4 @@
-/* 11==========================================================================
+/* ==========================================================================
    Aperture ITSM — Microsoft SQL Server build script
    Target:    SQL Server 2019+ (uses sequences, JSON_VALUE, MERGE)
    Idempotent: drops the database if it already exists, then rebuilds
