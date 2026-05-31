@@ -6,7 +6,7 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
-public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
+public class IncidentRepository(IDbConnectionFactory db, IWorkspaceContext workspace) : IIncidentRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(IncidentRepository));
 
@@ -68,6 +68,8 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
         {
             using var conn = db.Create();
             var where = BuildWhere(filter, out var p);
+            p.Add("wid", workspace.WorkspaceId);
+            var wsWhere = where + " AND i.WorkspaceId = @wid";
             var offset = (page - 1) * pageSize;
             var sortCol = filter.SortBy switch
             {
@@ -81,9 +83,9 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
             };
             var dir = filter.SortDesc ? "DESC" : "ASC";
 
-            sql = $"SELECT COUNT(*) FROM itil.Incident i WHERE i.DeletedAt IS NULL {where}";
+            sql = $"SELECT COUNT(*) FROM itil.Incident i WHERE i.DeletedAt IS NULL {wsWhere}";
             var total = await conn.ExecuteScalarAsync<int>(sql, p);
-            sql = $"{BaseSelect} {where} ORDER BY {sortCol} {dir} OFFSET {offset} ROWS FETCH NEXT {pageSize} ROWS ONLY";
+            sql = $"{BaseSelect} {wsWhere} ORDER BY {sortCol} {dir} OFFSET {offset} ROWS FETCH NEXT {pageSize} ROWS ONLY";
             var items = await conn.QueryAsync<Incident>(sql, p);
             return (items, total);
         }
@@ -96,11 +98,11 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
 
     public async Task<Incident?> GetByIdAsync(long incidentId)
     {
-        string sql = $"{BaseSelect} AND i.IncidentId = @incidentId";
+        string sql = $"{BaseSelect} AND i.IncidentId = @incidentId AND i.WorkspaceId = @wid";
         try
         {
             using var conn = db.Create();
-            return await conn.QueryFirstOrDefaultAsync<Incident>(sql, new { incidentId });
+            return await conn.QueryFirstOrDefaultAsync<Incident>(sql, new { incidentId, wid = workspace.WorkspaceId });
         }
         catch (Exception ex)
         {
@@ -137,6 +139,7 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
             p.Add("@ResolutionCodeCode", request.ResolutionCodeCode);
             p.Add("@ResolutionNotes", request.ResolutionNotes);
             p.Add("@CreatedByExtId", request.CreatedByExtId);
+            p.Add("@WorkspaceId", workspace.WorkspaceId);
             p.Add("@NewIncidentId", dbType: System.Data.DbType.Int64, direction: System.Data.ParameterDirection.Output);
             await conn.ExecuteAsync(sql, p, commandType: System.Data.CommandType.StoredProcedure);
             var newId = p.Get<long>("@NewIncidentId");
@@ -284,11 +287,11 @@ public class IncidentRepository(IDbConnectionFactory db) : IIncidentRepository
 
     public async Task<IEnumerable<Incident>> GetByProblemIdAsync(long problemId)
     {
-        string sql = $"{BaseSelect} AND i.ParentProblemId = @problemId ORDER BY i.OpenedAt DESC";
+        string sql = $"{BaseSelect} AND i.ParentProblemId = @problemId AND i.WorkspaceId = @wid ORDER BY i.OpenedAt DESC";
         try
         {
             using var conn = db.Create();
-            return await conn.QueryAsync<Incident>(sql, new { problemId });
+            return await conn.QueryAsync<Incident>(sql, new { problemId, wid = workspace.WorkspaceId });
         }
         catch (Exception ex)
         {

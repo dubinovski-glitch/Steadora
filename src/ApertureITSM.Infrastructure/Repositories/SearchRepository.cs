@@ -5,7 +5,7 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
-public class SearchRepository(IDbConnectionFactory db) : ISearchRepository
+public class SearchRepository(IDbConnectionFactory db, IWorkspaceContext workspace) : ISearchRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(SearchRepository));
 
@@ -23,7 +23,7 @@ public class SearchRepository(IDbConnectionFactory db) : ISearchRepository
                 FROM itil.Incident i
                 LEFT JOIN lookup.IncidentStatus st ON st.StatusId = i.StatusId
                 LEFT JOIN lookup.Priority       pr ON pr.PriorityId = i.PriorityId
-                WHERE i.DeletedAt IS NULL
+                WHERE i.DeletedAt IS NULL AND i.WorkspaceId = @wid
                   AND (i.Number LIKE @Like OR i.Title LIKE @Like)
 
                 UNION ALL
@@ -34,7 +34,7 @@ public class SearchRepository(IDbConnectionFactory db) : ISearchRepository
                 FROM itil.Problem p
                 LEFT JOIN lookup.Priority     pr ON pr.PriorityId = p.PriorityId
                 LEFT JOIN lookup.ProblemState st ON st.StateId    = p.StateId
-                WHERE p.DeletedAt IS NULL
+                WHERE p.DeletedAt IS NULL AND p.WorkspaceId = @wid
                   AND (p.Number LIKE @Like OR p.Title LIKE @Like)
 
                 UNION ALL
@@ -44,11 +44,12 @@ public class SearchRepository(IDbConnectionFactory db) : ISearchRepository
                     a.Number, a.Title,
                     NULL AS StatusCode, NULL AS PriorityCode, NULL AS StateCode
                 FROM kb.Article a
-                WHERE a.DeletedAt IS NULL AND a.Status = 'published'
+                WHERE a.DeletedAt IS NULL AND a.Status = 'published' AND a.WorkspaceId = @wid
                   AND (a.Number LIKE @Like OR a.Title LIKE @Like)
                 """;
 
-            return await conn.QueryAsync<SearchResult>(sql, new { Like = like });
+            var wid = workspace.WorkspaceId;
+            return await conn.QueryAsync<SearchResult>(sql, new { Like = like, wid });
         }
         catch (Exception ex)
         {

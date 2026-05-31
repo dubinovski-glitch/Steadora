@@ -6,7 +6,7 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
-public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
+public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext workspace) : IProblemRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(ProblemRepository));
 
@@ -34,17 +34,19 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
         try
         {
             using var conn = db.Create();
+            var wid = workspace.WorkspaceId;
             var clauses = new List<string>();
             if (!includeResolved) clauses.Add("st.IsTerminal = 0");
             if (groupIds is { Length: > 0 }) clauses.Add("p.GroupId IN @groupIds");
-            var where = clauses.Count > 0 ? "AND " + string.Join(" AND ", clauses) : string.Empty;
+            clauses.Add("p.WorkspaceId = @wid");
+            var where = "AND " + string.Join(" AND ", clauses);
             var offset = (page - 1) * pageSize;
 
             sql = $"SELECT COUNT(*) FROM itil.Problem p LEFT JOIN lookup.ProblemState st ON st.StateId=p.StateId WHERE p.DeletedAt IS NULL {where}";
-            var total = await conn.ExecuteScalarAsync<int>(sql, new { groupIds });
+            var total = await conn.ExecuteScalarAsync<int>(sql, new { groupIds, wid });
 
             sql = $"{BaseSelect} {where} ORDER BY p.OpenedAt DESC OFFSET {offset} ROWS FETCH NEXT {pageSize} ROWS ONLY";
-            var problems = (await conn.QueryAsync<Problem>(sql, new { groupIds })).ToList();
+            var problems = (await conn.QueryAsync<Problem>(sql, new { groupIds, wid })).ToList();
 
             if (problems.Count > 0)
             {
@@ -65,11 +67,11 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
 
     public async Task<Problem?> GetByIdAsync(long problemId)
     {
-        string sql = $"{BaseSelect} AND p.ProblemId=@problemId";
+        string sql = $"{BaseSelect} AND p.ProblemId=@problemId AND p.WorkspaceId=@wid";
         try
         {
             using var conn = db.Create();
-            var problem = await conn.QueryFirstOrDefaultAsync<Problem>(sql, new { problemId });
+            var problem = await conn.QueryFirstOrDefaultAsync<Problem>(sql, new { problemId, wid = workspace.WorkspaceId });
             if (problem is null) return null;
             sql = "SELECT s.Slug FROM itil.ProblemService ps JOIN core.Service s ON s.ServiceId=ps.ServiceId WHERE ps.ProblemId=@problemId";
             var slugs = await conn.QueryAsync<string>(sql, new { problemId });
@@ -100,10 +102,11 @@ public class ProblemRepository(IDbConnectionFactory db) : IProblemRepository
             sql = "SELECT NEXT VALUE FOR itil.ProblemSeq";
             var newId = await conn.ExecuteScalarAsync<long>(sql);
             sql = """
-                INSERT INTO itil.Problem (ProblemId,Title,RootCause,Workaround,PriorityId,StateId,IsKnownError,AssigneeUserId,GroupId,OpenedAt,CreatedAt,UpdatedAt)
-                VALUES (@newId,@title,@rootCause,@workaround,@priorityId,@stateId,@isKnown,@assigneeId,@groupId,SYSUTCDATETIME(),SYSUTCDATETIME(),SYSUTCDATETIME())
+                INSERT INTO itil.Problem (ProblemId,Title,RootCause,Workaround,PriorityId,StateId,IsKnownError,AssigneeUserId,GroupId,WorkspaceId,OpenedAt,CreatedAt,UpdatedAt)
+                VALUES (@newId,@title,@rootCause,@workaround,@priorityId,@stateId,@isKnown,@assigneeId,@groupId,@wid,SYSUTCDATETIME(),SYSUTCDATETIME(),SYSUTCDATETIME())
                 """;
-            await conn.ExecuteAsync(sql, new { newId, title = request.Title, rootCause = request.RootCause, workaround = request.Workaround, priorityId, stateId, isKnown = request.IsKnownError, assigneeId, groupId });
+            var wid = workspace.WorkspaceId;
+            await conn.ExecuteAsync(sql, new { newId, title = request.Title, rootCause = request.RootCause, workaround = request.Workaround, priorityId, stateId, isKnown = request.IsKnownError, assigneeId, groupId, wid });
             log.Info($"Created problem {newId}: {request.Title}");
             return newId;
         }

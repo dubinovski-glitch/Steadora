@@ -6,7 +6,7 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
-public class ChangeRepository(IDbConnectionFactory db) : IChangeRepository
+public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspace) : IChangeRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(ChangeRepository));
 
@@ -34,11 +34,11 @@ public class ChangeRepository(IDbConnectionFactory db) : IChangeRepository
 
     public async Task<IEnumerable<Change>> GetAllAsync(string? stateFilter = null)
     {
-        string sql = $"{BaseSelect} {(stateFilter is not null ? "AND cs.Code=@stateFilter" : "")} ORDER BY c.UpdatedAt DESC";
+        string sql = $"{BaseSelect} {(stateFilter is not null ? "AND cs.Code=@stateFilter" : "")} AND c.WorkspaceId=@wid ORDER BY c.UpdatedAt DESC";
         try
         {
             using var conn = db.Create();
-            var changes = (await conn.QueryAsync<Change>(sql, new { stateFilter })).ToList();
+            var changes = (await conn.QueryAsync<Change>(sql, new { stateFilter, wid = workspace.WorkspaceId })).ToList();
             await EnrichAsync(conn, changes);
             return changes;
         }
@@ -51,11 +51,11 @@ public class ChangeRepository(IDbConnectionFactory db) : IChangeRepository
 
     public async Task<Change?> GetByIdAsync(long changeId)
     {
-        string sql = $"{BaseSelect} AND c.ChangeId=@changeId";
+        string sql = $"{BaseSelect} AND c.ChangeId=@changeId AND c.WorkspaceId=@wid";
         try
         {
             using var conn = db.Create();
-            var change = await conn.QueryFirstOrDefaultAsync<Change>(sql, new { changeId });
+            var change = await conn.QueryFirstOrDefaultAsync<Change>(sql, new { changeId, wid = workspace.WorkspaceId });
             if (change is null) return null;
             await EnrichAsync(conn, [change]);
             return change;
@@ -89,12 +89,13 @@ public class ChangeRepository(IDbConnectionFactory db) : IChangeRepository
             sql = """
                 INSERT INTO itil.[Change] (ChangeId,Title,Description,RolloutPlan,RollbackPlan,ImpactNotes,
                     ChangeTypeId,RiskId,StateId,OwnerUserId,ApproverUserId,GroupId,
-                    CabName,ScheduledStart,ScheduledEnd,DowntimeEstimate,CreatedAt,UpdatedAt)
+                    CabName,ScheduledStart,ScheduledEnd,DowntimeEstimate,WorkspaceId,CreatedAt,UpdatedAt)
                 VALUES (@newId,@title,@desc,@rollout,@rollback,@impact,
                     @typeId,@riskId,@stateId,@ownerId,@approverId,@groupId,
-                    @cab,@start,@end,@downtime,SYSUTCDATETIME(),SYSUTCDATETIME())
+                    @cab,@start,@end,@downtime,@wid,SYSUTCDATETIME(),SYSUTCDATETIME())
                 """;
-            await conn.ExecuteAsync(sql, new { newId, title = request.Title, desc = request.Description, rollout = request.RolloutPlan, rollback = request.RollbackPlan, impact = request.ImpactNotes, typeId, riskId, stateId, ownerId, approverId, groupId, cab = request.CabName, start = request.ScheduledStart, end = request.ScheduledEnd, downtime = request.DowntimeEstimate });
+            var wid = workspace.WorkspaceId;
+            await conn.ExecuteAsync(sql, new { newId, title = request.Title, desc = request.Description, rollout = request.RolloutPlan, rollback = request.RollbackPlan, impact = request.ImpactNotes, typeId, riskId, stateId, ownerId, approverId, groupId, cab = request.CabName, start = request.ScheduledStart, end = request.ScheduledEnd, downtime = request.DowntimeEstimate, wid });
             log.Info($"Created change {newId}: {request.Title}");
             return newId;
         }

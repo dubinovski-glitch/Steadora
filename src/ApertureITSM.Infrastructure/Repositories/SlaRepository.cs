@@ -5,7 +5,7 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
-public class SlaRepository(IDbConnectionFactory db) : ISlaRepository
+public class SlaRepository(IDbConnectionFactory db, IWorkspaceContext workspace) : ISlaRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(SlaRepository));
 
@@ -30,7 +30,10 @@ public class SlaRepository(IDbConnectionFactory db) : ISlaRepository
         try
         {
             using var conn = db.Create();
-            var kpis = await conn.QueryFirstAsync<dynamic>(sql, commandType: System.Data.CommandType.StoredProcedure);
+            var wid = workspace.WorkspaceId;
+            var kpis = await conn.QueryFirstAsync<dynamic>(sql,
+                new { WorkspaceId = wid },
+                commandType: System.Data.CommandType.StoredProcedure);
 
             sql = """
                 SELECT COUNT(*) AS Total,
@@ -39,8 +42,9 @@ public class SlaRepository(IDbConnectionFactory db) : ISlaRepository
                 WHERE ResolvedAt IS NOT NULL
                   AND ResolvedAt >= DATEADD(DAY, -@days, SYSUTCDATETIME())
                   AND DeletedAt IS NULL
+                  AND WorkspaceId = @wid
                 """;
-            var slaResult = await conn.QueryFirstAsync<(int Total, int Met)>(sql, new { days });
+            var slaResult = await conn.QueryFirstAsync<(int Total, int Met)>(sql, new { days, wid });
 
             return new SlaStats
             {
@@ -71,13 +75,14 @@ public class SlaRepository(IDbConnectionFactory db) : ISlaRepository
             FROM itil.Incident i
             JOIN lookup.Priority pr ON pr.PriorityId = i.PriorityId
             WHERE i.DeletedAt IS NULL AND i.OpenedAt >= DATEADD(DAY,-@days,SYSUTCDATETIME())
+              AND i.WorkspaceId = @wid
             GROUP BY pr.Code, pr.DefaultResolutionMin, pr.SortOrder
             ORDER BY pr.SortOrder
             """;
         try
         {
             using var conn = db.Create();
-            return await conn.QueryAsync<SlaByPriority>(sql, new { days });
+            return await conn.QueryAsync<SlaByPriority>(sql, new { days, wid = workspace.WorkspaceId });
         }
         catch (Exception ex)
         {
@@ -96,13 +101,13 @@ public class SlaRepository(IDbConnectionFactory db) : ISlaRepository
             FROM itil.Incident i
             JOIN core.[Group] g ON g.GroupId = i.GroupId
             JOIN lookup.IncidentStatus s ON s.StatusId = i.StatusId AND s.IsTerminal = 0
-            WHERE i.DeletedAt IS NULL
+            WHERE i.DeletedAt IS NULL AND i.WorkspaceId = @wid
             GROUP BY g.Name
             """;
         try
         {
             using var conn = db.Create();
-            return await conn.QueryAsync<TeamLoad>(sql);
+            return await conn.QueryAsync<TeamLoad>(sql, new { wid = workspace.WorkspaceId });
         }
         catch (Exception ex)
         {
@@ -119,13 +124,14 @@ public class SlaRepository(IDbConnectionFactory db) : ISlaRepository
                    SUM(CASE WHEN ResolvedAt IS NOT NULL AND CONVERT(date, ResolvedAt) = CONVERT(date, OpenedAt) THEN 1 ELSE 0 END) AS SameDayResolved
             FROM itil.Incident
             WHERE DeletedAt IS NULL AND OpenedAt >= DATEADD(DAY,-@days,SYSUTCDATETIME())
+              AND WorkspaceId = @wid
             GROUP BY CONVERT(date, OpenedAt)
             ORDER BY BucketDate
             """;
         try
         {
             using var conn = db.Create();
-            return await conn.QueryAsync<DailyVolume>(sql, new { days });
+            return await conn.QueryAsync<DailyVolume>(sql, new { days, wid = workspace.WorkspaceId });
         }
         catch (Exception ex)
         {

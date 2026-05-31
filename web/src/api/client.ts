@@ -3,11 +3,12 @@ import { useAuthStore } from '../store/authStore'
 const BASE = '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = useAuthStore.getState().token
+  const { token, workspaceId } = useAuthStore.getState()
   const res = await fetch(`${BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(workspaceId ? { 'X-Workspace-Id': String(workspaceId) } : {}),
       ...init?.headers,
     },
     ...init,

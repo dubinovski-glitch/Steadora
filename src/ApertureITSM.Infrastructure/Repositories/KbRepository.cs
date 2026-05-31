@@ -6,7 +6,7 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
-public class KbRepository(IDbConnectionFactory db) : IKbRepository
+public class KbRepository(IDbConnectionFactory db, IWorkspaceContext workspace) : IKbRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(KbRepository));
 
@@ -34,7 +34,8 @@ public class KbRepository(IDbConnectionFactory db) : IKbRepository
             if (!string.IsNullOrWhiteSpace(query)) { clauses.Add("(a.Title LIKE @q OR a.Snippet LIKE @q)"); p.Add("@q", $"%{query}%"); }
             if (categoryId.HasValue) { clauses.Add("a.KbCategoryId=@categoryId"); p.Add("@categoryId", categoryId); }
             if (!string.IsNullOrWhiteSpace(status)) { clauses.Add("a.Status=@status"); p.Add("@status", status); }
-            var where = clauses.Count > 0 ? "AND " + string.Join(" AND ", clauses) : string.Empty;
+            clauses.Add("a.WorkspaceId=@wid"); p.Add("@wid", workspace.WorkspaceId);
+            var where = "AND " + string.Join(" AND ", clauses);
             sql = $"{BaseSelect} {where} ORDER BY a.Pinned DESC, a.Views DESC";
             var articles = (await conn.QueryAsync<KbArticle>(sql, p)).ToList();
             await EnrichTagsAsync(conn, articles);
@@ -49,11 +50,11 @@ public class KbRepository(IDbConnectionFactory db) : IKbRepository
 
     public async Task<KbArticle?> GetByIdAsync(long articleId)
     {
-        string sql = $"{BaseSelect} AND a.ArticleId=@articleId";
+        string sql = $"{BaseSelect} AND a.ArticleId=@articleId AND a.WorkspaceId=@wid";
         try
         {
             using var conn = db.Create();
-            var article = await conn.QueryFirstOrDefaultAsync<KbArticle>(sql, new { articleId });
+            var article = await conn.QueryFirstOrDefaultAsync<KbArticle>(sql, new { articleId, wid = workspace.WorkspaceId });
             if (article is null) return null;
             await EnrichTagsAsync(conn, [article]);
             return article;
