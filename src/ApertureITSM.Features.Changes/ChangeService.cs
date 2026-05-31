@@ -9,6 +9,7 @@ public interface IChangeService
     Task<IEnumerable<Change>> GetAllAsync(string? stateFilter);
     Task<Change?> GetDetailAsync(long changeId);
     Task<long> CreateAsync(CreateChangeRequest request);
+    Task UpdateAsync(long changeId, UpdateChangeRequest request);
     Task SetStateAsync(long changeId, string stateCode, int? actorUserId);
     Task VoteAsync(long changeId, string userExtId, string voteCode, string? comment);
 }
@@ -27,6 +28,12 @@ public class ChangeService(IChangeRepository repository) : IChangeService
     {
         log.Info($"Creating change: {request.Title}");
         return repository.CreateAsync(request);
+    }
+
+    public Task UpdateAsync(long changeId, UpdateChangeRequest request)
+    {
+        log.Info($"Updating change {changeId}");
+        return repository.UpdateAsync(changeId, request);
     }
 
     public Task SetStateAsync(long changeId, string stateCode, int? actorUserId)

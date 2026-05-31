@@ -30,6 +30,13 @@ public class ChangesController(IChangeService service, INotificationService? not
         return CreatedAtAction(nameof(GetDetail), new { id }, new { id });
     }
 
+    [HttpPut("{id:long}")]
+    public async Task<IActionResult> Update(long id, [FromBody] UpdateChangeRequest request)
+    {
+        await service.UpdateAsync(id, request);
+        return NoContent();
+    }
+
     [HttpPatch("{id:long}/state")]
     public async Task<IActionResult> SetState(long id, [FromBody] SetStateRequest request)
     {

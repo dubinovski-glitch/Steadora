@@ -88,14 +88,14 @@ public class AdminController(IAdminRepository repo) : ControllerBase
     [HttpPost("categories")]
     public async Task<IActionResult> CreateCategory([FromBody] CreateCategoryRequest req)
     {
-        var id = await repo.CreateCategoryAsync(req.Code, req.DisplayName, req.SortOrder, req.ServiceId);
+        var id = await repo.CreateCategoryAsync(req.Code, req.DisplayName, req.ServiceId);
         return CreatedAtAction(nameof(GetCategories), new { id });
     }
 
     [HttpPut("categories/{id:int}")]
     public async Task<IActionResult> UpdateCategory(int id, [FromBody] UpdateCategoryRequest req)
     {
-        await repo.UpdateCategoryAsync(id, req.Code, req.DisplayName, req.SortOrder, req.ServiceId);
+        await repo.UpdateCategoryAsync(id, req.Code, req.DisplayName, req.ServiceId);
         return NoContent();
     }
 
@@ -118,14 +118,14 @@ public class AdminController(IAdminRepository repo) : ControllerBase
     [HttpPost("subcategories")]
     public async Task<IActionResult> CreateSubCategory([FromBody] CreateSubCategoryRequest req)
     {
-        var id = await repo.CreateSubCategoryAsync(req.CategoryId, req.Code, req.DisplayName, req.SortOrder);
+        var id = await repo.CreateSubCategoryAsync(req.CategoryId, req.Code, req.DisplayName);
         return CreatedAtAction(nameof(GetCategories), new { id });
     }
 
     [HttpPut("subcategories/{id:int}")]
     public async Task<IActionResult> UpdateSubCategory(int id, [FromBody] UpdateSubCategoryRequest req)
     {
-        await repo.UpdateSubCategoryAsync(id, req.CategoryId, req.Code, req.DisplayName, req.SortOrder);
+        await repo.UpdateSubCategoryAsync(id, req.CategoryId, req.Code, req.DisplayName);
         return NoContent();
     }
 
@@ -283,10 +283,10 @@ public record CreateUserRequest(string ExternalId, string Email, string Username
 public record UpdateUserRequest(string Email, string Username, string DisplayName, string? Title, byte RoleId, bool IsActive, string? Password);
 public record CreateGroupRequest(string Name, string? Description);
 public record UpdateGroupRequest(string Name, string? Description, bool IsActive);
-public record CreateCategoryRequest(string Code, string DisplayName, int SortOrder, int? ServiceId);
-public record UpdateCategoryRequest(string Code, string DisplayName, int SortOrder, int? ServiceId);
-public record CreateSubCategoryRequest(int CategoryId, string Code, string DisplayName, int SortOrder);
-public record UpdateSubCategoryRequest(int CategoryId, string Code, string DisplayName, int SortOrder);
+public record CreateCategoryRequest(string Code, string DisplayName, int? ServiceId);
+public record UpdateCategoryRequest(string Code, string DisplayName, int? ServiceId);
+public record CreateSubCategoryRequest(int CategoryId, string Code, string DisplayName);
+public record UpdateSubCategoryRequest(int CategoryId, string Code, string DisplayName);
 public record UpdateRoleRequest(string DisplayName, string? Description);
 public record CreateServiceRequest(string Name, int? OwningGroupId, string HealthCode, int? SlaTierId);
 public record UpdateServiceRequest(string Name, int? OwningGroupId, string HealthCode, int? SlaTierId, bool IsActive);

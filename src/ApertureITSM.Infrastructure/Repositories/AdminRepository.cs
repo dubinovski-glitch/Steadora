@@ -243,17 +243,17 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
             using var conn = db.Create();
             sql = """
                 SELECT c.CategoryId, c.ServiceId, s.Name AS ServiceName,
-                       c.Code, c.DisplayName, c.SortOrder,
+                       c.Code, c.DisplayName,
                        COUNT(i.IncidentId) AS TicketCount
                 FROM lookup.Category c
                 LEFT JOIN core.Service s ON s.ServiceId = c.ServiceId
                 LEFT JOIN itil.Incident i ON i.CategoryId = c.CategoryId AND i.DeletedAt IS NULL
-                GROUP BY c.CategoryId, c.ServiceId, s.Name, c.Code, c.DisplayName, c.SortOrder
-                ORDER BY s.Name, c.SortOrder, c.DisplayName
+                GROUP BY c.CategoryId, c.ServiceId, s.Name, c.Code, c.DisplayName
+                ORDER BY s.Name, c.DisplayName
                 """;
-            var cats = (await conn.QueryAsync<(int CategoryId, int? ServiceId, string? ServiceName, string Code, string DisplayName, int SortOrder, int TicketCount)>(sql)).ToList();
+            var cats = (await conn.QueryAsync<(int CategoryId, int? ServiceId, string? ServiceName, string Code, string DisplayName, int TicketCount)>(sql)).ToList();
 
-            sql = "SELECT SubCategoryId, CategoryId, Code, DisplayName, SortOrder FROM lookup.SubCategory ORDER BY SortOrder, DisplayName";
+            sql = "SELECT SubCategoryId, CategoryId, Code, DisplayName FROM lookup.SubCategory ORDER BY DisplayName";
             var subs = (await conn.QueryAsync<SubCategory>(sql)).ToList();
 
             return cats.Select(c => new CategoryWithSubs
@@ -263,7 +263,6 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
                 ServiceName = c.ServiceName,
                 Code        = c.Code,
                 DisplayName = c.DisplayName,
-                SortOrder   = c.SortOrder,
                 TicketCount = c.TicketCount,
                 SubCategories = subs.Where(s => s.CategoryId == c.CategoryId).ToList()
             });
@@ -275,17 +274,17 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task<int> CreateCategoryAsync(string code, string displayName, int sortOrder, int? serviceId)
+    public async Task<int> CreateCategoryAsync(string code, string displayName, int? serviceId)
     {
         string sql = """
-            INSERT INTO lookup.Category (ServiceId, Code, DisplayName, SortOrder)
-            VALUES (@serviceId, @code, @displayName, @sortOrder);
+            INSERT INTO lookup.Category (ServiceId, Code, DisplayName)
+            VALUES (@serviceId, @code, @displayName);
             SELECT SCOPE_IDENTITY();
             """;
         try
         {
             using var conn = db.Create();
-            var id = await conn.ExecuteScalarAsync<int>(sql, new { serviceId, code, displayName, sortOrder });
+            var id = await conn.ExecuteScalarAsync<int>(sql, new { serviceId, code, displayName });
             log.Info($"Created category '{displayName}' (code: {code}, serviceId: {serviceId})");
             return id;
         }
@@ -296,17 +295,17 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task UpdateCategoryAsync(int categoryId, string code, string displayName, int sortOrder, int? serviceId)
+    public async Task UpdateCategoryAsync(int categoryId, string code, string displayName, int? serviceId)
     {
         string sql = """
             UPDATE lookup.Category
-            SET ServiceId = @serviceId, Code = @code, DisplayName = @displayName, SortOrder = @sortOrder
+            SET ServiceId = @serviceId, Code = @code, DisplayName = @displayName
             WHERE CategoryId = @categoryId
             """;
         try
         {
             using var conn = db.Create();
-            await conn.ExecuteAsync(sql, new { categoryId, serviceId, code, displayName, sortOrder });
+            await conn.ExecuteAsync(sql, new { categoryId, serviceId, code, displayName });
             log.Info($"Updated category {categoryId}");
         }
         catch (Exception ex)
@@ -340,17 +339,17 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task<int> CreateSubCategoryAsync(int categoryId, string code, string displayName, int sortOrder)
+    public async Task<int> CreateSubCategoryAsync(int categoryId, string code, string displayName)
     {
         string sql = """
-            INSERT INTO lookup.SubCategory (CategoryId, Code, DisplayName, SortOrder)
-            VALUES (@categoryId, @code, @displayName, @sortOrder);
+            INSERT INTO lookup.SubCategory (CategoryId, Code, DisplayName)
+            VALUES (@categoryId, @code, @displayName);
             SELECT SCOPE_IDENTITY();
             """;
         try
         {
             using var conn = db.Create();
-            var id = await conn.ExecuteScalarAsync<int>(sql, new { categoryId, code, displayName, sortOrder });
+            var id = await conn.ExecuteScalarAsync<int>(sql, new { categoryId, code, displayName });
             log.Info($"Created subcategory '{displayName}' under category {categoryId}");
             return id;
         }
@@ -361,18 +360,17 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
-    public async Task UpdateSubCategoryAsync(int subCategoryId, int categoryId, string code, string displayName, int sortOrder)
+    public async Task UpdateSubCategoryAsync(int subCategoryId, int categoryId, string code, string displayName)
     {
         string sql = """
             UPDATE lookup.SubCategory
-            SET CategoryId = @categoryId, Code = @code,
-                DisplayName = @displayName, SortOrder = @sortOrder
+            SET CategoryId = @categoryId, Code = @code, DisplayName = @displayName
             WHERE SubCategoryId = @subCategoryId
             """;
         try
         {
             using var conn = db.Create();
-            await conn.ExecuteAsync(sql, new { subCategoryId, categoryId, code, displayName, sortOrder });
+            await conn.ExecuteAsync(sql, new { subCategoryId, categoryId, code, displayName });
             log.Info($"Updated subcategory {subCategoryId}");
         }
         catch (Exception ex)

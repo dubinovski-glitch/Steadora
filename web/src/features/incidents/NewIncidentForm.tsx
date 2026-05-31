@@ -7,6 +7,7 @@ import { lookupsApi } from '../../api/lookups'
 import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
 import { useAuthStore } from '../../store/authStore'
+import { useWorkspaceFields } from '../../hooks/useWorkspaceFields'
 import type { User as UserType } from '../../types'
 import type {
   User, Group, Service, AdminCategory, AdminSubCategory,
@@ -69,6 +70,7 @@ const INITIAL: FormState = {
 export function NewIncidentForm({ addToast }: Props) {
   const { setShowNewIncident } = useAppStore()
   const { user: authUser } = useAuthStore()
+  const fc = useWorkspaceFields()
   const [form, setForm] = useState<FormState>(INITIAL)
   const [submitting, setSubmitting] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
@@ -151,11 +153,11 @@ export function NewIncidentForm({ addToast }: Props) {
 
   const validate = (): string[] => {
     const missing: string[] = []
-    if (!form.callerExtId)  missing.push('Caller / Affected User')
-    if (!form.serviceSlug)  missing.push('Service')
-    if (!form.categoryCode) missing.push('Category')
-    if (!form.groupSlug)    missing.push('Assignment Team')
     if (!form.title.trim()) missing.push('Short Description')
+    if (fc('incident', 'caller').mandatory   && !form.callerExtId)  missing.push('Caller / Affected User')
+    if (fc('incident', 'service').mandatory  && !form.serviceSlug)  missing.push('Service')
+    if (fc('incident', 'category').mandatory && !form.categoryCode) missing.push('Category')
+    if (fc('incident', 'group').mandatory    && !form.groupSlug)    missing.push('Assignment Team')
     return missing
   }
 
@@ -225,17 +227,19 @@ export function NewIncidentForm({ addToast }: Props) {
           <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 font-medium">New</span>
             <span className="text-xs text-text-muted">Incident ID will be auto-generated on submit</span>
-            <div className="ml-auto">
-              <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={form.isMajorIncident}
-                  onChange={e => setForm(f => ({ ...f, isMajorIncident: e.target.checked }))}
-                  className="w-3.5 h-3.5 accent-accent"
-                />
-                <span className="font-medium text-text-secondary">Major Incident</span>
-              </label>
-            </div>
+            {fc('incident', 'isMajorIncident').visible && (
+              <div className="ml-auto">
+                <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.isMajorIncident}
+                    onChange={e => setForm(f => ({ ...f, isMajorIncident: e.target.checked }))}
+                    className="w-3.5 h-3.5 accent-accent"
+                  />
+                  <span className="font-medium text-text-secondary">Major Incident</span>
+                </label>
+              </div>
+            )}
           </div>
         </div>
 
@@ -245,9 +249,11 @@ export function NewIncidentForm({ addToast }: Props) {
             <div className="text-sm text-text-muted text-center py-12">Loading form data…</div>
           )}
 
-          {!loadingData && (
+          {!loadingData && fc('incident', 'description').visible && (
             <div>
-              <h3 className="text-sm font-semibold text-text-primary mb-2">Description</h3>
+              <h3 className="text-sm font-semibold text-text-primary mb-2">
+                Description{fc('incident', 'description').mandatory && <span className="text-red-400 ml-0.5">*</span>}
+              </h3>
               <textarea
                 value={form.description}
                 onChange={sf('description')}
@@ -294,36 +300,39 @@ export function NewIncidentForm({ addToast }: Props) {
 
           {/* Properties */}
           <div className="flex flex-col gap-2.5">
-            <SbField label="Status">
-              <select value={form.statusCode} onChange={sf('statusCode')} className={sel}>
-                {INCIDENT_STATUSES.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Priority">
-              <select value={form.priorityCode} onChange={sf('priorityCode')} className={sel}>
-                {['critical', 'high', 'medium', 'low'].map(p => (
-                  <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                ))}
-              </select>
-            </SbField>
-            <SbField label="Severity">
-              <select value={form.severityCode} onChange={sf('severityCode')} className={sel}>
-                <option value="">— none —</option>
-                {severities.map(s => <option key={s.code} value={s.code}>{s.displayName}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Assignment Team" required>
-              <select value={form.groupSlug} onChange={sf('groupSlug')} className={sel}>
-                <option value="">— select —</option>
-                {groups.map(g => <option key={g.slug} value={g.slug}>{g.name}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Assigned To">
-              <select value={form.assigneeExtId} onChange={sf('assigneeExtId')} disabled={!form.groupSlug} className={sel}>
-                <option value="">— unassigned —</option>
-                {groupUsers.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
-              </select>
-            </SbField>
+            {fc('incident', 'priority').visible && (
+              <SbField label="Priority" required={fc('incident', 'priority').mandatory}>
+                <select value={form.priorityCode} onChange={sf('priorityCode')} className={sel}>
+                  {['critical', 'high', 'medium', 'low'].map(p => (
+                    <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                  ))}
+                </select>
+              </SbField>
+            )}
+            {fc('incident', 'severity').visible && (
+              <SbField label="Severity" required={fc('incident', 'severity').mandatory}>
+                <select value={form.severityCode} onChange={sf('severityCode')} className={sel}>
+                  <option value="">— none —</option>
+                  {severities.map(s => <option key={s.code} value={s.code}>{s.displayName}</option>)}
+                </select>
+              </SbField>
+            )}
+            {fc('incident', 'group').visible && (
+              <SbField label="Assignment Team" required={fc('incident', 'group').mandatory}>
+                <select value={form.groupSlug} onChange={sf('groupSlug')} className={sel}>
+                  <option value="">— select —</option>
+                  {groups.map(g => <option key={g.slug} value={g.slug}>{g.name}</option>)}
+                </select>
+              </SbField>
+            )}
+            {fc('incident', 'assignee').visible && (
+              <SbField label="Assigned To" required={fc('incident', 'assignee').mandatory}>
+                <select value={form.assigneeExtId} onChange={sf('assigneeExtId')} disabled={!form.groupSlug} className={sel}>
+                  <option value="">— unassigned —</option>
+                  {groupUsers.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
+                </select>
+              </SbField>
+            )}
             <SbField label="Problem">
               <select value={form.linkedProblemId} onChange={e => setForm(f => ({ ...f, linkedProblemId: e.target.value ? Number(e.target.value) : '' }))} className={sel}>
                 <option value="">— none —</option>
@@ -334,65 +343,83 @@ export function NewIncidentForm({ addToast }: Props) {
 
           {/* Caller / Contact */}
           <div className="flex flex-col gap-2.5">
-            <SbField label="Caller / Affected User" required>
-              <select value={form.callerExtId} onChange={sf('callerExtId')} className={sel}>
-                <option value="">— select —</option>
-                {users.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Contact Method">
-              <select value={form.contactMethodCode} onChange={sf('contactMethodCode')} className={sel}>
-                <option value="">— none —</option>
-                {contactMethods.map(cm => <option key={cm.code} value={cm.code}>{cm.displayName}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Location">
-              <input value={form.location} onChange={sf('location')} placeholder="e.g. HQ Floor 4" className={inp} />
-            </SbField>
+            {fc('incident', 'caller').visible && (
+              <SbField label="Caller / Affected User" required={fc('incident', 'caller').mandatory}>
+                <select value={form.callerExtId} onChange={sf('callerExtId')} className={sel}>
+                  <option value="">— select —</option>
+                  {users.map(u => <option key={u.externalId} value={u.externalId}>{u.displayName}</option>)}
+                </select>
+              </SbField>
+            )}
+            {fc('incident', 'contactMethod').visible && (
+              <SbField label="Contact Method" required={fc('incident', 'contactMethod').mandatory}>
+                <select value={form.contactMethodCode} onChange={sf('contactMethodCode')} className={sel}>
+                  <option value="">— none —</option>
+                  {contactMethods.map(cm => <option key={cm.code} value={cm.code}>{cm.displayName}</option>)}
+                </select>
+              </SbField>
+            )}
+            {fc('incident', 'location').visible && (
+              <SbField label="Location" required={fc('incident', 'location').mandatory}>
+                <input value={form.location} onChange={sf('location')} placeholder="e.g. HQ Floor 4" className={inp} />
+              </SbField>
+            )}
           </div>
 
           {/* Classification */}
           <div className="flex flex-col gap-2.5">
-            <SbField label="Service" required>
-              <select value={form.serviceSlug} onChange={sf('serviceSlug')} className={sel}>
-                <option value="">— select —</option>
-                {services.map(s => <option key={s.slug} value={s.slug}>{s.name}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Category" required>
-              <select value={form.categoryCode} onChange={sf('categoryCode')} disabled={!form.serviceSlug} className={sel}>
-                <option value="">— select —</option>
-                {filteredCategories.map(c => <option key={c.code} value={c.code}>{c.displayName}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Subcategory">
-              <select value={form.subCategoryCode} onChange={sf('subCategoryCode')} disabled={!form.categoryCode || subCategories.length === 0} className={sel}>
-                <option value="">— none —</option>
-                {subCategories.map(s => <option key={s.code} value={s.code}>{s.displayName}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Config Item">
-              <input value={form.ciAssetTag} onChange={sf('ciAssetTag')} placeholder="e.g. EXCH-NL-01" className={inp} />
-            </SbField>
+            {fc('incident', 'service').visible && (
+              <SbField label="Service" required={fc('incident', 'service').mandatory}>
+                <select value={form.serviceSlug} onChange={sf('serviceSlug')} className={sel}>
+                  <option value="">— select —</option>
+                  {services.map(s => <option key={s.slug} value={s.slug}>{s.name}</option>)}
+                </select>
+              </SbField>
+            )}
+            {fc('incident', 'category').visible && (
+              <SbField label="Category" required={fc('incident', 'category').mandatory}>
+                <select value={form.categoryCode} onChange={sf('categoryCode')} disabled={!form.serviceSlug} className={sel}>
+                  <option value="">— select —</option>
+                  {filteredCategories.map(c => <option key={c.code} value={c.code}>{c.displayName}</option>)}
+                </select>
+              </SbField>
+            )}
+            {fc('incident', 'subCategory').visible && (
+              <SbField label="Subcategory" required={fc('incident', 'subCategory').mandatory}>
+                <select value={form.subCategoryCode} onChange={sf('subCategoryCode')} disabled={!form.categoryCode || subCategories.length === 0} className={sel}>
+                  <option value="">— none —</option>
+                  {subCategories.map(s => <option key={s.code} value={s.code}>{s.displayName}</option>)}
+                </select>
+              </SbField>
+            )}
+            {fc('incident', 'ciAssetTag').visible && (
+              <SbField label="Config Item" required={fc('incident', 'ciAssetTag').mandatory}>
+                <input value={form.ciAssetTag} onChange={sf('ciAssetTag')} placeholder="e.g. EXCH-NL-01" className={inp} />
+              </SbField>
+            )}
           </div>
 
           {/* Resolution */}
           <div className="flex flex-col gap-2.5">
-            <SbField label="Resolution Code">
-              <select value={form.resolutionCodeCode} onChange={sf('resolutionCodeCode')} className={sel}>
-                <option value="">— none —</option>
-                {resolutionCodes.map(rc => <option key={rc.code} value={rc.code}>{rc.displayName}</option>)}
-              </select>
-            </SbField>
-            <SbField label="Resolution Notes">
-              <textarea
-                value={form.resolutionNotes}
-                onChange={sf('resolutionNotes')}
-                rows={3}
-                placeholder="How was this resolved?"
-                className={`${inp} resize-none`}
-              />
-            </SbField>
+            {fc('incident', 'resolutionCode').visible && (
+              <SbField label="Resolution Code" required={fc('incident', 'resolutionCode').mandatory}>
+                <select value={form.resolutionCodeCode} onChange={sf('resolutionCodeCode')} className={sel}>
+                  <option value="">— none —</option>
+                  {resolutionCodes.map(rc => <option key={rc.code} value={rc.code}>{rc.displayName}</option>)}
+                </select>
+              </SbField>
+            )}
+            {fc('incident', 'resolutionNotes').visible && (
+              <SbField label="Resolution Notes" required={fc('incident', 'resolutionNotes').mandatory}>
+                <textarea
+                  value={form.resolutionNotes}
+                  onChange={sf('resolutionNotes')}
+                  rows={3}
+                  placeholder="How was this resolved?"
+                  className={`${inp} resize-none`}
+                />
+              </SbField>
+            )}
           </div>
 
         </div>

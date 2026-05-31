@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle, Clock } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, Plus } from 'lucide-react'
 import { changeApi } from '../../api/changes'
 import { Badge } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
+import { useAppStore } from '../../store/appStore'
+import { ChangeDetailView } from './ChangeDetailView'
+import { NewChangeForm } from './NewChangeForm'
 import type { Change } from '../../types'
 
 const CHANGE_STEPS = ['draft', 'in_review', 'pending_approval', 'approved', 'scheduled', 'implementing', 'complete']
@@ -20,6 +23,26 @@ const typeVariant = (code: string) => code === 'emergency' ? 'critical' : code =
 interface Props { addToast: (t: string) => void }
 
 export function ChangesView({ addToast }: Props) {
+  const { openChangeId, showNewChange, openChange, setShowNewChange } = useAppStore()
+
+  if (openChangeId !== null)
+    return <ChangeDetailView changeId={openChangeId} addToast={addToast} />
+
+  if (showNewChange)
+    return <NewChangeForm addToast={addToast} />
+
+  return <ChangesList addToast={addToast} openChange={openChange} setShowNewChange={setShowNewChange} />
+}
+
+function ChangesList({
+  addToast,
+  openChange,
+  setShowNewChange,
+}: {
+  addToast: (t: string) => void
+  openChange: (id: number) => void
+  setShowNewChange: (v: boolean) => void
+}) {
   const [changes, setChanges] = useState<Change[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('')
@@ -28,8 +51,7 @@ export function ChangesView({ addToast }: Props) {
     setLoading(true)
     try {
       const state = tab && tab !== 'all' ? tab : undefined
-      const all = await changeApi.getAll(state)
-      setChanges(all)
+      setChanges(await changeApi.getAll(state))
     } finally {
       setLoading(false)
     }
@@ -37,7 +59,8 @@ export function ChangesView({ addToast }: Props) {
 
   useEffect(() => { load() }, [tab])
 
-  const vote = async (changeId: number, voteCode: string) => {
+  const vote = async (changeId: number, voteCode: string, e: React.MouseEvent) => {
+    e.stopPropagation()
     await changeApi.vote(changeId, 'me', voteCode)
     addToast(`Vote "${voteCode}" recorded`)
     load()
@@ -47,6 +70,12 @@ export function ChangesView({ addToast }: Props) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Change management</h1>
+        <button
+          onClick={() => setShowNewChange(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition-colors"
+        >
+          <Plus size={14} /> New Change
+        </button>
       </div>
 
       <div className="flex gap-1 border-b border-border-default">
@@ -62,7 +91,15 @@ export function ChangesView({ addToast }: Props) {
         <div className="py-12 text-center text-text-muted">Loading…</div>
       ) : (
         <div className="flex flex-col gap-3 list-font">
-          {changes.map((c, idx) => <ChangeCard key={c.changeId} change={c} onVote={vote} idx={idx} />)}
+          {changes.map((c, idx) => (
+            <ChangeCard
+              key={c.changeId}
+              change={c}
+              onVote={vote}
+              idx={idx}
+              onClick={() => openChange(c.changeId)}
+            />
+          ))}
           {changes.length === 0 && <div className="py-12 text-center text-text-muted">No changes found</div>}
         </div>
       )}
@@ -70,12 +107,25 @@ export function ChangesView({ addToast }: Props) {
   )
 }
 
-function ChangeCard({ change: c, onVote, idx }: { change: Change; onVote: (id: number, vote: string) => void; idx: number }) {
+function ChangeCard({
+  change: c,
+  onVote,
+  idx,
+  onClick,
+}: {
+  change: Change
+  onVote: (id: number, vote: string, e: React.MouseEvent) => void
+  idx: number
+  onClick: () => void
+}) {
   const currentStep = CHANGE_STEPS.indexOf(c.stateCode)
   const isRejected = c.stateCode === 'rejected'
 
   return (
-    <div className={`rounded-lg border border-border-default shadow-sm overflow-hidden ${idx % 2 === 1 ? 'bg-subtle' : 'bg-surface'}`}>
+    <div
+      onClick={onClick}
+      className={`rounded-lg border border-border-default shadow-sm overflow-hidden cursor-pointer hover:border-accent/40 hover:shadow-md transition-all ${idx % 2 === 1 ? 'bg-subtle' : 'bg-surface'}`}
+    >
       {/* Top strip */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border-default">
         <span className="tabular font-mono text-text-primary">{c.number}</span>
@@ -84,7 +134,7 @@ function ChangeCard({ change: c, onVote, idx }: { change: Change; onVote: (id: n
         <Badge variant="info">{c.stateName}</Badge>
         <span className="flex-1 font-medium text-text-primary">{c.title}</span>
         {c.scheduledStart && (
-          <span className="text-text-secondary flex items-center gap-1">
+          <span className="text-text-secondary flex items-center gap-1 text-xs">
             <Clock size={12} /> {new Date(c.scheduledStart).toLocaleDateString()}
             {c.scheduledEnd && <> – {new Date(c.scheduledEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}
           </span>
@@ -133,10 +183,10 @@ function ChangeCard({ change: c, onVote, idx }: { change: Change; onVote: (id: n
           <div className="text-xs text-text-tertiary mb-2 font-medium">Decision</div>
           {c.stateCode === 'pending_approval' && (
             <div className="flex gap-2">
-              <button onClick={() => onVote(c.changeId, 'approve')} className="flex items-center gap-1.5 px-2 py-1 bg-[#e6f4ec] text-[#1f8a4c] border border-[#b6dcc4] rounded text-xs hover:bg-[#d1eadb] transition-colors">
+              <button onClick={e => onVote(c.changeId, 'approve', e)} className="flex items-center gap-1.5 px-2 py-1 bg-[#e6f4ec] text-[#1f8a4c] border border-[#b6dcc4] rounded text-xs hover:bg-[#d1eadb] transition-colors">
                 <CheckCircle size={12} /> Approve
               </button>
-              <button onClick={() => onVote(c.changeId, 'reject')} className="flex items-center gap-1.5 px-2 py-1 bg-[#fdecec] text-[#c8252b] border border-[#f5c2c4] rounded text-xs hover:bg-[#fbd9d9] transition-colors">
+              <button onClick={e => onVote(c.changeId, 'reject', e)} className="flex items-center gap-1.5 px-2 py-1 bg-[#fdecec] text-[#c8252b] border border-[#f5c2c4] rounded text-xs hover:bg-[#fbd9d9] transition-colors">
                 <XCircle size={12} /> Reject
               </button>
             </div>

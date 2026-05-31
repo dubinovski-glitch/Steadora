@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { Priority, ContactMethod, Severity, ResolutionCode, CategoryLookup, SubCategoryLookup, Impact, Urgency } from '../types'
+import type { Priority, ContactMethod, Severity, ResolutionCode, CategoryLookup, SubCategoryLookup, Impact, Urgency, ChangeType, Risk, ChangeState } from '../types'
 
 export const lookupsApi = {
   getPriorities: () => api.get<Priority[]>('/lookups/priorities'),
@@ -10,4 +10,7 @@ export const lookupsApi = {
   getResolutionCodes: () => api.get<ResolutionCode[]>('/lookups/resolution-codes'),
   getImpacts: () => api.get<Impact[]>('/lookups/impacts'),
   getUrgencies: () => api.get<Urgency[]>('/lookups/urgencies'),
+  getChangeTypes: () => api.get<ChangeType[]>('/lookups/change-types'),
+  getRisks: () => api.get<Risk[]>('/lookups/risks'),
+  getChangeStates: () => api.get<ChangeState[]>('/lookups/change-states'),
 }

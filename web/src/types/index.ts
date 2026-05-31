@@ -209,7 +209,6 @@ export interface AdminSubCategory {
   categoryId: number
   code: string
   displayName: string
-  sortOrder: number
 }
 
 export interface AdminCategory {
@@ -218,7 +217,6 @@ export interface AdminCategory {
   serviceName?: string
   code: string
   displayName: string
-  sortOrder: number
   ticketCount: number
   subCategories: AdminSubCategory[]
 }
@@ -336,8 +334,30 @@ export interface ActivityEvent {
   occurredAt: string
 }
 
+export interface Workspace {
+  workspaceId: number
+  name: string
+  slug: string
+  description?: string
+  isDefault: boolean
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  fields: WorkspaceField[]
+  userIds: number[]
+}
+
+export interface WorkspaceField {
+  workspaceFieldId: number
+  workspaceId: number
+  entityType: string
+  fieldKey: string
+  isVisible: boolean
+  isMandatory: boolean
+}
+
 export type View = 'dashboard' | 'incidents' | 'problems' | 'changes' | 'knowledge' | 'sla' | 'admin'
-export type AdminSection = 'users' | 'teams' | 'categories' | 'roles' | 'services' | 'priority-matrix' | 'sla-policies' | 'business-hours' | 'workflow' | 'automations'
+export type AdminSection = 'users' | 'teams' | 'categories' | 'roles' | 'services' | 'priority-matrix' | 'sla-policies' | 'business-hours' | 'workflow' | 'automations' | 'workspaces'
 
 export interface IncidentStatus {
   statusId: number
@@ -419,6 +439,28 @@ export interface CurrentUser {
   roleCode: string
   roleDisplayName: string
   serviceIds: number[]
+}
+
+export interface ChangeType {
+  changeTypeId: number
+  code: string
+  displayName: string
+  sortOrder: number
+}
+
+export interface Risk {
+  riskId: number
+  code: string
+  displayName: string
+  sortOrder: number
+}
+
+export interface ChangeState {
+  stateId: number
+  code: string
+  displayName: string
+  isTerminal: boolean
+  sortOrder: number
 }
 
 export type PriorityCode = 'critical' | 'high' | 'medium' | 'low'

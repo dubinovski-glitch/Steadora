@@ -285,14 +285,14 @@ function ServiceModal({ svc, groups, slaTiers, onClose, onSaved }: ServiceModalP
 // CategoryModal — with Service dropdown
 interface CategoryModalProps { cat?: AdminCategory; defaultServiceId?: number; services: AdminService[]; onClose: () => void; onSaved: (msg: string) => void }
 function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: CategoryModalProps) {
-  const [form, setForm] = useState({ serviceId: String(cat?.serviceId ?? defaultServiceId ?? ''), code: cat?.code ?? '', displayName: cat?.displayName ?? '', sortOrder: String(cat?.sortOrder ?? 100) })
+  const [form, setForm] = useState({ serviceId: String(cat?.serviceId ?? defaultServiceId ?? ''), code: cat?.code ?? '', displayName: cat?.displayName ?? '' })
   const [saving, setSaving] = useState(false)
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
   const submit = async () => {
     if (!form.code.trim() || !form.displayName.trim()) return
     setSaving(true)
     try {
-      const body = { code: form.code, displayName: form.displayName, sortOrder: Number(form.sortOrder), serviceId: form.serviceId ? Number(form.serviceId) : undefined }
+      const body = { code: form.code, displayName: form.displayName, serviceId: form.serviceId ? Number(form.serviceId) : undefined }
       if (cat) { await adminApi.updateCategory(cat.categoryId, body); onSaved(`Updated category "${form.displayName}"`) }
       else { await adminApi.createCategory(body); onSaved(`Created category "${form.displayName}"`) }
     } finally { setSaving(false) }
@@ -321,10 +321,6 @@ function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: Ca
             <label className="block text-xs font-medium text-text-secondary mb-1">Code <span className="text-[#c8252b]">*</span></label>
             <input value={form.code} onChange={set('code')} placeholder="e.g. email" className="w-full px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus font-mono" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">Sort order</label>
-            <input value={form.sortOrder} onChange={set('sortOrder')} type="number" className="w-full px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus" />
-          </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border-default bg-subtle">
           <button onClick={onClose} className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-hover rounded-md transition-colors">Cancel</button>
@@ -338,14 +334,14 @@ function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: Ca
 // SubCategoryModal — category dropdown
 interface SubCategoryModalProps { sub?: AdminSubCategory; defaultCategoryId?: number; categories: AdminCategory[]; onClose: () => void; onSaved: (msg: string) => void }
 function SubCategoryModal({ sub, defaultCategoryId, categories, onClose, onSaved }: SubCategoryModalProps) {
-  const [form, setForm] = useState({ categoryId: String(sub?.categoryId ?? defaultCategoryId ?? categories[0]?.categoryId ?? ''), code: sub?.code ?? '', displayName: sub?.displayName ?? '', sortOrder: String(sub?.sortOrder ?? 100) })
+  const [form, setForm] = useState({ categoryId: String(sub?.categoryId ?? defaultCategoryId ?? categories[0]?.categoryId ?? ''), code: sub?.code ?? '', displayName: sub?.displayName ?? '' })
   const [saving, setSaving] = useState(false)
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
   const submit = async () => {
     if (!form.code.trim() || !form.displayName.trim() || !form.categoryId) return
     setSaving(true)
     try {
-      const body = { categoryId: Number(form.categoryId), code: form.code, displayName: form.displayName, sortOrder: Number(form.sortOrder) }
+      const body = { categoryId: Number(form.categoryId), code: form.code, displayName: form.displayName }
       if (sub) { await adminApi.updateSubCategory(sub.subCategoryId, body); onSaved(`Updated subcategory "${form.displayName}"`) }
       else { await adminApi.createSubCategory(body); onSaved(`Created subcategory "${form.displayName}"`) }
     } finally { setSaving(false) }
@@ -372,10 +368,6 @@ function SubCategoryModal({ sub, defaultCategoryId, categories, onClose, onSaved
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1">Code <span className="text-[#c8252b]">*</span></label>
             <input value={form.code} onChange={set('code')} className="w-full px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus font-mono" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">Sort order</label>
-            <input value={form.sortOrder} onChange={set('sortOrder')} type="number" className="w-full px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus" />
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border-default bg-subtle">

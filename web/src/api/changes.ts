@@ -5,6 +5,7 @@ export const changeApi = {
   getAll: (state?: string) => api.get<Change[]>(`/changes${state ? `?state=${state}` : ''}`),
   getById: (id: number) => api.get<Change>(`/changes/${id}`),
   create: (body: object) => api.post<{ id: number }>('/changes', body),
+  update: (id: number, body: object) => api.put(`/changes/${id}`, body),
   setState: (id: number, stateCode: string, actorUserId?: number) =>
     api.patch(`/changes/${id}/state`, { stateCode, actorUserId }),
   vote: (id: number, userExtId: string, voteCode: string, comment?: string) =>

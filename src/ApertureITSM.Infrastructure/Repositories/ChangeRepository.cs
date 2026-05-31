@@ -105,6 +105,39 @@ public class ChangeRepository(IDbConnectionFactory db) : IChangeRepository
         }
     }
 
+    public async Task UpdateAsync(long changeId, UpdateChangeRequest request)
+    {
+        string sql = "";
+        try
+        {
+            using var conn = db.Create();
+            sql = "SELECT ChangeTypeId FROM lookup.ChangeType WHERE Code=@c";
+            var typeId = await conn.ExecuteScalarAsync<byte>(sql, new { c = request.ChangeTypeCode });
+            sql = "SELECT RiskId FROM lookup.Risk WHERE Code=@c";
+            var riskId = await conn.ExecuteScalarAsync<byte>(sql, new { c = request.RiskCode });
+            sql = "SELECT UserId FROM core.[User] WHERE ExternalId=@e";
+            var ownerId = string.IsNullOrEmpty(request.OwnerExtId) ? (int?)null : await conn.ExecuteScalarAsync<int?>(sql, new { e = request.OwnerExtId });
+            var approverId = string.IsNullOrEmpty(request.ApproverExtId) ? (int?)null : await conn.ExecuteScalarAsync<int?>(sql, new { e = request.ApproverExtId });
+            sql = "SELECT GroupId FROM core.[Group] WHERE Slug=@s";
+            var groupId = string.IsNullOrEmpty(request.GroupSlug) ? (int?)null : await conn.ExecuteScalarAsync<int?>(sql, new { s = request.GroupSlug });
+            sql = """
+                UPDATE itil.[Change] SET
+                    Title=@title, Description=@desc, RolloutPlan=@rollout, RollbackPlan=@rollback, ImpactNotes=@impact,
+                    ChangeTypeId=@typeId, RiskId=@riskId, OwnerUserId=@ownerId, ApproverUserId=@approverId, GroupId=@groupId,
+                    CabName=@cab, ScheduledStart=@start, ScheduledEnd=@end, DowntimeEstimate=@downtime,
+                    UpdatedAt=SYSUTCDATETIME()
+                WHERE ChangeId=@changeId AND DeletedAt IS NULL
+                """;
+            await conn.ExecuteAsync(sql, new { changeId, title = request.Title, desc = request.Description, rollout = request.RolloutPlan, rollback = request.RollbackPlan, impact = request.ImpactNotes, typeId, riskId, ownerId, approverId, groupId, cab = request.CabName, start = request.ScheduledStart, end = request.ScheduledEnd, downtime = request.DowntimeEstimate });
+            log.Info($"Updated change {changeId}");
+        }
+        catch (Exception ex)
+        {
+            SqlLogger.LogError(log, $"Failed to update change {changeId}", sql, ex);
+            throw;
+        }
+    }
+
     public async Task UpdateStateAsync(long changeId, string stateCode, int? actorUserId)
     {
         string sql = "SELECT StateId FROM lookup.ChangeState WHERE Code=@stateCode";

@@ -82,6 +82,7 @@ builder.Services.AddScoped<ILookupRepository, LookupRepository>();
 builder.Services.AddScoped<ISlaRepository, SlaRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
+builder.Services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
 
 // Feature: Incidents
 if (features.GetValue<bool>("Incidents"))

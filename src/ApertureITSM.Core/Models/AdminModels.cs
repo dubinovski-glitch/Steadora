@@ -1,6 +1,6 @@
 namespace ApertureITSM.Core.Models;
 
-public record SubCategory(int SubCategoryId, int CategoryId, string Code, string DisplayName, int SortOrder);
+public record SubCategory(int SubCategoryId, int CategoryId, string Code, string DisplayName);
 
 public class CategoryWithSubs
 {
@@ -9,7 +9,6 @@ public class CategoryWithSubs
     public string? ServiceName { get; init; }
     public string Code { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
-    public int SortOrder { get; init; }
     public int TicketCount { get; init; }
     public List<SubCategory> SubCategories { get; init; } = [];
 }

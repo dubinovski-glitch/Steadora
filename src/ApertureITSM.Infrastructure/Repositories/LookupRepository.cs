@@ -68,14 +68,14 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
 
     public async Task<IEnumerable<Category>> GetCategoriesAsync()
     {
-        string sql = "SELECT CategoryId, ServiceId, Code, DisplayName, SortOrder FROM lookup.Category ORDER BY SortOrder";
+        string sql = "SELECT CategoryId, ServiceId, Code, DisplayName FROM lookup.Category ORDER BY DisplayName";
         try { using var conn = db.Create(); return await conn.QueryAsync<Category>(sql); }
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get categories", sql, ex); throw; }
     }
 
     public async Task<IEnumerable<SubCategory>> GetSubCategoriesAsync(int categoryId)
     {
-        string sql = "SELECT SubCategoryId, CategoryId, Code, DisplayName, SortOrder FROM lookup.SubCategory WHERE CategoryId=@categoryId ORDER BY SortOrder";
+        string sql = "SELECT SubCategoryId, CategoryId, Code, DisplayName FROM lookup.SubCategory WHERE CategoryId=@categoryId ORDER BY DisplayName";
         try { using var conn = db.Create(); return await conn.QueryAsync<SubCategory>(sql, new { categoryId }); }
         catch (Exception ex) { SqlLogger.LogError(log, $"Failed to get subcategories for category {categoryId}", sql, ex); throw; }
     }
