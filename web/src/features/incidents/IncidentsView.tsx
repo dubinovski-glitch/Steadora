@@ -251,7 +251,6 @@ export function IncidentsView({ addToast }: Props) {
           slaAtRisk:      tab === 'sla',
           unassigned:     tab === 'new',
           includeResolved: tab === 'resolved',
-          myGroupsOnly:   true,
           priority:       filterPriority || undefined,
           groupId:        filterGroupId || undefined,
           sortBy,

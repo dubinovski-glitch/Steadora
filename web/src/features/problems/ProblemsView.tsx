@@ -35,7 +35,7 @@ export function ProblemsView({ addToast: _addToast }: Props) {
 
   useEffect(() => {
     setLoading(true)
-    problemApi.getAll(includeResolved, true, page, PAGE_SIZE)
+    problemApi.getAll(includeResolved, false, page, PAGE_SIZE)
       .then(res => { setProblems(res.items); setTotal(res.total) })
       .finally(() => setLoading(false))
   }, [includeResolved, page])
