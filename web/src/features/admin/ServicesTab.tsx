@@ -1,3 +1,4 @@
+import { SkeletonRows } from '../../components/primitives/Skeleton'
 import React, { useState, useEffect } from 'react'
 import { Plus, MoreHorizontal, ChevronRight, ChevronDown, Pencil, Trash2 } from 'lucide-react'
 import { adminApi } from '../../api/admin'
@@ -74,7 +75,7 @@ export function ServicesTab({ addToast }: Props) {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-text-muted">Loading…</div>
+        <SkeletonRows rows={5} />
       ) : services.length === 0 ? (
         <div className="py-12 text-center text-text-muted">No services yet</div>
       ) : (

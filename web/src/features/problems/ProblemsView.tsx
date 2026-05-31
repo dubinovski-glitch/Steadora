@@ -4,6 +4,7 @@ import { problemApi } from '../../api/problems'
 import { Badge, priorityVariant } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
 import { Pagination } from '../../components/primitives/Pagination'
+import { SkeletonRows } from '../../components/primitives/Skeleton'
 import { useAppStore } from '../../store/appStore'
 import type { Problem } from '../../types'
 
@@ -78,7 +79,9 @@ export function ProblemsView({ addToast: _addToast }: Props) {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-text-muted">Loading…</div>
+        <div className="bg-surface rounded-lg border border-border-default shadow-sm overflow-hidden">
+          <SkeletonRows rows={6} cols={['w-14', 'flex-1', 'w-24', 'w-20', 'w-16']} />
+        </div>
       ) : (
         <>
           <ProblemGroup title="Active problems" items={active} onOpen={openProblem} />

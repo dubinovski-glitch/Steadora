@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Search, Pin, ThumbsUp, Eye } from 'lucide-react'
 import { kbApi } from '../../api/knowledge'
+import { SkeletonArticleGrid } from '../../components/primitives/Skeleton'
 import type { KbArticle, KbCategory } from '../../types'
 
 export function KnowledgeView() {
@@ -65,7 +66,7 @@ export function KnowledgeView() {
         </div>
 
         {loading ? (
-          <div className="py-12 text-center text-text-muted">Loading…</div>
+          <SkeletonArticleGrid cards={6} />
         ) : (
           <>
             {/* Pinned hero */}

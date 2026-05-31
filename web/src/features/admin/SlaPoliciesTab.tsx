@@ -1,3 +1,4 @@
+import { SkeletonRows } from '../../components/primitives/Skeleton'
 import { useState, useEffect } from 'react'
 import { Plus, Bell } from 'lucide-react'
 import { adminApi } from '../../api/admin'
@@ -94,7 +95,7 @@ export function SlaPoliciesTab({ addToast }: Props) {
     setEditTargets(prev => prev.map(t => t.priorityId === priorityId ? { ...t, [field]: minutes } : t))
   }
 
-  if (loading) return <div className="py-12 text-center text-text-muted">Loading…</div>
+  if (loading) return <SkeletonRows rows={5} />
 
   return (
     <div className="flex flex-col gap-4">

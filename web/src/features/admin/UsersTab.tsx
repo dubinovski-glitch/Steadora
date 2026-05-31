@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { UserPlus, Eye, EyeOff, X } from 'lucide-react'
 import { adminApi } from '../../api/admin'
+import { SkeletonTableRows } from '../../components/primitives/Skeleton'
 import type { User, Group, Role, AdminService } from '../../types'
 
 interface Props { addToast: (msg: string) => void }
@@ -233,7 +234,7 @@ export function UsersTab({ addToast }: Props) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="py-12 text-center text-text-muted">Loading…</td></tr>
+                <SkeletonTableRows rows={5} cols={5} />
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={5} className="py-12 text-center text-text-muted">No users found</td></tr>
               ) : filtered.map(u => {

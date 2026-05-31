@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react'
 import { problemApi } from '../../api/problems'
 import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
+import { SkeletonInline } from '../../components/primitives/Skeleton'
 import type { User, Group } from '../../types'
 
 interface Props { addToast: (t: string) => void }
@@ -144,7 +145,7 @@ export function NewProblemForm({ addToast }: Props) {
 
         {/* Scrollable body */}
         <div className="px-6 py-5 flex flex-col gap-6 flex-1">
-          {loadingData && <div className="text-sm text-text-muted text-center py-12">Loading…</div>}
+          {loadingData && <SkeletonInline rows={3} />}
 
           {!loadingData && (
             <>

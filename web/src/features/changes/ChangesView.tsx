@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, Clock, Plus } from 'lucide-react'
 import { changeApi } from '../../api/changes'
 import { Badge } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
+import { SkeletonCards } from '../../components/primitives/Skeleton'
 import { useAppStore } from '../../store/appStore'
 import { ChangeDetailView } from './ChangeDetailView'
 import { NewChangeForm } from './NewChangeForm'
@@ -88,7 +89,7 @@ function ChangesList({
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-text-muted">Loading…</div>
+        <SkeletonCards cards={4} cols={3} />
       ) : (
         <div className="flex flex-col gap-3 list-font">
           {changes.map((c, idx) => (

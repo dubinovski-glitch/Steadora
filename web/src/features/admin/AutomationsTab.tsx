@@ -1,3 +1,4 @@
+import { SkeletonRows } from '../../components/primitives/Skeleton'
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, MoreHorizontal } from 'lucide-react'
 import { adminApi } from '../../api/admin'
@@ -49,7 +50,7 @@ export function AutomationsTab({ addToast }: Props) {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-text-muted">Loading…</div>
+        <SkeletonRows rows={5} />
       ) : automations.length === 0 ? (
         <div className="py-12 text-center text-text-muted">No automation rules yet</div>
       ) : (

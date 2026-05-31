@@ -1,3 +1,4 @@
+import { SkeletonRows } from '../../components/primitives/Skeleton'
 import { useState, useEffect } from 'react'
 import { ArrowRight, Plus, GitBranch } from 'lucide-react'
 import { api } from '../../api/client'
@@ -27,7 +28,7 @@ export function WorkflowTab({ addToast: _addToast }: Props) {
     return 'border-accent text-accent bg-accent-subtle'
   }
 
-  if (loading) return <div className="py-12 text-center text-text-muted">Loading…</div>
+  if (loading) return <SkeletonRows rows={5} />
 
   return (
     <div className="flex flex-col gap-4">

@@ -7,6 +7,7 @@ import { useAppStore } from '../../store/appStore'
 import { useAuthStore } from '../../store/authStore'
 import { Badge } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
+import { SkeletonDetail } from '../../components/primitives/Skeleton'
 import type { Change, Comment, User, Group, ChangeType, Risk, ChangeState } from '../../types'
 
 const CHANGE_STEPS = ['draft', 'in_review', 'pending_approval', 'approved', 'scheduled', 'implementing', 'complete']
@@ -188,7 +189,7 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
     setChange(updated); setEdit(toEdit(updated))
   }
 
-  if (!change || !edit) return <div className="flex items-center justify-center h-64 text-text-muted">Loading…</div>
+  if (!change || !edit) return <SkeletonDetail />
 
   const isTerminal = change.stateCode === 'complete' || change.stateCode === 'rejected'
   const dis = isTerminal || saving

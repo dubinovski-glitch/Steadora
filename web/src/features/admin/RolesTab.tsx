@@ -1,3 +1,4 @@
+import { SkeletonRows } from '../../components/primitives/Skeleton'
 import { useState, useEffect } from 'react'
 import { Shield, Pencil } from 'lucide-react'
 import { adminApi } from '../../api/admin'
@@ -68,7 +69,7 @@ export function RolesTab({ addToast }: Props) {
 
       {/* Role cards */}
       {loading ? (
-        <div className="py-12 text-center text-text-muted">Loading…</div>
+        <SkeletonRows rows={5} />
       ) : error ? (
         <div className="py-12 text-center">
           <p className="text-sm text-[#c8252b] mb-3">{error}</p>

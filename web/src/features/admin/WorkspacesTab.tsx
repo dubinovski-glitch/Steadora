@@ -1,3 +1,4 @@
+import { SkeletonRows } from '../../components/primitives/Skeleton'
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Check } from 'lucide-react'
 import { workspaceApi } from '../../api/workspaces'
@@ -181,7 +182,7 @@ export function WorkspacesTab({ addToast }: Props) {
 
   const inp = `text-sm border border-border-default rounded px-2 py-1.5 focus:outline-none focus:border-border-focus bg-surface text-text-primary`
 
-  if (loading) return <div className="py-12 text-center text-text-muted text-sm">Loading…</div>
+  if (loading) return <SkeletonRows rows={4} cols={['w-32', 'flex-1', 'w-20']} />
 
   return (
     <div className="flex gap-5 min-h-0 h-full">

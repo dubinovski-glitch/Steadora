@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ArrowLeft, Star, Share2, Lock, Eye, EyeOff } from 'lucide-react'
+import { SkeletonDetail } from '../../components/primitives/Skeleton'
 import { incidentApi } from '../../api/incidents'
 import { problemApi } from '../../api/problems'
 import { adminApi } from '../../api/admin'
@@ -288,7 +289,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     return `${Math.floor(hrs / 24)}d`
   }, [timeline, incident])
 
-  if (!incident || !edit) return <div className="flex items-center justify-center h-64 text-text-muted">Loading…</div>
+  if (!incident || !edit) return <SkeletonDetail />
 
   const isClosed = incident.statusCode === 'closed'
   const dis = readOnly || isClosed || saving
