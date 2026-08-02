@@ -4,6 +4,9 @@ import { fetchWorkspacesForUser, fetchWorkspace } from '../../api/workspaces'
 import { useAuthStore } from '../../store/authStore'
 import type { CurrentUser, Workspace } from '../../types'
 
+// Two-step login screen: step 1 collects credentials; if the authenticated user
+// belongs to multiple workspaces, step 2 lets them pick one before entering the
+// app. Renders the brand header, an error banner, and the active step's form.
 export function LoginPage() {
   // Step 1 — credentials
   const [username, setUsername] = useState('')
@@ -66,6 +69,7 @@ export function LoginPage() {
     }
   }
 
+  // Return to the credentials step, clearing any pending auth/workspace state.
   const goBack = () => {
     setStep('credentials')
     setError(null)

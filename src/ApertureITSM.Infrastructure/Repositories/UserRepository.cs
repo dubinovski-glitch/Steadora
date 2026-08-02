@@ -6,10 +6,15 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
+/// <summary>
+/// Read-only directory data used to populate pickers and reference lists across the app: users,
+/// their group memberships, groups, services, and configuration items (CIs).
+/// </summary>
 public class UserRepository(IDbConnectionFactory db) : IUserRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(UserRepository));
 
+    /// <summary>Returns all active users (with role code) ordered by display name, e.g. for assignee pickers.</summary>
     public async Task<IEnumerable<User>> GetAllAsync()
     {
         string sql = """
@@ -32,6 +37,7 @@ public class UserRepository(IDbConnectionFactory db) : IUserRepository
         }
     }
 
+    /// <summary>Returns the active members of a single group (identified by slug), for group-scoped pickers.</summary>
     public async Task<IEnumerable<User>> GetByGroupSlugAsync(string groupSlug)
     {
         string sql = """
@@ -57,6 +63,7 @@ public class UserRepository(IDbConnectionFactory db) : IUserRepository
         }
     }
 
+    /// <summary>Resolves a single user by their stable external id (the identifier used in API requests).</summary>
     public async Task<User?> GetByExternalIdAsync(string externalId)
     {
         string sql = """
@@ -79,6 +86,7 @@ public class UserRepository(IDbConnectionFactory db) : IUserRepository
         }
     }
 
+    /// <summary>Returns the ids of the groups a user belongs to, used to scope "my group" queue filters.</summary>
     public async Task<int[]> GetGroupIdsAsync(int userId)
     {
         const string sql = "SELECT GroupId FROM core.UserGroup WHERE UserId = @userId";
@@ -95,6 +103,7 @@ public class UserRepository(IDbConnectionFactory db) : IUserRepository
         }
     }
 
+    /// <summary>Returns active groups each with a computed count of active members, for group lists/pickers.</summary>
     public async Task<IEnumerable<Group>> GetGroupsAsync()
     {
         string sql = """
@@ -120,6 +129,10 @@ public class UserRepository(IDbConnectionFactory db) : IUserRepository
         }
     }
 
+    /// <summary>
+    /// Returns active services with owning group and health, plus a computed OpenIncidentCount per service
+    /// (the correlated subquery counts non-terminal, non-deleted incidents).
+    /// </summary>
     public async Task<IEnumerable<Service>> GetServicesAsync()
     {
         string sql = """
@@ -144,6 +157,7 @@ public class UserRepository(IDbConnectionFactory db) : IUserRepository
         }
     }
 
+    /// <summary>Returns active configuration items (CIs) with owner display name, for CI reference pickers.</summary>
     public async Task<IEnumerable<ConfigurationItem>> GetConfigurationItemsAsync()
     {
         string sql = """

@@ -1,11 +1,16 @@
 import { api } from './client'
 import type { Incident, Problem } from '../types'
 
+// One page of problems plus paging metadata.
 export interface ProblemPage { items: Problem[]; total: number; page: number; pageSize: number }
 
+// Problem CRUD + workflow endpoints (state transitions, comments, timeline, linked incidents, watchers).
 export const problemApi = {
-  getAll: (includeResolved = false, myGroupsOnly = false, page = 1, pageSize = 25) =>
-    api.get<ProblemPage>(`/problems?includeResolved=${includeResolved}&myGroupsOnly=${myGroupsOnly}&page=${page}&pageSize=${pageSize}`),
+  // Paged problem list with resolved/my-groups/assigned-to-me filters.
+  getAll: (includeResolved = false, myGroupsOnly = false, page = 1, pageSize = 25, assignedToMe = false) =>
+    api.get<ProblemPage>(`/problems?includeResolved=${includeResolved}&myGroupsOnly=${myGroupsOnly}&assignedToMe=${assignedToMe}&page=${page}&pageSize=${pageSize}`),
+  // Convenience: fetch effectively all problems (large page size) and return just the items array,
+  // e.g. for dropdowns where paging isn't needed.
   getAllItems: (includeResolved = false) =>
     api.get<ProblemPage>(`/problems?includeResolved=${includeResolved}&myGroupsOnly=false&page=1&pageSize=1000`).then(r => r.items),
   getById: (id: number) => api.get<Problem>(`/problems/${id}`),

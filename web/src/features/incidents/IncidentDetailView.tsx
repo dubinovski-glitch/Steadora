@@ -11,6 +11,7 @@ import { useAuthStore } from '../../store/authStore'
 import { Badge, priorityVariant, statusVariant } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
 import { SlaBar } from '../../components/primitives/SlaBar'
+import { modKey, modEnter } from '../../utils/platform'
 import type {
   Incident, Comment, ActivityEvent,
   User, Group, Service, AdminCategory, AdminSubCategory,
@@ -43,6 +44,8 @@ interface EditState {
   linkedProblemId: number | ''
 }
 
+// Map a loaded Incident into the editable form state. Slug/code fields (service, group,
+// caller, assignee, category) start empty and are seeded later once lookups resolve.
 function toEdit(i: Incident): EditState {
   return {
     title: i.title ?? '', description: i.description ?? '',
@@ -61,6 +64,12 @@ type ActivityItem = { at: string } & (
   | { type: 'event'; event: ActivityEvent }
 )
 
+// Detail/edit view for a single incident. Left pane shows the editable title/description,
+// note composer, change log and a merged activity timeline; right pane is the properties
+// sidebar (status, priority, assignment, classification, resolution, dates) plus save and
+// watch/subscribe controls. Loads the incident + comments + timeline + lookups, auto-
+// refreshes every 30s without clobbering unsaved edits, and supports ⌘/Ctrl+S to save.
+// `readOnly` (and closed incidents) disable editing.
 export function IncidentDetailView({ incidentId, addToast, readOnly = false, onBack }: Props) {
   const { closeIncident } = useAppStore()
   const { user: authUser } = useAuthStore()
@@ -85,6 +94,8 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
   const [groupUsers, setGroupUsers] = useState<User[]>([])
   const [problems, setProblems] = useState<Problem[]>([])
 
+  // Initial load: fetch the incident plus all related data (comments, timeline, lookups,
+  // watchers) in parallel, seed the edit form, and compute the current user's watch state.
   useEffect(() => {
     Promise.all([
       incidentApi.getById(incidentId),
@@ -130,7 +141,8 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     return () => clearInterval(id)
   }, [incidentId])
 
-  // Seed slug/code fields once lookups are available
+  // Seed slug/code fields once lookups are available — resolves the incident's display
+  // names (service, group, caller, assignee) back into the slug/externalId the selects need.
   useEffect(() => {
     if (!incident || !services.length || !groups.length || !users.length) return
     setEdit(prev => {
@@ -148,6 +160,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     })
   }, [incident, services, groups, users])
 
+  // Seed the category code from the incident's category display name once categories load
   useEffect(() => {
     if (!incident || !categories.length) return
     setEdit(prev => {
@@ -157,12 +170,14 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     })
   }, [incident, categories])
 
+  // Recompute the subcategory options whenever the selected category changes
   useEffect(() => {
     if (!edit?.categoryCode) { setSubCategories([]); return }
     const cat = categories.find(c => c.code === edit.categoryCode)
     setSubCategories(cat?.subCategories ?? [])
   }, [edit?.categoryCode, categories])
 
+  // Load the selected group's members for the Assignee dropdown
   useEffect(() => {
     if (!edit?.groupSlug) { setGroupUsers([]); return }
     api.get<User[]>(`/users?groupSlug=${encodeURIComponent(edit.groupSlug)}`)
@@ -182,12 +197,16 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     return () => window.removeEventListener('keydown', handle)
   }, [edit, incident, readOnly])
 
+  // Curried onChange factory: updates edit field `k` and marks the form dirty
   const sf = <K extends keyof EditState>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       setEdit(prev => prev ? { ...prev, [k]: e.target.value } : prev)
       setIsDirty(true)
     }
 
+  // Persist edits: PATCH the incident fields, then (if changed) apply a status transition
+  // and/or link a problem separately, re-fetch the fresh record/comments/timeline, and
+  // clear the dirty flag.
   const save = async () => {
     if (!edit || !incident) return
     setSaving(true)
@@ -225,6 +244,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     } finally { setSaving(false) }
   }
 
+  // Post a new note/comment, clear the composer, and refresh comments + timeline
   const submitNote = async () => {
     if (!noteBody.trim()) return
     await incidentApi.postComment(incidentId, authUser?.externalId ?? '', noteBody, true)
@@ -238,6 +258,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     setTimeline(updatedTimeline)
   }
 
+  // Subscribe/unsubscribe the current user to the incident, optimistically updating the count
   const toggleWatch = async () => {
     if (!authUser) return
     try {
@@ -255,6 +276,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     } catch { addToast('Failed to update subscription') }
   }
 
+  // Merge comments and non-comment timeline events into one chronological activity feed
   const activityItems = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [
       ...comments.map(c => ({ type: 'comment' as const, at: c.createdAt, comment: c })),
@@ -263,6 +285,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     return items.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
   }, [comments, timeline])
 
+  // Field-change events only, newest first — drives the Change Log table
   const changeLog = useMemo(() =>
     [...timeline]
       .filter(e => e.kind === 'field_changed' && e.field)
@@ -295,12 +318,16 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
   const dis = readOnly || isClosed || saving
 
   const filteredCats = edit.serviceSlug
-    ? categories.filter(c => { const s = services.find(x => x.slug === edit.serviceSlug); return s ? c.serviceId === s.serviceId : true })
+    // Show categories scoped to the selected service AND global categories (serviceId == null),
+    // which apply to every service. Without the null check the list empties for services that
+    // have no scoped categories, hiding the incident's own category.
+    ? categories.filter(c => { const s = services.find(x => x.slug === edit.serviceSlug); return s ? (c.serviceId === s.serviceId || c.serviceId == null) : true })
     : categories
 
   const sel = `w-full text-sm font-medium text-text-primary bg-surface border border-border-default rounded px-2 py-1.5 focus:outline-none focus:border-border-focus disabled:opacity-50 disabled:cursor-not-allowed`
   const inp = `w-full text-sm font-medium text-text-primary bg-surface border border-border-default rounded px-2 py-1.5 focus:outline-none focus:border-border-focus disabled:opacity-50 disabled:cursor-not-allowed`
 
+  // Short relative time ("5m ago"); coerces naive timestamps to UTC before comparing
   const relative = (iso: string) => {
     const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
     const diff = Date.now() - new Date(utc).getTime()
@@ -312,6 +339,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     return `${Math.floor(h / 24)}d ago`
   }
 
+  // Absolute date+time label, omitting the year when it's the current year
   const formatDate = (iso: string) => {
     const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
     const d = new Date(utc)
@@ -323,6 +351,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
     })
   }
 
+  // "Mon D, h:mm" label used for change-log and activity rows (adds year if not current)
   const formatActivityTime = (iso: string) => {
     const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
     const d = new Date(utc)
@@ -447,7 +476,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
                 className="w-full px-3 py-2 text-sm text-text-primary bg-surface resize-none focus:outline-none"
               />
               <div className="flex items-center justify-between px-3 py-2 bg-subtle">
-                <span className="text-xs text-text-muted">⌘+⏎ to add</span>
+                <span className="text-xs text-text-muted">{modEnter} to add</span>
                 <button
                   onClick={submitNote}
                   disabled={isClosed}
@@ -574,7 +603,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
                   ? 'bg-accent hover:bg-accent-hover ring-2 ring-accent/30'
                   : 'bg-accent hover:bg-accent-hover disabled:opacity-40'
               }`}
-              title={isDirty ? 'You have unsaved changes (⌘S)' : 'No changes (⌘S)'}
+              title={isDirty ? `You have unsaved changes (${modKey}S)` : `No changes (${modKey}S)`}
             >
               {saving ? 'Saving…' : isDirty ? 'Save Changes ●' : 'Save Changes'}
             </button>
@@ -727,6 +756,7 @@ export function IncidentDetailView({ incidentId, addToast, readOnly = false, onB
 
 /* ── Sidebar primitives ── */
 
+// Labelled wrapper for an editable properties-sidebar field
 function SbField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -736,6 +766,7 @@ function SbField({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
+// Read-only label/value row for derived dates and counters in the sidebar
 function SbInfo({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-0.5">

@@ -7,10 +7,16 @@ using System.Text.RegularExpressions;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
+/// <summary>
+/// Manages workspaces — the multi-tenancy boundary that isolates one tenant's data from another.
+/// Handles workspace CRUD plus their per-workspace configuration: visible/mandatory field overrides
+/// and user membership. Each returned workspace is "enriched" with its fields and member ids.
+/// </summary>
 public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(WorkspaceRepository));
 
+    /// <summary>Returns every workspace (default first, then by name), each enriched with fields and members.</summary>
     public async Task<IEnumerable<Workspace>> GetAllAsync()
     {
         const string sql = "SELECT * FROM core.Workspace ORDER BY IsDefault DESC, Name";
@@ -24,6 +30,7 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
         catch (Exception ex) { log.Error("Failed to get workspaces", ex); throw; }
     }
 
+    /// <summary>Returns a single workspace by id (enriched with its fields and members), or null if missing.</summary>
     public async Task<Workspace?> GetByIdAsync(int workspaceId)
     {
         const string sql = "SELECT * FROM core.Workspace WHERE WorkspaceId=@workspaceId";
@@ -38,6 +45,10 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
         catch (Exception ex) { log.Error($"Failed to get workspace {workspaceId}", ex); throw; }
     }
 
+    /// <summary>
+    /// Returns the active workspaces a user may switch between; if they have no explicit assignments,
+    /// falls back to the single default workspace so every user always has at least one.
+    /// </summary>
     public async Task<IEnumerable<Workspace>> GetForUserAsync(int userId)
     {
         try
@@ -65,6 +76,10 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
         catch (Exception ex) { log.Error($"Failed to get workspaces for user {userId}", ex); throw; }
     }
 
+    /// <summary>
+    /// Creates a new (non-default) workspace with a unique slug, then seeds its field configuration by
+    /// copying the default workspace's field set so it starts with sensible defaults. Returns the new id.
+    /// </summary>
     public async Task<int> CreateAsync(CreateWorkspaceRequest request)
     {
         try
@@ -106,6 +121,11 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
         catch (Exception ex) { log.Error($"Failed to create workspace: {request.Name}", ex); throw; }
     }
 
+    /// <summary>
+    /// Updates a workspace's name/description (and active flag for non-default workspaces). The two
+    /// statements are mutually exclusive by IsDefault: the default workspace can be renamed but never
+    /// deactivated.
+    /// </summary>
     public async Task UpdateAsync(int workspaceId, UpdateWorkspaceRequest request)
     {
         try
@@ -129,6 +149,10 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
         catch (Exception ex) { log.Error($"Failed to update workspace {workspaceId}", ex); throw; }
     }
 
+    /// <summary>
+    /// Upserts per-workspace field visibility/mandatory overrides. Each field is MERGEd so existing
+    /// rows are updated and new ones inserted in a single statement.
+    /// </summary>
     public async Task SetFieldsAsync(int workspaceId, IEnumerable<SetWorkspaceFieldRequest> fields)
     {
         try
@@ -136,6 +160,7 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
             using var conn = db.Create();
             foreach (var f in fields)
             {
+                // Upsert each field config row keyed by (workspace, entity type, field key).
                 await conn.ExecuteAsync("""
                     MERGE core.WorkspaceField AS tgt
                     USING (SELECT @workspaceId AS WorkspaceId, @entityType AS EntityType, @fieldKey AS FieldKey) AS src
@@ -152,11 +177,16 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
         catch (Exception ex) { log.Error($"Failed to set fields for workspace {workspaceId}", ex); throw; }
     }
 
+    /// <summary>
+    /// Replaces a workspace's membership with the supplied set of users (delete-then-insert), so the
+    /// final list exactly matches <paramref name="userIds"/>.
+    /// </summary>
     public async Task SetUsersAsync(int workspaceId, IEnumerable<int> userIds)
     {
         try
         {
             using var conn = db.Create();
+            // Clear existing membership, then re-insert the desired set (full replace).
             await conn.ExecuteAsync(
                 "DELETE FROM core.WorkspaceUser WHERE WorkspaceId=@workspaceId", new { workspaceId });
             if (userIds.Any())
@@ -168,11 +198,13 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
         catch (Exception ex) { log.Error($"Failed to set users for workspace {workspaceId}", ex); throw; }
     }
 
+    /// <summary>Deletes a workspace; the IsDefault=0 guard prevents removing the default workspace.</summary>
     public async Task DeleteAsync(int workspaceId)
     {
         try
         {
             using var conn = db.Create();
+            // Guard: never delete the default workspace.
             await conn.ExecuteAsync(
                 "DELETE FROM core.Workspace WHERE WorkspaceId=@workspaceId AND IsDefault=0",
                 new { workspaceId });
@@ -181,6 +213,8 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
         catch (Exception ex) { log.Error($"Failed to delete workspace {workspaceId}", ex); throw; }
     }
 
+    // Batch-loads child collections (fields + member ids) for all given workspaces in two queries
+    // and stitches them back onto each workspace, avoiding an N+1 query per workspace.
     private static async Task EnrichAsync(System.Data.IDbConnection conn, List<Workspace> workspaces)
     {
         if (workspaces.Count == 0) return;
@@ -201,6 +235,7 @@ public class WorkspaceRepository(IDbConnectionFactory db) : IWorkspaceRepository
         }
     }
 
+    // Builds a URL-safe slug from a workspace name (lowercase, non-alphanumerics collapsed to dashes).
     private static string MakeSlug(string name)
         => Regex.Replace(name.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
 }

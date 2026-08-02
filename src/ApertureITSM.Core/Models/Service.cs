@@ -1,5 +1,9 @@
 namespace ApertureITSM.Core.Models;
 
+/// <summary>
+/// A business or technical service offered in the catalog, with its owning group, current health
+/// status, and associated SLA tier.
+/// </summary>
 public class Service
 {
     public int ServiceId { get; init; }
@@ -16,6 +20,10 @@ public class Service
     public int OpenIncidentCount { get; init; }
 }
 
+/// <summary>
+/// A configuration item (CI) in the CMDB: a tracked asset such as hardware or software,
+/// identified by its asset tag and described by type, environment, and region.
+/// </summary>
 public class ConfigurationItem
 {
     public int CiId { get; init; }

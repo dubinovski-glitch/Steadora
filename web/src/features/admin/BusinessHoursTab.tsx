@@ -8,6 +8,8 @@ interface Props { addToast: (msg: string) => void }
 
 const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
+// Business hours admin tab: lets admins pick a calendar, edit the 7-day working schedule,
+// and manage public holidays — all used for SLA time calculations.
 export function BusinessHoursTab({ addToast }: Props) {
   const [calendars, setCalendars] = useState<BusinessCalendar[]>([])
   const [selected, setSelected] = useState<BusinessCalendar | null>(null)
@@ -17,6 +19,7 @@ export function BusinessHoursTab({ addToast }: Props) {
   const [holidayModal, setHolidayModal] = useState(false)
   const [newCalModal, setNewCalModal] = useState(false)
 
+  // Fetch all calendars; on first load auto-select the default (or first) calendar.
   const load = () => {
     setLoading(true)
     adminApi.getBusinessCalendars().then(data => {
@@ -28,8 +31,10 @@ export function BusinessHoursTab({ addToast }: Props) {
     }).finally(() => setLoading(false))
   }
 
+  // Load calendars once on mount.
   useEffect(() => { load() }, [])
 
+  // Select a calendar and normalise its days into a full Mon–Sun (1–7) editable array.
   const selectCal = (cal: BusinessCalendar) => {
     setSelected(cal)
     // Ensure all 7 days present
@@ -41,10 +46,12 @@ export function BusinessHoursTab({ addToast }: Props) {
     setEditDays(days)
   }
 
+  // Update a single day's start/end time in the editable schedule.
   const setDayField = (dayOfWeek: number, field: 'startTime' | 'endTime', value: string) => {
     setEditDays(prev => prev.map(d => d.dayOfWeek === dayOfWeek ? { ...d, [field]: value || undefined } : d))
   }
 
+  // Toggle a day active/inactive: inactive clears times, active seeds default 08:00–18:00.
   const toggleDay = (dayOfWeek: number) => {
     setEditDays(prev => prev.map(d => {
       if (d.dayOfWeek !== dayOfWeek) return d
@@ -53,6 +60,7 @@ export function BusinessHoursTab({ addToast }: Props) {
     }))
   }
 
+  // Persist the edited weekly schedule for the selected calendar, then reload.
   const handleSaveDays = async () => {
     if (!selected) return
     setSavingDays(true)
@@ -71,6 +79,7 @@ export function BusinessHoursTab({ addToast }: Props) {
     }
   }
 
+  // Remove a holiday from the calendar, then reload to refresh the chip list.
   const handleDeleteHoliday = async (h: BusinessHoliday) => {
     try {
       await adminApi.deleteHoliday(h.holidayId)
@@ -252,10 +261,12 @@ export function BusinessHoursTab({ addToast }: Props) {
   )
 }
 
+// Modal to add a single holiday (date + name) to a calendar.
 function HolidayModal({ calendarId, onClose, onSaved }: { calendarId: number; onClose: () => void; onSaved: (msg: string) => void }) {
   const [form, setForm] = useState({ holidayDate: '', name: '' })
   const [saving, setSaving] = useState(false)
 
+  // Validate date and name, then add the holiday via the API.
   const submit = async () => {
     if (!form.holidayDate || !form.name.trim()) return
     setSaving(true)
@@ -296,10 +307,12 @@ function HolidayModal({ calendarId, onClose, onSaved }: { calendarId: number; on
   )
 }
 
+// Modal to create a new business calendar (name + timezone).
 function NewCalendarModal({ onClose, onSaved }: { onClose: () => void; onSaved: (msg: string) => void }) {
   const [form, setForm] = useState({ name: '', timezone: 'UTC' })
   const [saving, setSaving] = useState(false)
 
+  // Validate the name, then create the calendar via the API.
   const submit = async () => {
     if (!form.name.trim()) return
     setSaving(true)

@@ -67,6 +67,11 @@ const INITIAL: FormState = {
   linkedProblemId: '',
 }
 
+// Full-page "New Incident" form: a left description pane and a right properties sidebar.
+// Loads all lookup data up front, honours per-workspace field config (visible/mandatory)
+// via useWorkspaceFields, cascades Service → Category → Subcategory and Group → Assignee,
+// validates mandatory fields, then creates the incident (optionally linking a problem)
+// and closes back to the list.
 export function NewIncidentForm({ addToast }: Props) {
   const { setShowNewIncident } = useAppStore()
   const { user: authUser } = useAuthStore()
@@ -88,6 +93,8 @@ export function NewIncidentForm({ addToast }: Props) {
   const [problems, setProblems] = useState<Problem[]>([])
   const [loadingData, setLoadingData] = useState(true)
 
+  // Load every dropdown's data in parallel on mount; each call degrades to [] on failure
+  // so one failed lookup doesn't block the rest. Toggles loadingData off when all settle.
   useEffect(() => {
     Promise.all([
       adminApi.getServices().catch(() => []),
@@ -112,13 +119,19 @@ export function NewIncidentForm({ addToast }: Props) {
     }).finally(() => setLoadingData(false))
   }, [])
 
+  // Categories shown for the chosen service: service-scoped plus global (serviceId == null)
   const filteredCategories = form.serviceSlug
     ? categories.filter(c => {
         const svc = services.find(s => s.slug === form.serviceSlug)
-        return svc ? c.serviceId === svc.serviceId : true
+        // Show categories scoped to the selected service AND global categories
+        // (serviceId == null), which apply to every service. Without the null
+        // check, selecting a service with no scoped categories empties the list
+        // and blocks submission, since Category is mandatory.
+        return svc ? (c.serviceId === svc.serviceId || c.serviceId == null) : true
       })
     : categories
 
+  // When the category changes, refresh the subcategory options and clear any prior choice
   useEffect(() => {
     if (!form.categoryCode) { setSubCategories([]); return }
     const cat = categories.find(c => c.code === form.categoryCode)
@@ -126,10 +139,13 @@ export function NewIncidentForm({ addToast }: Props) {
     setForm(f => ({ ...f, subCategoryCode: '' }))
   }, [form.categoryCode, categories])
 
+  // Changing the service invalidates category/subcategory, so reset them
   useEffect(() => {
     setForm(f => ({ ...f, categoryCode: '', subCategoryCode: '' }))
   }, [form.serviceSlug])
 
+  // When the assignment group changes, load that group's members for the Assignee dropdown
+  // and drop the current assignee if they aren't in the newly selected group.
   useEffect(() => {
     if (!form.groupSlug) { setGroupUsers([]); setForm(f => ({ ...f, assigneeExtId: '' })); return }
     api.get<UserType[]>(`/users?groupSlug=${encodeURIComponent(form.groupSlug)}`)
@@ -145,12 +161,16 @@ export function NewIncidentForm({ addToast }: Props) {
 
   const close = () => setShowNewIncident(false)
 
+  // Curried change handler factory: returns an onChange that updates field `k` and clears
+  // any visible validation errors as the user edits.
   const sf = <K extends keyof FormState>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       setValidationErrors([])
       setForm(f => ({ ...f, [k]: e.target.value }))
     }
 
+  // Collect labels of missing mandatory fields (title always required; others gated by
+  // the workspace field config). An empty array means the form is valid.
   const validate = (): string[] => {
     const missing: string[] = []
     if (!form.title.trim()) missing.push('Short Description')
@@ -161,6 +181,8 @@ export function NewIncidentForm({ addToast }: Props) {
     return missing
   }
 
+  // Validate first (surfacing missing fields), then create the incident; if a problem was
+  // chosen, link it afterwards. Toasts the new INC number and closes on success.
   const submit = async () => {
     const missing = validate()
     if (missing.length > 0) { setValidationErrors(missing); return }
@@ -430,6 +452,7 @@ export function NewIncidentForm({ addToast }: Props) {
 
 /* ── Sidebar primitives ── */
 
+// Labelled wrapper for a properties-sidebar field, with an optional required asterisk
 function SbField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>

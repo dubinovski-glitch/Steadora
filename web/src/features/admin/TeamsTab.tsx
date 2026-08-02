@@ -6,17 +6,21 @@ import type { Group } from '../../types'
 
 interface Props { addToast: (msg: string) => void }
 
+// Teams & groups admin tab: renders service-desk groups as a card grid with member counts,
+// plus the create/edit modal (TeamModal).
 export function TeamsTab({ addToast }: Props) {
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Group | null>(null)
   const [creating, setCreating] = useState(false)
 
+  // Fetch all groups from the admin API.
   const load = () => {
     setLoading(true)
     adminApi.getGroups().then(setGroups).finally(() => setLoading(false))
   }
 
+  // Load groups once on mount.
   useEffect(() => { load() }, [])
 
   return (
@@ -83,6 +87,7 @@ interface ModalProps {
   onSaved: (msg: string) => void
 }
 
+// Modal form to create a new team or edit an existing one (name, description, active flag).
 function TeamModal({ group, onClose, onSaved }: ModalProps) {
   const [form, setForm] = useState({
     name: group?.name ?? '',
@@ -91,9 +96,11 @@ function TeamModal({ group, onClose, onSaved }: ModalProps) {
   })
   const [saving, setSaving] = useState(false)
 
+  // Curried change handler that updates a form field (handles checkbox vs text inputs).
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value }))
 
+  // Validate the name, then create or update the group and notify the parent.
   const submit = async () => {
     if (!form.name.trim()) return
     setSaving(true)

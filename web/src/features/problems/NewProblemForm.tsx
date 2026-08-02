@@ -30,6 +30,9 @@ const INITIAL: FormState = {
   isKnownError: false,
 }
 
+// Two-pane form for creating a new problem: title/root-cause/workaround on the left,
+// priority and group/assignee properties in the right sidebar. Validates required fields,
+// submits via the API, then opens the newly-created problem.
 export function NewProblemForm({ addToast }: Props) {
   const { setShowNewProblem, openProblem } = useAppStore()
   const [form, setForm] = useState<FormState>(INITIAL)
@@ -41,6 +44,7 @@ export function NewProblemForm({ addToast }: Props) {
   const [groupUsers, setGroupUsers] = useState<User[]>([])
   const [loadingData, setLoadingData] = useState(true)
 
+  // On mount, load the full user and group lists for the assignment dropdowns.
   useEffect(() => {
     Promise.all([
       api.get<User[]>('/users').catch(() => []),
@@ -51,6 +55,8 @@ export function NewProblemForm({ addToast }: Props) {
     }).finally(() => setLoadingData(false))
   }, [])
 
+  // When the selected group changes, fetch its members for the assignee dropdown
+  // and clear any previously-selected assignee that isn't in the new group.
   useEffect(() => {
     if (!form.groupSlug) { setGroupUsers([]); setForm(f => ({ ...f, assigneeExtId: '' })); return }
     api.get<User[]>(`/users?groupSlug=${encodeURIComponent(form.groupSlug)}`)
@@ -61,14 +67,17 @@ export function NewProblemForm({ addToast }: Props) {
       .catch(() => setGroupUsers([]))
   }, [form.groupSlug])
 
+  // Dismiss the form and return to the problems list.
   const close = () => setShowNewProblem(false)
 
+  // Curried change handler: updates one form field and clears any validation errors.
   const sf = <K extends keyof FormState>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       setValidationErrors([])
       setForm(f => ({ ...f, [k]: e.target.value }))
     }
 
+  // Returns the list of missing required fields (title and assignment team).
   const validate = (): string[] => {
     const missing: string[] = []
     if (!form.title.trim()) missing.push('Title')
@@ -76,6 +85,7 @@ export function NewProblemForm({ addToast }: Props) {
     return missing
   }
 
+  // Validate, then create the problem via the API; on success toast and open the new record.
   const submit = async () => {
     const missing = validate()
     if (missing.length > 0) { setValidationErrors(missing); return }
@@ -226,6 +236,7 @@ export function NewProblemForm({ addToast }: Props) {
   )
 }
 
+// Sidebar field wrapper: renders a label (with an optional red required asterisk) above its control.
 function SbField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>

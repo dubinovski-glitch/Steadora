@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { AlertCircle, Clock, GitBranch, TrendingUp, CheckCircle, ArrowRight } from 'lucide-react'
 import { dashboardApi } from '../../api/dashboard'
 import { Badge, priorityVariant, statusVariant } from '../../components/primitives/Badge'
+import { priorityLabel, statusLabel } from '../../utils/labels'
 import { SlaBar } from '../../components/primitives/SlaBar'
 import { useAppStore } from '../../store/appStore'
 import { useAuthStore } from '../../store/authStore'
@@ -14,6 +15,8 @@ const kpiTheme = {
   metric:   { bar: '#1f8a4c', icon: 'bg-[#e6f4ec] text-[#1f8a4c]' },
 }
 
+// KPI summary card with a colored top accent bar, label, icon, big value, and
+// optional sub-text; becomes clickable (with hover affordance) when onClick is given.
 function KpiCard({ label, value, sub, icon, theme, onClick }: {
   label: string; value: string | number; sub?: string; icon: React.ReactNode;
   theme: keyof typeof kpiTheme; onClick?: () => void
@@ -37,21 +40,27 @@ function KpiCard({ label, value, sub, icon, theme, onClick }: {
   )
 }
 
+// Maps a service health code to the Tailwind class for its status dot color.
 const healthDot = (code: string) => ({
   healthy:  'bg-[#1f8a4c]',
   degraded: 'bg-[#d97706]',
   incident: 'bg-[#c8252b]',
 }[code] ?? 'bg-text-muted')
 
+// Maps a service health code to the badge's text/background/border classes.
 const healthBadge = (code: string) => ({
   healthy:  'text-[#1f8a4c] bg-[#e6f4ec] border border-[#b6dcc4]',
   degraded: 'text-[#d97706] bg-[#fdf3e3] border border-[#f3d9a4]',
   incident: 'text-[#c8252b] bg-[#fdecec] border border-[#f5c6c8]',
 }[code] ?? 'text-text-muted bg-subtle border border-border-default')
 
+// Maps a service health code to its human-readable label (falls back to the code).
 const healthLabel = (code: string) =>
   ({ healthy: 'Healthy', degraded: 'Degraded', incident: 'Incident' }[code] ?? code)
 
+// Landing dashboard: greets the user, shows an overall system-status pill, a KPI
+// strip, a "tickets needing attention" table (SLA-at-risk incidents), and a
+// service portfolio health list. KPI cards navigate to other views on click.
 export function DashboardView() {
   const { setView } = useAppStore()
   const { user: authUser } = useAuthStore()
@@ -59,6 +68,7 @@ export function DashboardView() {
   const [atRisk, setAtRisk] = useState<Incident[]>([])
   const [services, setServices] = useState<Service[]>([])
 
+  // Pick a time-of-day greeting based on the current hour.
   const greeting = (() => {
     const h = new Date().getHours()
     if (h < 12) return 'Good morning'
@@ -66,12 +76,15 @@ export function DashboardView() {
     return 'Good evening'
   })()
 
+  // On mount, fetch dashboard KPIs, the SLA-at-risk incident list, and the
+  // service portfolio; errors are logged to the console.
   useEffect(() => {
     dashboardApi.getKpis().then(setStats).catch(console.error)
     dashboardApi.getSlaAtRisk().then(setAtRisk).catch(console.error)
     dashboardApi.getServices().then(setServices).catch(console.error)
   }, [])
 
+  // Tally services by health for the portfolio header summary.
   const incidentCount = services.filter(s => s.healthCode === 'incident').length
   const degradedCount = services.filter(s => s.healthCode === 'degraded').length
   const healthyCount  = services.filter(s => s.healthCode === 'healthy').length
@@ -150,8 +163,8 @@ export function DashboardView() {
                 <tr key={inc.incidentId} className="border-b border-border-default last:border-0 hover:bg-hover transition-colors">
                   <td className="px-3 py-2 tabular font-mono text-xs text-text-tertiary">{inc.number}</td>
                   <td className="px-3 py-2 text-text-primary truncate max-w-[180px]">{inc.title}</td>
-                  <td className="px-3 py-2"><Badge variant={priorityVariant(inc.priorityCode)}>{inc.priorityCode}</Badge></td>
-                  <td className="px-3 py-2"><Badge variant={statusVariant(inc.statusCode)}>{inc.statusCode}</Badge></td>
+                  <td className="px-3 py-2"><Badge variant={priorityVariant(inc.priorityCode)}>{priorityLabel(inc.priorityCode)}</Badge></td>
+                  <td className="px-3 py-2"><Badge variant={statusVariant(inc.statusCode)}>{statusLabel(inc.statusCode)}</Badge></td>
                   <td className="px-3 py-2">
                     <SlaBar percent={inc.slaPercent} breachedAt={inc.slaBreachedAt} targetMinutes={inc.slaTargetMinutes} startedAt={inc.slaStartedAt} pausedSeconds={inc.slaPausedSeconds} compact />
                   </td>

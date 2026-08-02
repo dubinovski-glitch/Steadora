@@ -1,5 +1,10 @@
 namespace ApertureITSM.Core.Models;
 
+/// <summary>
+/// An ITIL change request describing a planned modification to a service or configuration item,
+/// including its rollout/rollback plans, risk and type classification, approval workflow state,
+/// and scheduling window.
+/// </summary>
 public class Change
 {
     public long ChangeId { get; init; }
@@ -27,7 +32,7 @@ public class Change
     public int? GroupId { get; init; }
     public string? GroupName { get; init; }
 
-    public string? CabName { get; init; }
+    public string? CabName { get; init; } // Change Advisory Board responsible for review
     public DateTime? ScheduledStart { get; init; }
     public DateTime? ScheduledEnd { get; init; }
     public string? DowntimeEstimate { get; init; }
@@ -40,9 +45,13 @@ public class Change
     public DateTime UpdatedAt { get; init; }
 
     public List<ChangeReviewer> Reviewers { get; set; } = [];
-    public List<string> AffectedServiceSlugs { get; set; } = [];
+    public List<string> AffectedServiceSlugs { get; set; } = []; // services impacted by this change
 }
 
+/// <summary>
+/// A reviewer assigned to vote on a change request, capturing their approval vote and optional
+/// comment as part of the change approval workflow.
+/// </summary>
 public class ChangeReviewer
 {
     public long ChangeReviewerId { get; init; }

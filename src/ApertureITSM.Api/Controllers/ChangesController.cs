@@ -5,10 +5,16 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ApertureITSM.Api.Controllers;
 
+/// <summary>
+/// REST API for change records: listing/detail, CRUD, state transitions, CAB approval voting, and
+/// comments. Comment endpoints depend on the optional Notifications feature (503 when disabled) and
+/// use the "CHG" entity-type discriminator.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class ChangesController(IChangeService service, INotificationService? notifications) : ControllerBase
 {
+    /// <summary>GET api/changes — lists changes, optionally filtered by <paramref name="state"/>.</summary>
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? state)
     {
@@ -16,6 +22,7 @@ public class ChangesController(IChangeService service, INotificationService? not
         return Ok(changes);
     }
 
+    /// <summary>GET api/changes/{id} — returns the full change detail, or 404 if not found.</summary>
     [HttpGet("{id:long}")]
     public async Task<IActionResult> GetDetail(long id)
     {
@@ -23,6 +30,7 @@ public class ChangesController(IChangeService service, INotificationService? not
         return change is null ? NotFound() : Ok(change);
     }
 
+    /// <summary>POST api/changes — creates a change and returns 201 with the new id.</summary>
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateChangeRequest request)
     {
@@ -30,6 +38,7 @@ public class ChangesController(IChangeService service, INotificationService? not
         return CreatedAtAction(nameof(GetDetail), new { id }, new { id });
     }
 
+    /// <summary>PUT api/changes/{id} — replaces the change's editable fields; returns 204.</summary>
     [HttpPut("{id:long}")]
     public async Task<IActionResult> Update(long id, [FromBody] UpdateChangeRequest request)
     {
@@ -37,6 +46,7 @@ public class ChangesController(IChangeService service, INotificationService? not
         return NoContent();
     }
 
+    /// <summary>PATCH api/changes/{id}/state — transitions the change state; returns 204.</summary>
     [HttpPatch("{id:long}/state")]
     public async Task<IActionResult> SetState(long id, [FromBody] SetStateRequest request)
     {
@@ -44,6 +54,7 @@ public class ChangesController(IChangeService service, INotificationService? not
         return NoContent();
     }
 
+    /// <summary>POST api/changes/{id}/vote — records a CAB approval/rejection vote; returns 204.</summary>
     [HttpPost("{id:long}/vote")]
     public async Task<IActionResult> Vote(long id, [FromBody] VoteRequest request)
     {
@@ -51,6 +62,7 @@ public class ChangesController(IChangeService service, INotificationService? not
         return NoContent();
     }
 
+    /// <summary>GET api/changes/{id}/comments — lists comments, or 503 if notifications are disabled.</summary>
     [HttpGet("{id:long}/comments")]
     public async Task<IActionResult> GetComments(long id)
     {
@@ -58,6 +70,7 @@ public class ChangesController(IChangeService service, INotificationService? not
         return Ok(await notifications.GetCommentsAsync("CHG", id));
     }
 
+    /// <summary>POST api/changes/{id}/comments — adds a comment and returns its id, or 503 if notifications are disabled.</summary>
     [HttpPost("{id:long}/comments")]
     public async Task<IActionResult> PostComment(long id, [FromBody] PostCommentRequest request)
     {
@@ -67,4 +80,5 @@ public class ChangesController(IChangeService service, INotificationService? not
     }
 }
 
+/// <summary>CAB vote payload: voter external id, vote code (approve/reject), and an optional comment.</summary>
 public record VoteRequest(string UserExtId, string VoteCode, string? Comment);

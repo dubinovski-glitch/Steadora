@@ -1,5 +1,10 @@
 namespace ApertureITSM.Core.Models;
 
+/// <summary>
+/// A user-authored comment attached to a parent record (e.g. incident, problem, change),
+/// identified by <see cref="ParentType"/> and <see cref="ParentId"/>. Comments may be marked
+/// <see cref="Internal"/> to hide them from end users.
+/// </summary>
 public class Comment
 {
     public long CommentId { get; init; }
@@ -16,6 +21,11 @@ public class Comment
     public DateTime? EditedAt { get; init; }
 }
 
+/// <summary>
+/// An audit/timeline entry recording something that happened on a parent record, such as a
+/// field change or state transition. <see cref="Kind"/> classifies the event; for field changes
+/// <see cref="Field"/>, <see cref="OldValue"/> and <see cref="NewValue"/> capture the before/after.
+/// </summary>
 public class ActivityEvent
 {
     public long ActivityId { get; init; }
@@ -33,6 +43,9 @@ public class ActivityEvent
     public DateTime OccurredAt { get; init; }
 }
 
+/// <summary>
+/// An in-app notification delivered to a single user about activity on a parent record.
+/// </summary>
 public class Notification
 {
     public long NotificationId { get; init; }
@@ -43,9 +56,13 @@ public class Notification
     public string? Message { get; init; }
     public DateTime? ReadAt { get; init; }
     public DateTime CreatedAt { get; init; }
-    public bool IsRead => ReadAt.HasValue;
+    public bool IsRead => ReadAt.HasValue; // derived: read once ReadAt is set
 }
 
+/// <summary>
+/// A subscription linking a user to a parent record so they receive notifications about its
+/// activity. The parent is identified by <see cref="ParentType"/> and <see cref="ParentId"/>.
+/// </summary>
 public class Watcher
 {
     public string ParentType { get; init; } = string.Empty;

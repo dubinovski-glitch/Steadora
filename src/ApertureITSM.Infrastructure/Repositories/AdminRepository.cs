@@ -6,12 +6,19 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
+/// <summary>
+/// Backs the admin/configuration screens. Provides CRUD over the system's setup data: users, groups,
+/// categories/subcategories, roles, services, SLA tiers and their targets, business calendars/hours, and
+/// automations. These operations are global (not workspace-scoped) and include validation (e.g. uniqueness)
+/// and slug/code generation where needed.
+/// </summary>
 public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(AdminRepository));
 
     // ── Users ─────────────────────────────────────────────────────────────────
 
+    /// <summary>Returns all users (active and inactive) with role and a comma-joined list of their group names.</summary>
     public async Task<IEnumerable<User>> GetUsersAsync()
     {
         string sql = """
@@ -39,6 +46,10 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>
+    /// Creates a user after pre-checking uniqueness of username/email/external id (so duplicates surface as
+    /// a friendly error, not a raw constraint 500), deriving avatar initials. Returns the new user id.
+    /// </summary>
     public async Task<int> CreateUserAsync(string externalId, string email, string username, string displayName, string? title, byte roleId, string? passwordHash)
     {
         string sql = """
@@ -50,19 +61,46 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         {
             var initials = BuildInitials(displayName);
             using var conn = db.Create();
+            await EnsureUserUniqueAsync(conn, externalId, email, username, excludeUserId: null);
             var id = await conn.ExecuteScalarAsync<int>(sql, new { externalId, email, username, displayName, title, initials, roleId, passwordHash });
             log.Info($"Created user '{displayName}' ({email})");
             return id;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not InvalidOperationException)
         {
             SqlLogger.LogError(log, $"Failed to create user '{email}'", sql, ex);
             throw;
         }
     }
 
+    // Pre-flight uniqueness checks so a duplicate Username/Email/ExternalId surfaces
+    // as a clear, user-facing message instead of a raw SQL UNIQUE-constraint 500.
+    private static async Task EnsureUserUniqueAsync(System.Data.IDbConnection conn, string? externalId, string email, string username, int? excludeUserId)
+    {
+        if (await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM core.[User] WHERE Username = @username AND (@excludeUserId IS NULL OR UserId <> @excludeUserId)",
+                new { username, excludeUserId }) > 0)
+            throw new InvalidOperationException($"Username '{username}' is already taken.");
+
+        if (await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM core.[User] WHERE Email = @email AND (@excludeUserId IS NULL OR UserId <> @excludeUserId)",
+                new { email, excludeUserId }) > 0)
+            throw new InvalidOperationException($"Email '{email}' is already in use.");
+
+        // ExternalId is immutable on update, so it's only checked when provided (i.e. on create).
+        if (!string.IsNullOrWhiteSpace(externalId) && await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM core.[User] WHERE ExternalId = @externalId AND (@excludeUserId IS NULL OR UserId <> @excludeUserId)",
+                new { externalId, excludeUserId }) > 0)
+            throw new InvalidOperationException($"External ID '{externalId}' is already in use.");
+    }
+
+    /// <summary>
+    /// Updates a user's profile/role/active flag after re-checking username/email uniqueness. The password
+    /// hash is only written when supplied, so a null leaves the existing password unchanged.
+    /// </summary>
     public async Task UpdateUserAsync(int userId, string email, string username, string displayName, string? title, byte roleId, bool isActive, string? passwordHash)
     {
+        // Two SQL variants: include the PasswordHash column only when a new hash is provided.
         string sql = passwordHash != null
             ? """
               UPDATE core.[User]
@@ -82,16 +120,18 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         {
             var initials = BuildInitials(displayName);
             using var conn = db.Create();
+            await EnsureUserUniqueAsync(conn, externalId: null, email, username, excludeUserId: userId);
             await conn.ExecuteAsync(sql, new { userId, email, username, displayName, title, initials, roleId, isActive, passwordHash });
             log.Info($"Updated user {userId}");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not InvalidOperationException)
         {
             SqlLogger.LogError(log, $"Failed to update user {userId}", sql, ex);
             throw;
         }
     }
 
+    /// <summary>Returns the ids of the groups a user belongs to, to pre-select the group membership editor.</summary>
     public async Task<IEnumerable<int>> GetUserGroupIdsAsync(int userId)
     {
         string sql = "SELECT GroupId FROM core.UserGroup WHERE UserId = @userId ORDER BY GroupId";
@@ -107,12 +147,14 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Replaces a user's group memberships with the supplied set (delete-then-insert full replace).</summary>
     public async Task SetUserGroupsAsync(int userId, IEnumerable<int> groupIds)
     {
         string sql = "DELETE FROM core.UserGroup WHERE UserId = @userId";
         try
         {
             using var conn = db.Create();
+            // Clear existing memberships, then re-insert the desired set.
             await conn.ExecuteAsync(sql, new { userId });
             foreach (var gid in groupIds)
             {
@@ -128,6 +170,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Returns the ids of the services a user is scoped to, to pre-select the service-access editor.</summary>
     public async Task<IEnumerable<int>> GetUserServiceIdsAsync(int userId)
     {
         string sql = "SELECT ServiceId FROM core.UserService WHERE UserId = @userId";
@@ -143,12 +186,14 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Replaces a user's service access list with the supplied set (delete-then-insert full replace).</summary>
     public async Task SetUserServicesAsync(int userId, IEnumerable<int> serviceIds)
     {
         string sql = "DELETE FROM core.UserService WHERE UserId = @userId";
         try
         {
             using var conn = db.Create();
+            // Clear existing service grants, then re-insert the desired set.
             await conn.ExecuteAsync(sql, new { userId });
             foreach (var sid in serviceIds)
             {
@@ -166,6 +211,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
 
     // ── Groups ────────────────────────────────────────────────────────────────
 
+    /// <summary>Returns all groups (active and inactive) with a computed count of their active members.</summary>
     public async Task<IEnumerable<Group>> GetGroupsAsync()
     {
         string sql = """
@@ -190,6 +236,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Creates a group, generating a URL-safe slug from its name. Returns the new group id.</summary>
     public async Task<int> CreateGroupAsync(string name, string? description)
     {
         string sql = """
@@ -212,6 +259,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Updates a group's name, description, and active flag (the slug is left unchanged).</summary>
     public async Task UpdateGroupAsync(int groupId, string name, string? description, bool isActive)
     {
         string sql = """
@@ -235,12 +283,17 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
 
     // ── Categories ────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Returns the category tree for admin: each category (with owning service and a computed incident count)
+    /// plus its subcategories, assembled in memory from two queries.
+    /// </summary>
     public async Task<IEnumerable<CategoryWithSubs>> GetCategoriesAsync()
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
+            // First query: categories with a computed count of non-deleted incidents using each.
             sql = """
                 SELECT c.CategoryId, c.ServiceId, s.Name AS ServiceName,
                        c.Code, c.DisplayName,
@@ -253,6 +306,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
                 """;
             var cats = (await conn.QueryAsync<(int CategoryId, int? ServiceId, string? ServiceName, string Code, string DisplayName, int TicketCount)>(sql)).ToList();
 
+            // Second query: all subcategories, grouped under their parent category below.
             sql = "SELECT SubCategoryId, CategoryId, Code, DisplayName FROM lookup.SubCategory ORDER BY DisplayName";
             var subs = (await conn.QueryAsync<SubCategory>(sql)).ToList();
 
@@ -274,12 +328,16 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>
+    /// Creates a category, generating a unique immutable code from its display name. Returns the new id.
+    /// </summary>
     public async Task<int> CreateCategoryAsync(string displayName, int? serviceId)
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
+            // Derive a unique, stable lookup code from the name (incidents reference this code).
             var code = await MakeUniqueCodeAsync(conn, "lookup.Category", displayName);
             sql = """
                 INSERT INTO lookup.Category (ServiceId, Code, DisplayName)
@@ -297,6 +355,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Updates a category's owning service and display name (its code is immutable and untouched).</summary>
     public async Task UpdateCategoryAsync(int categoryId, string displayName, int? serviceId)
     {
         // Code is an immutable lookup key (referenced by incidents) — never changed on update.
@@ -318,6 +377,10 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>
+    /// Deletes a category and its subcategories, but only if no active incidents reference it; otherwise
+    /// throws so the caller can show a clear "in use" message.
+    /// </summary>
     public async Task DeleteCategoryAsync(int categoryId)
     {
         string sql = "SELECT COUNT(*) FROM itil.Incident WHERE CategoryId = @categoryId AND DeletedAt IS NULL";
@@ -326,9 +389,11 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
             using var conn = db.Create();
             var ticketCount = await conn.ExecuteScalarAsync<int>(sql, new { categoryId });
 
+            // Guard: refuse to delete a category still in use by open incidents.
             if (ticketCount > 0)
                 throw new InvalidOperationException($"Category {categoryId} has {ticketCount} open incident(s) and cannot be deleted.");
 
+            // Remove children first, then the category itself.
             sql = "DELETE FROM lookup.SubCategory WHERE CategoryId = @categoryId";
             await conn.ExecuteAsync(sql, new { categoryId });
             sql = "DELETE FROM lookup.Category WHERE CategoryId = @categoryId";
@@ -342,12 +407,14 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Creates a subcategory under a category, generating a unique immutable code. Returns the new id.</summary>
     public async Task<int> CreateSubCategoryAsync(int categoryId, string displayName)
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
+            // Derive a unique, stable lookup code from the name.
             var code = await MakeUniqueCodeAsync(conn, "lookup.SubCategory", displayName);
             sql = """
                 INSERT INTO lookup.SubCategory (CategoryId, Code, DisplayName)
@@ -365,6 +432,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Updates a subcategory's parent category and display name (its code is immutable and untouched).</summary>
     public async Task UpdateSubCategoryAsync(int subCategoryId, int categoryId, string displayName)
     {
         // Code is an immutable lookup key — never changed on update.
@@ -387,6 +455,8 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
     }
 
     // Generates a URL-safe, unique code (≤32 chars) from a display name.
+    // Slugs the name, then probes the target table and appends -2, -3, ... until the code is free
+    // (truncating to stay within 32 chars). Table name comes from a fixed caller, not user input.
     private static async Task<string> MakeUniqueCodeAsync(System.Data.IDbConnection conn, string table, string displayName)
     {
         var slug = System.Text.RegularExpressions.Regex
@@ -406,6 +476,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         return candidate;
     }
 
+    /// <summary>Deletes a single subcategory by id.</summary>
     public async Task DeleteSubCategoryAsync(int subCategoryId)
     {
         string sql = "DELETE FROM lookup.SubCategory WHERE SubCategoryId = @subCategoryId";
@@ -424,6 +495,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
 
     // ── Roles ─────────────────────────────────────────────────────────────────
 
+    /// <summary>Returns all roles with a computed count of the active users assigned to each.</summary>
     public async Task<IEnumerable<Role>> GetRolesAsync()
     {
         string sql = """
@@ -446,6 +518,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Updates a role's display name and description (its code is a fixed system key).</summary>
     public async Task UpdateRoleAsync(byte roleId, string displayName, string? description)
     {
         string sql = """
@@ -468,6 +541,10 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
 
     // ── Services ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Returns all services (active and inactive) for admin, with owning group, health, SLA tier, and a
+    /// computed count of currently open (not-closed, non-deleted) incidents per service.
+    /// </summary>
     public async Task<IEnumerable<Service>> GetAdminServicesAsync()
     {
         string sql = """
@@ -501,6 +578,9 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>
+    /// Creates a service, resolving the health code to its id (defaulting to 1 if unknown). Returns the new id.
+    /// </summary>
     public async Task<int> CreateServiceAsync(string slug, string name, int? owningGroupId, string healthCode, int? slaTierId)
     {
         string sql = """
@@ -523,6 +603,10 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>
+    /// Updates a service's name, owning group, health, SLA tier, and active flag (slug is left unchanged),
+    /// resolving the health code to its id (defaulting to 1 if unknown).
+    /// </summary>
     public async Task UpdateServiceAsync(int serviceId, string name, int? owningGroupId, string healthCode, int? slaTierId, bool isActive)
     {
         string sql = """
@@ -548,12 +632,17 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
 
     // ── SLA Tiers ─────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Returns all SLA tiers, each with its per-priority response/resolution targets attached (assembled
+    /// in memory from two queries).
+    /// </summary>
     public async Task<IEnumerable<SlaTier>> GetSlaTiersAsync()
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
+            // First query: the tiers themselves.
             sql = """
                 SELECT SlaTierId, Name, Description, IsActive, Calculate247, AutoEscalate, SortOrder
                 FROM admin.SlaTier
@@ -561,6 +650,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
                 """;
             var tiers = (await conn.QueryAsync<SlaTier>(sql)).ToList();
 
+            // Second query: all per-priority targets, grouped under their tier below.
             sql = """
                 SELECT t.TargetId, t.SlaTierId, t.PriorityId,
                        p.Code AS PriorityCode, p.DisplayName AS PriorityDisplayName,
@@ -583,6 +673,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Creates an SLA tier (with default sort order); per-priority targets are saved separately. Returns the new id.</summary>
     public async Task<int> CreateSlaTierAsync(string name, string? description, bool calculate247, bool autoEscalate)
     {
         string sql = """
@@ -604,6 +695,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Updates an SLA tier's settings (name, description, active, 24x7 calc, auto-escalate).</summary>
     public async Task UpdateSlaTierAsync(int tierId, string name, string? description, bool isActive, bool calculate247, bool autoEscalate)
     {
         string sql = """
@@ -625,6 +717,10 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>
+    /// Upserts the per-priority response/resolution targets for a tier; each target is MERGEd so existing
+    /// rows update and missing ones insert.
+    /// </summary>
     public async Task SaveSlaTierTargetsAsync(int tierId, IEnumerable<(byte priorityId, int responseMinutes, int resolutionMinutes)> targets)
     {
         string sql = """
@@ -640,6 +736,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         try
         {
             using var conn = db.Create();
+            // Upsert one row per priority target.
             foreach (var (priorityId, responseMinutes, resolutionMinutes) in targets)
                 await conn.ExecuteAsync(sql, new { tierId, priorityId, responseMinutes, resolutionMinutes });
             log.Info($"Saved SLA tier targets for tier {tierId}");
@@ -654,12 +751,17 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
 
     // ── Business Hours ────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Returns all business calendars used for SLA clock calculations, each with its weekly working hours
+    /// and holidays attached (assembled in memory from three queries; times/dates pre-formatted as strings).
+    /// </summary>
     public async Task<IEnumerable<BusinessCalendar>> GetBusinessCalendarsAsync()
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
+            // First query: the calendars themselves.
             sql = """
                 SELECT CalendarId, Name, Timezone, IsDefault
                 FROM admin.BusinessCalendar
@@ -667,6 +769,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
                 """;
             var calendars = (await conn.QueryAsync<BusinessCalendar>(sql)).ToList();
 
+            // Second query: per-day working hours for every calendar.
             sql = """
                 SELECT DayId, CalendarId, CAST(DayOfWeek AS INT) AS DayOfWeek,
                        CONVERT(VARCHAR(5), StartTime, 108) AS StartTime,
@@ -676,6 +779,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
                 """;
             var days = (await conn.QueryAsync<BusinessDay>(sql)).ToList();
 
+            // Third query: holidays (non-working days) for every calendar.
             sql = """
                 SELECT HolidayId, CalendarId,
                        CONVERT(VARCHAR(10), HolidayDate, 120) AS HolidayDate,
@@ -699,6 +803,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Creates a new (non-default) business calendar in the given timezone. Returns the new id.</summary>
     public async Task<int> CreateBusinessCalendarAsync(string name, string timezone)
     {
         string sql = """
@@ -720,6 +825,10 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>
+    /// Upserts the weekly working-hours rows for a calendar; each day is MERGEd so existing rows update and
+    /// missing ones insert. A null start/end marks a non-working day.
+    /// </summary>
     public async Task SaveBusinessDaysAsync(int calendarId, IEnumerable<(int dayOfWeek, string? startTime, string? endTime)> days)
     {
         string sql = """
@@ -735,6 +844,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         try
         {
             using var conn = db.Create();
+            // Upsert one row per day of week.
             foreach (var (dayOfWeek, startTime, endTime) in days)
                 await conn.ExecuteAsync(sql, new { calendarId, dayOfWeek, startTime, endTime });
             log.Info($"Saved business days for calendar {calendarId}");
@@ -746,6 +856,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Adds a holiday (non-working date) to a calendar. Returns the new holiday id.</summary>
     public async Task<int> AddHolidayAsync(int calendarId, string holidayDate, string name)
     {
         string sql = """
@@ -767,6 +878,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Removes a holiday from its calendar by id.</summary>
     public async Task DeleteHolidayAsync(int holidayId)
     {
         string sql = "DELETE FROM admin.BusinessHoliday WHERE HolidayId = @holidayId";
@@ -785,6 +897,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
 
     // ── Automations ───────────────────────────────────────────────────────────
 
+    /// <summary>Returns all configured automation rules (with their when/then descriptions and run stats).</summary>
     public async Task<IEnumerable<Automation>> GetAutomationsAsync()
     {
         string sql = """
@@ -804,6 +917,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Creates an automation rule (enabled by default). Returns the new id.</summary>
     public async Task<int> CreateAutomationAsync(string name, string whenDescription, string thenDescription)
     {
         string sql = """
@@ -825,6 +939,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Updates an automation rule's name and when/then descriptions.</summary>
     public async Task UpdateAutomationAsync(int id, string name, string whenDescription, string thenDescription)
     {
         string sql = """
@@ -846,6 +961,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
         }
     }
 
+    /// <summary>Enables or disables an automation rule without otherwise changing it.</summary>
     public async Task ToggleAutomationAsync(int id, bool enabled)
     {
         string sql = """
@@ -868,6 +984,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    // Derives 2-letter avatar initials: first+last name initials, or the first two characters as a fallback.
     private static string BuildInitials(string displayName)
     {
         var parts = displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -876,6 +993,7 @@ public class AdminRepository(IDbConnectionFactory db) : IAdminRepository
             : displayName[..Math.Min(2, displayName.Length)].ToUpperInvariant();
     }
 
+    // Builds a URL-safe slug from a group name (lowercase, spaces to dashes, other chars stripped).
     private static string GenerateSlug(string name) =>
         System.Text.RegularExpressions.Regex.Replace(name.ToLowerInvariant().Replace(' ', '-'), @"[^a-z0-9\-]", "").Trim('-');
 }

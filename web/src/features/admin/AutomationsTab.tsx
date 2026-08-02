@@ -6,6 +6,8 @@ import type { Automation } from '../../types'
 
 interface Props { addToast: (msg: string) => void }
 
+// Automations admin tab: lists automation rules with enable/disable toggles and
+// renders the create/edit modal. Each row shows the "when → then" description and 30-day run count.
 export function AutomationsTab({ addToast }: Props) {
   const [automations, setAutomations] = useState<Automation[]>([])
   const [loading, setLoading] = useState(true)
@@ -13,13 +15,16 @@ export function AutomationsTab({ addToast }: Props) {
   const [menuOpen, setMenuOpen] = useState<number | null>(null)
   const [toggling, setToggling] = useState<number | null>(null)
 
+  // Fetch the full list of automation rules from the admin API.
   const load = () => {
     setLoading(true)
     adminApi.getAutomations().then(data => setAutomations(data)).finally(() => setLoading(false))
   }
 
+  // Load rules once on mount.
   useEffect(() => { load() }, [])
 
+  // Flip a rule's enabled state, toast the result, then reload to reflect the change.
   const handleToggle = async (automation: Automation) => {
     setToggling(automation.automationId)
     try {
@@ -138,6 +143,7 @@ export function AutomationsTab({ addToast }: Props) {
   )
 }
 
+// Modal form for creating or editing an automation rule (name + when/then descriptions + enabled flag).
 function AutomationModal({ automation, onClose, onSaved }: { automation?: Automation; onClose: () => void; onSaved: (msg: string) => void }) {
   const [form, setForm] = useState({
     name: automation?.name ?? '',
@@ -147,9 +153,11 @@ function AutomationModal({ automation, onClose, onSaved }: { automation?: Automa
   })
   const [saving, setSaving] = useState(false)
 
+  // Curried change handler: returns an onChange that updates the given form field.
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
 
+  // Validate required fields, then create or update the rule via the API and notify the parent.
   const submit = async () => {
     if (!form.name.trim() || !form.whenDescription.trim() || !form.thenDescription.trim()) return
     setSaving(true)

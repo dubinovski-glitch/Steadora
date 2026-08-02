@@ -5,6 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ApertureITSM.Api.Controllers;
 
+/// <summary>
+/// REST API for incidents: querying the queue, CRUD/state transitions (status, assignee, priority,
+/// problem link, close), bulk close, and incident collaboration (comments, timeline, watchers).
+/// Collaboration endpoints depend on the optional Notifications feature and return 503 when disabled.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class IncidentsController(
@@ -13,6 +18,10 @@ public class IncidentsController(
     ICurrentUserService currentUser,
     IUserRepository userRepository) : ControllerBase
 {
+    /// <summary>
+    /// GET api/incidents — returns a paged, filtered/sorted incident queue wrapped in
+    /// { items, total, page, pageSize }. Applies role-based service scoping and optional group filtering.
+    /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetQueue(
         [FromQuery] string? search,
@@ -34,6 +43,7 @@ public class IncidentsController(
         if (currentUser.RoleCode is "agent" or "requester" && currentUser.ServiceIds.Length > 0)
             serviceFilter = currentUser.ServiceIds;
 
+        // When "my groups only" is requested, restrict results to the caller's group memberships
         int[]? groupIds = null;
         if (myGroupsOnly && currentUser.IsAuthenticated)
             groupIds = await userRepository.GetGroupIdsAsync(currentUser.UserId);
@@ -57,6 +67,7 @@ public class IncidentsController(
         return Ok(new { items, total, page, pageSize });
     }
 
+    /// <summary>GET api/incidents/{id} — returns the full incident detail, or 404 if not found.</summary>
     [HttpGet("{id:long}")]
     public async Task<IActionResult> GetDetail(long id)
     {
@@ -64,6 +75,7 @@ public class IncidentsController(
         return incident is null ? NotFound() : Ok(incident);
     }
 
+    /// <summary>POST api/incidents — creates an incident and returns 201 with the new id.</summary>
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateIncidentRequest request)
     {
@@ -71,6 +83,7 @@ public class IncidentsController(
         return CreatedAtAction(nameof(GetDetail), new { id }, new { id });
     }
 
+    /// <summary>PATCH api/incidents/{id} — applies a partial field update; returns 204.</summary>
     [HttpPatch("{id:long}")]
     public async Task<IActionResult> Update(long id, [FromBody] UpdateIncidentRequest request)
     {
@@ -78,14 +91,20 @@ public class IncidentsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// PATCH api/incidents/{id}/status — transitions the incident status; returns 204.
+    /// The acting user is resolved from the JWT (null when unauthenticated) for audit logging.
+    /// </summary>
     [HttpPatch("{id:long}/status")]
     public async Task<IActionResult> SetStatus(long id, [FromBody] SetStatusRequest request)
     {
+        // Resolve the actor from the authenticated principal so the change can be attributed
         int? actorId = currentUser.IsAuthenticated ? currentUser.UserId : (int?)null;
         await service.SetStatusAsync(id, request.StatusCode, actorId);
         return NoContent();
     }
 
+    /// <summary>PATCH api/incidents/{id}/assignee — (re)assigns the incident; returns 204.</summary>
     [HttpPatch("{id:long}/assignee")]
     public async Task<IActionResult> Assign(long id, [FromBody] AssignRequest request)
     {
@@ -93,6 +112,7 @@ public class IncidentsController(
         return NoContent();
     }
 
+    /// <summary>PATCH api/incidents/{id}/priority — changes the incident priority; returns 204.</summary>
     [HttpPatch("{id:long}/priority")]
     public async Task<IActionResult> SetPriority(long id, [FromBody] SetPriorityRequest request)
     {
@@ -100,6 +120,7 @@ public class IncidentsController(
         return NoContent();
     }
 
+    /// <summary>PATCH api/incidents/{id}/problem — links the incident to a problem record; returns 204.</summary>
     [HttpPatch("{id:long}/problem")]
     public async Task<IActionResult> LinkProblem(long id, [FromBody] LinkProblemRequest request)
     {
@@ -107,6 +128,10 @@ public class IncidentsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// DELETE api/incidents/{id} — closes the incident (soft close, not a hard delete); returns 204.
+    /// The acting user is resolved from the JWT for audit purposes.
+    /// </summary>
     [HttpDelete("{id:long}")]
     public async Task<IActionResult> Close(long id)
     {
@@ -115,6 +140,7 @@ public class IncidentsController(
         return NoContent();
     }
 
+    /// <summary>POST api/incidents/bulk/close — closes multiple incidents in one call; returns 204.</summary>
     [HttpPost("bulk/close")]
     public async Task<IActionResult> BulkClose([FromBody] BulkCloseRequest request)
     {
@@ -123,14 +149,17 @@ public class IncidentsController(
         return NoContent();
     }
 
+    /// <summary>GET api/incidents/{id}/comments — lists comments for the incident, or 503 if notifications are disabled.</summary>
     [HttpGet("{id:long}/comments")]
     public async Task<IActionResult> GetComments(long id)
     {
         if (notifications is null) return StatusCode(503);
+        // "INC" is the entity-type discriminator shared by the notifications subsystem
         var comments = await notifications.GetCommentsAsync("INC", id);
         return Ok(comments);
     }
 
+    /// <summary>POST api/incidents/{id}/comments — adds a comment and returns its id, or 503 if notifications are disabled.</summary>
     [HttpPost("{id:long}/comments")]
     public async Task<IActionResult> PostComment(long id, [FromBody] PostCommentRequest request)
     {
@@ -139,6 +168,7 @@ public class IncidentsController(
         return Ok(new { commentId });
     }
 
+    /// <summary>GET api/incidents/{id}/timeline — returns the audit/activity timeline, or 503 if notifications are disabled.</summary>
     [HttpGet("{id:long}/timeline")]
     public async Task<IActionResult> GetTimeline(long id)
     {
@@ -147,6 +177,7 @@ public class IncidentsController(
         return Ok(events);
     }
 
+    /// <summary>GET api/incidents/{id}/watchers — lists users watching the incident, or 503 if notifications are disabled.</summary>
     [HttpGet("{id:long}/watchers")]
     public async Task<IActionResult> GetWatchers(long id)
     {
@@ -155,6 +186,10 @@ public class IncidentsController(
         return Ok(watchers);
     }
 
+    /// <summary>
+    /// POST api/incidents/{id}/watchers — subscribes the authenticated caller as a watcher; returns 204.
+    /// Returns 503 if notifications are disabled, or 401 if unauthenticated.
+    /// </summary>
     [HttpPost("{id:long}/watchers")]
     public async Task<IActionResult> Watch(long id)
     {
@@ -164,6 +199,10 @@ public class IncidentsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// DELETE api/incidents/{id}/watchers — unsubscribes the authenticated caller; returns 204.
+    /// Returns 503 if notifications are disabled, or 401 if unauthenticated.
+    /// </summary>
     [HttpDelete("{id:long}/watchers")]
     public async Task<IActionResult> Unwatch(long id)
     {
@@ -174,6 +213,7 @@ public class IncidentsController(
     }
 }
 
+// Request DTOs for incident actions; ActorUserId attributes the change to a user where applicable.
 public record SetStatusRequest(string StatusCode, int? ActorUserId);
 public record AssignRequest(string? AssigneeExtId, int? ActorUserId);
 public record SetPriorityRequest(string PriorityCode, int? ActorUserId);

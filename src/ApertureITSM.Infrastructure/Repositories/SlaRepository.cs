@@ -5,10 +5,19 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
+/// <summary>
+/// Provides SLA and reporting/dashboard metrics over incident data: the periodic breach-evaluation job
+/// plus aggregate KPIs, SLA attainment by priority, per-team load, and daily ticket volume. All metric
+/// queries are scoped to the current workspace.
+/// </summary>
 public class SlaRepository(IDbConnectionFactory db, IWorkspaceContext workspace) : ISlaRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(SlaRepository));
 
+    /// <summary>
+    /// Runs the background job (stored proc) that scans open incidents and flags newly breached SLAs.
+    /// Uses a longer command timeout because it sweeps the whole incident set.
+    /// </summary>
     public async Task EvaluateBreachesAsync()
     {
         string sql = "reporting.usp_EvaluateSlaBreaches";
@@ -24,6 +33,11 @@ public class SlaRepository(IDbConnectionFactory db, IWorkspaceContext workspace)
         }
     }
 
+    /// <summary>
+    /// Builds the top-line dashboard stats: pulls headline KPIs from the reporting proc, then computes the
+    /// SLA-met percentage over incidents resolved in the last <paramref name="days"/> days, all for the
+    /// current workspace.
+    /// </summary>
     public async Task<SlaStats> GetStatsAsync(int days)
     {
         string sql = "reporting.usp_DashboardKpis";
@@ -31,10 +45,12 @@ public class SlaRepository(IDbConnectionFactory db, IWorkspaceContext workspace)
         {
             using var conn = db.Create();
             var wid = workspace.WorkspaceId;
+            // Headline KPIs (open count, at-risk, changes this week, avg resolution) come from the proc.
             var kpis = await conn.QueryFirstAsync<dynamic>(sql,
                 new { WorkspaceId = wid },
                 commandType: System.Data.CommandType.StoredProcedure);
 
+            // Second query derives SLA attainment over the recently-resolved window.
             sql = """
                 SELECT COUNT(*) AS Total,
                        SUM(CASE WHEN SlaBreachedAt IS NULL THEN 1 ELSE 0 END) AS Met
@@ -46,6 +62,7 @@ public class SlaRepository(IDbConnectionFactory db, IWorkspaceContext workspace)
                 """;
             var slaResult = await conn.QueryFirstAsync<(int Total, int Met)>(sql, new { days, wid });
 
+            // Combine proc KPIs with the derived SLA figures; guard against divide-by-zero when none resolved.
             return new SlaStats
             {
                 OpenIncidents = (int)kpis.OpenIncidents,
@@ -64,6 +81,10 @@ public class SlaRepository(IDbConnectionFactory db, IWorkspaceContext workspace)
         }
     }
 
+    /// <summary>
+    /// Returns SLA attainment broken down by priority (total/met/breached and percent met) over incidents
+    /// opened in the last <paramref name="days"/> days, for the current workspace.
+    /// </summary>
     public async Task<IEnumerable<SlaByPriority>> GetByPriorityAsync(int days)
     {
         string sql = """
@@ -91,6 +112,10 @@ public class SlaRepository(IDbConnectionFactory db, IWorkspaceContext workspace)
         }
     }
 
+    /// <summary>
+    /// Returns per-team workload over currently open incidents: open count plus SLA met/breached and
+    /// percent met for each owning group, for the current workspace.
+    /// </summary>
     public async Task<IEnumerable<TeamLoad>> GetTeamLoadAsync()
     {
         string sql = """
@@ -116,6 +141,10 @@ public class SlaRepository(IDbConnectionFactory db, IWorkspaceContext workspace)
         }
     }
 
+    /// <summary>
+    /// Returns a daily time series over the last <paramref name="days"/> days of incidents opened and how
+    /// many were resolved same-day, for trend charts in the current workspace.
+    /// </summary>
     public async Task<IEnumerable<DailyVolume>> GetDailyVolumeAsync(int days)
     {
         string sql = """

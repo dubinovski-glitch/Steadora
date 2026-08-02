@@ -7,10 +7,14 @@ interface Props {
   onChange: (page: number) => void
 }
 
+// Renders the "Showing X–Y of N" label plus prev/next and numbered page buttons.
+// Calls onChange(page) when the user navigates; parent owns the current page state.
 export function Pagination({ total, page, pageSize, onChange }: Props) {
+  // Derive total page count and the 1-based range of items shown on the current page.
   const totalPages = Math.ceil(total / pageSize)
   const from = (page - 1) * pageSize + 1
   const to = Math.min(page * pageSize, total)
+  // Compute the condensed list of page buttons (with ellipses) to render.
   const pages = buildPageList(page, totalPages)
 
   return (
@@ -55,6 +59,8 @@ export function Pagination({ total, page, pageSize, onChange }: Props) {
   )
 }
 
+// Builds a compact page-number sequence: shows all pages when <=7, otherwise
+// first/last plus a window around the current page, inserting '...' for gaps.
 function buildPageList(current: number, total: number): (number | '...')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   const pages: (number | '...')[] = [1]

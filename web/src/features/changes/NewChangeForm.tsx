@@ -44,6 +44,9 @@ const INITIAL: FormState = {
   downtimeEstimate: '',
 }
 
+// Two-pane form for creating a change request. Visibility and mandatory status of each field
+// are driven by workspace field config (useWorkspaceFields), with plan/description textareas on the
+// left and type/risk/owner/scheduling properties in the right sidebar. Submits then opens the new change.
 export function NewChangeForm({ addToast }: Props) {
   const { setShowNewChange, openChange } = useAppStore()
   const { user: authUser } = useAuthStore()
@@ -58,6 +61,7 @@ export function NewChangeForm({ addToast }: Props) {
   const [risks, setRisks] = useState<Risk[]>([])
   const [loadingData, setLoadingData] = useState(true)
 
+  // On mount, load users, groups, and change-type/risk lookups in parallel; default the owner to the current user.
   useEffect(() => {
     Promise.all([
       api.get<User[]>('/users').catch(() => []),
@@ -73,14 +77,17 @@ export function NewChangeForm({ addToast }: Props) {
     }).finally(() => setLoadingData(false))
   }, [])
 
+  // Dismiss the form and return to the changes list.
   const close = () => setShowNewChange(false)
 
+  // Curried change handler: updates one form field and clears any validation errors.
   const sf = <K extends keyof FormState>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       setValidationErrors([])
       setForm(f => ({ ...f, [k]: e.target.value }))
     }
 
+  // Collect missing required fields: title is always required; others only if the workspace config marks them mandatory.
   const validate = (): string[] => {
     const missing: string[] = []
     if (!form.title.trim()) missing.push('Title')
@@ -92,6 +99,7 @@ export function NewChangeForm({ addToast }: Props) {
     return missing
   }
 
+  // Validate, then create the change via the API; on success toast, close the form, and open the new change.
   const submit = async () => {
     const missing = validate()
     if (missing.length > 0) { setValidationErrors(missing); return }
@@ -331,6 +339,7 @@ export function NewChangeForm({ addToast }: Props) {
   )
 }
 
+// Sidebar field wrapper: renders a label (with an optional red required asterisk) above its control.
 function SbField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>

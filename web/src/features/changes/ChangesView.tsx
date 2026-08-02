@@ -7,6 +7,7 @@ import { SkeletonCards } from '../../components/primitives/Skeleton'
 import { useAppStore } from '../../store/appStore'
 import { ChangeDetailView } from './ChangeDetailView'
 import { NewChangeForm } from './NewChangeForm'
+import { changeTypeLabel, riskLabel, humanize } from '../../utils/labels'
 import type { Change } from '../../types'
 
 const CHANGE_STEPS = ['draft', 'in_review', 'pending_approval', 'approved', 'scheduled', 'implementing', 'complete']
@@ -18,11 +19,17 @@ const TABS = [
   { key: 'all', label: 'All' },
 ]
 
-const riskVariant = (code: string) => code === 'high' ? 'critical' : code === 'medium' ? 'high' : 'low'
-const typeVariant = (code: string) => code === 'emergency' ? 'critical' : code === 'normal' ? 'medium' : 'low'
+// Map a risk code to a Badge color variant (high→critical, medium→high, else low).
+const riskVariant = (code: string): 'critical' | 'high' | 'low' =>
+  code === 'high' ? 'critical' : code === 'medium' ? 'high' : 'low'
+// Map a change-type code to a Badge color variant (emergency→critical, normal→medium, else low).
+const typeVariant = (code: string): 'critical' | 'medium' | 'low' =>
+  code === 'emergency' ? 'critical' : code === 'normal' ? 'medium' : 'low'
 
 interface Props { addToast: (t: string) => void }
 
+// Top-level router for the Changes feature: shows the detail view, the new-change form,
+// or the list depending on app store state.
 export function ChangesView({ addToast }: Props) {
   const { openChangeId, showNewChange, openChange, setShowNewChange } = useAppStore()
 
@@ -35,6 +42,8 @@ export function ChangesView({ addToast }: Props) {
   return <ChangesList addToast={addToast} openChange={openChange} setShowNewChange={setShowNewChange} />
 }
 
+// The change list screen: tab filters (active/pending/scheduled/all) over a fetched set of
+// change cards, plus inline approve/reject voting and a button to start a new change.
 function ChangesList({
   addToast,
   openChange,
@@ -48,6 +57,7 @@ function ChangesList({
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('')
 
+  // Fetch changes for the active tab; the 'all' and 'active' tabs pass no state filter.
   const load = async () => {
     setLoading(true)
     try {
@@ -58,8 +68,10 @@ function ChangesList({
     }
   }
 
+  // Reload the list whenever the selected tab changes.
   useEffect(() => { load() }, [tab])
 
+  // Record an approve/reject vote on a card without triggering the row's open-detail click, then reload.
   const vote = async (changeId: number, voteCode: string, e: React.MouseEvent) => {
     e.stopPropagation()
     await changeApi.vote(changeId, 'me', voteCode)
@@ -108,6 +120,9 @@ function ChangesList({
   )
 }
 
+// A single change summary card: top strip with number/type/risk/state/schedule, and a
+// three-column body showing workflow progress, people (owner/approver/reviewers), and the
+// decision area (approve/reject buttons when pending, or completion/rejection status).
 function ChangeCard({
   change: c,
   onVote,
@@ -119,6 +134,7 @@ function ChangeCard({
   idx: number
   onClick: () => void
 }) {
+  // Position within the workflow steps and whether this change was rejected (drives step styling).
   const currentStep = CHANGE_STEPS.indexOf(c.stateCode)
   const isRejected = c.stateCode === 'rejected'
 
@@ -130,8 +146,8 @@ function ChangeCard({
       {/* Top strip */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border-default">
         <span className="tabular font-mono text-text-primary">{c.number}</span>
-        <Badge variant={typeVariant(c.changeTypeCode) as any}>{c.changeTypeCode}</Badge>
-        <Badge variant={riskVariant(c.riskCode) as any}>Risk: {c.riskCode}</Badge>
+        <Badge variant={typeVariant(c.changeTypeCode)}>{changeTypeLabel(c.changeTypeCode)}</Badge>
+        <Badge variant={riskVariant(c.riskCode)}>Risk: {riskLabel(c.riskCode)}</Badge>
         <Badge variant="info">{c.stateName}</Badge>
         <span className="flex-1 font-medium text-text-primary">{c.title}</span>
         {c.scheduledStart && (
@@ -154,7 +170,7 @@ function ChangeCard({
               return (
                 <span key={s} className={`flex items-center gap-1 text-xs ${done ? 'text-[#1f8a4c]' : current ? 'text-accent font-medium' : 'text-text-muted'}`}>
                   {i > 0 && <span>›</span>}
-                  {s.replace(/_/g, ' ')}
+                  {humanize(s)}
                 </span>
               )
             })}

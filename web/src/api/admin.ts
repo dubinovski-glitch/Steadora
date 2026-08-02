@@ -4,6 +4,9 @@ import type {
   SlaTier, BusinessCalendar, Automation,
 } from '../types'
 
+// Admin configuration endpoints, grouped by domain (users, groups, categories, roles, services,
+// SLA tiers, business calendars, automations). Backs the screens under the Admin view. Each call
+// is a typed wrapper over the shared client; create returns the new id, update/delete return void.
 export const adminApi = {
   // Users
   getUsers: () => api.get<User[]>('/admin/users'),

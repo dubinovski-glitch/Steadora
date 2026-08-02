@@ -56,6 +56,8 @@ const FIELD_DEFS: Record<EntityType, { key: string; label: string }[]> = {
 // Local mutable field state during editing
 type FieldMap = Record<string, { visible: boolean; mandatory: boolean }>
 
+// Build the editable visible/mandatory map for one entity type, defaulting unconfigured
+// fields to visible+optional. Maps stored WorkspaceField configs onto the static FIELD_DEFS.
 function buildFieldMap(fields: WorkspaceField[], entityType: EntityType): FieldMap {
   const map: FieldMap = {}
   for (const def of FIELD_DEFS[entityType]) {
@@ -65,6 +67,8 @@ function buildFieldMap(fields: WorkspaceField[], entityType: EntityType): FieldM
   return map
 }
 
+// Workspaces admin tab: master-detail editor for workspaces. Left list selects a workspace;
+// right panel edits its name/description, per-entity field visibility/mandatory rules, and members.
 export function WorkspacesTab({ addToast }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [selected, setSelected] = useState<Workspace | null>(null)
@@ -86,11 +90,13 @@ export function WorkspacesTab({ addToast }: Props) {
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
   const [addUserId, setAddUserId] = useState('')
 
+  // On mount: load workspaces and fetch the user list for the member picker.
   useEffect(() => {
     load()
     api.get<User[]>('/users').then(setUsers).catch(() => {})
   }, [])
 
+  // Fetch all workspaces; if one is already open, re-open its refreshed copy.
   const load = async () => {
     setLoading(true)
     try {
@@ -103,6 +109,7 @@ export function WorkspacesTab({ addToast }: Props) {
     } finally { setLoading(false) }
   }
 
+  // Open a workspace for editing: copy its values into the editable form/field/member state.
   const openWorkspace = (ws: Workspace) => {
     setSelected(ws)
     setEditName(ws.name)
@@ -117,6 +124,7 @@ export function WorkspacesTab({ addToast }: Props) {
     setFieldTab('incident')
   }
 
+  // Create a new workspace from the inline form, then load and open it.
   const createWorkspace = async () => {
     if (!newName.trim()) return
     setSaving(true)
@@ -129,6 +137,7 @@ export function WorkspacesTab({ addToast }: Props) {
     } finally { setSaving(false) }
   }
 
+  // Save the selected workspace: persist meta, then flattened field configs, then members.
   const saveWorkspace = async () => {
     if (!selected) return
     setSaving(true)
@@ -153,6 +162,7 @@ export function WorkspacesTab({ addToast }: Props) {
     } finally { setSaving(false) }
   }
 
+  // Delete the selected non-default workspace after confirmation, then clear and reload.
   const deleteWorkspace = async () => {
     if (!selected || selected.isDefault) return
     if (!confirm(`Delete workspace "${selected.name}"? This cannot be undone.`)) return
@@ -162,6 +172,7 @@ export function WorkspacesTab({ addToast }: Props) {
     await load()
   }
 
+  // Toggle a field's visible/mandatory flag in the current entity tab; hiding also clears mandatory.
   const setField = (key: string, which: 'visible' | 'mandatory', value: boolean) => {
     setFieldMaps(prev => {
       const map = { ...prev[fieldTab], [key]: { ...prev[fieldTab][key], [which]: value } }
@@ -171,6 +182,7 @@ export function WorkspacesTab({ addToast }: Props) {
     })
   }
 
+  // Add the chosen user to the member list (ignoring blanks/duplicates) and reset the picker.
   const addUser = () => {
     const uid = parseInt(addUserId)
     if (!uid || selectedUserIds.includes(uid)) return
@@ -178,6 +190,7 @@ export function WorkspacesTab({ addToast }: Props) {
     setAddUserId('')
   }
 
+  // Remove a user from the workspace member list.
   const removeUser = (uid: number) => setSelectedUserIds(prev => prev.filter(id => id !== uid))
 
   const inp = `text-sm border border-border-default rounded px-2 py-1.5 focus:outline-none focus:border-border-focus bg-surface text-text-primary`

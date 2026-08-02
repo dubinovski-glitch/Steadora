@@ -6,6 +6,8 @@ import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
 import { useAuthStore } from '../../store/authStore'
 import { Badge, priorityVariant, statusVariant } from '../../components/primitives/Badge'
+import { priorityLabel, statusLabel } from '../../utils/labels'
+import { modKey, modEnter } from '../../utils/platform'
 import { Avatar } from '../../components/primitives/Avatar'
 import { IncidentDetailView } from '../incidents/IncidentDetailView'
 import type { Problem, Comment, ActivityEvent, User, Group, Incident } from '../../types'
@@ -34,6 +36,8 @@ interface EditState {
   isKnownError: boolean
 }
 
+// Maps a Problem record into the editable form state, applying defaults for missing fields.
+// Group/assignee slugs start empty and are seeded later once lookups load.
 function toEdit(p: Problem): EditState {
   return {
     title: p.title ?? '',
@@ -52,6 +56,9 @@ type ActivityItem = { at: string } & (
   | { type: 'event'; event: ActivityEvent }
 )
 
+// Full-page detail view for a single problem: editable title/root-cause/workaround,
+// state-progress header, change log, linked incidents, activity feed, and a properties sidebar.
+// Renders a skeleton until the problem loads, and can drill into a linked incident in read-only mode.
 export function ProblemDetailView({ problemId, addToast }: Props) {
   const { closeProblem } = useAppStore()
   const { user: authUser } = useAuthStore()
@@ -70,6 +77,8 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
   const [groups, setGroups] = useState<Group[]>([])
   const [groupUsers, setGroupUsers] = useState<User[]>([])
 
+  // Initial load: fetch problem plus comments, timeline, groups, linked incidents and watchers in parallel.
+  // Seeds form state and computes the current user's watch status.
   useEffect(() => {
     Promise.all([
       problemApi.getById(problemId),
@@ -107,6 +116,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
   }, [problemId])
 
   // Seed group/assignee slugs once lookups are loaded
+  // Matches the problem's group name to a slug so the sidebar selects show the right value.
   useEffect(() => {
     if (!problem || !groups.length) return
     setEdit(prev => {
@@ -116,6 +126,8 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     })
   }, [problem, groups])
 
+  // When the selected group changes, load that group's users for the assignee dropdown
+  // and resolve the current assignee name to its external id.
   useEffect(() => {
     if (!edit?.groupSlug) { setGroupUsers([]); return }
     api.get<User[]>(`/users?groupSlug=${encodeURIComponent(edit.groupSlug)}`)
@@ -141,12 +153,15 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     return () => window.removeEventListener('keydown', handle)
   }, [edit, problem])
 
+  // Curried change handler: updates one EditState field from an input/select/textarea and marks the form dirty.
   const sf = <K extends keyof EditState>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       setEdit(prev => prev ? { ...prev, [k]: e.target.value } : prev)
       setIsDirty(true)
     }
 
+  // Persist edits: update fields, push a separate state transition if it changed,
+  // then re-fetch problem/comments/timeline to refresh the view and clear the dirty flag.
   const save = async () => {
     if (!edit || !problem) return
     setSaving(true)
@@ -173,6 +188,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     } finally { setSaving(false) }
   }
 
+  // Post the note textarea as an internal comment, clear the input, then refresh comments and timeline.
   const submitNote = async () => {
     if (!noteBody.trim()) return
     await problemApi.postComment(problemId, authUser?.externalId ?? '', noteBody, true)
@@ -186,6 +202,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     setTimeline(updatedTimeline as ActivityEvent[])
   }
 
+  // Subscribe/unsubscribe the current user to problem notifications and optimistically adjust the watcher count.
   const toggleWatch = async () => {
     if (!authUser) return
     try {
@@ -203,6 +220,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     } catch { addToast('Failed to update subscription') }
   }
 
+  // Merge comments and non-comment timeline events into a single chronological activity feed.
   const activityItems = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [
       ...comments.map(c => ({ type: 'comment' as const, at: c.createdAt, comment: c })),
@@ -211,6 +229,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     return items.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
   }, [comments, timeline])
 
+  // Field-change events only, sorted newest-first, for the audit-style Change Log table.
   const changeLog = useMemo(() =>
     [...timeline]
       .filter(e => e.kind === 'field_changed' && e.field)
@@ -222,6 +241,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
   [timeline])
 
   // Time in current state
+  // Computes elapsed time since the last State change (or open time) as a compact m/h/d string.
   const timeInState = useMemo(() => {
     const lastStateChange = [...timeline]
       .filter(e => e.kind === 'field_changed' && e.field === 'State')
@@ -256,6 +276,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
   const sel = 'w-full text-sm font-medium text-text-primary bg-surface border border-border-default rounded px-2 py-1.5 focus:outline-none focus:border-border-focus disabled:opacity-50 disabled:cursor-not-allowed'
   const inp = sel
 
+  // Formats an ISO timestamp as a short relative "x ago" string (assumes UTC when no tz suffix).
   const relative = (iso: string) => {
     const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
     const diff = Date.now() - new Date(utc).getTime()
@@ -267,6 +288,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     return `${Math.floor(h / 24)}d ago`
   }
 
+  // Formats an ISO timestamp as an absolute date+time, omitting the year when it's the current year.
   const formatDate = (iso: string) => {
     const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
     const d = new Date(utc)
@@ -278,6 +300,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     })
   }
 
+  // Formats an ISO timestamp as "Mon D, h:mm AM/PM" (with year when not current) for activity/change rows.
   const formatActivityTime = (iso: string) => {
     const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
     const d = new Date(utc)
@@ -289,6 +312,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
     return `${date}, ${time}`
   }
 
+  // Index of the currently-selected state within STATE_STEPS, used to render the progress dots.
   const currentStateIdx = STATE_STEPS.findIndex(s => s.code === edit.stateCode)
 
   return (
@@ -405,7 +429,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
                 className="w-full px-3 py-2 text-sm text-text-primary bg-surface resize-none focus:outline-none"
               />
               <div className="flex items-center justify-between px-3 py-2 bg-subtle">
-                <span className="text-xs text-text-muted">⌘+⏎ to add</span>
+                <span className="text-xs text-text-muted">{modEnter} to add</span>
                 <button onClick={submitNote} disabled={isClosed} className="px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white text-xs rounded font-medium">
                   Add Note
                 </button>
@@ -481,8 +505,8 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
                     className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-hover transition-colors ${idx > 0 ? 'border-t border-border-default' : ''}`}
                   >
                     <span className="font-mono text-xs text-text-secondary shrink-0">{inc.number}</span>
-                    <Badge variant={priorityVariant(inc.priorityCode)}>{inc.priorityCode}</Badge>
-                    <Badge variant={statusVariant(inc.statusCode)}>{inc.statusCode}</Badge>
+                    <Badge variant={priorityVariant(inc.priorityCode)}>{priorityLabel(inc.priorityCode)}</Badge>
+                    <Badge variant={statusVariant(inc.statusCode)}>{statusLabel(inc.statusCode)}</Badge>
                     <span className="flex-1 text-sm text-text-primary truncate">{inc.title}</span>
                     {inc.assigneeName && (
                       <span className="flex items-center gap-1 text-xs text-text-secondary shrink-0">
@@ -561,7 +585,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
                   ? 'bg-accent hover:bg-accent-hover ring-2 ring-accent/30'
                   : 'bg-accent hover:bg-accent-hover disabled:opacity-40'
               }`}
-              title={isDirty ? 'You have unsaved changes (⌘S)' : 'No changes (⌘S)'}
+              title={isDirty ? `You have unsaved changes (${modKey}S)` : `No changes (${modKey}S)`}
             >
               {saving ? 'Saving…' : isDirty ? 'Save Changes ●' : 'Save Changes'}
             </button>
@@ -647,6 +671,7 @@ export function ProblemDetailView({ problemId, addToast }: Props) {
 
 /* ── Sidebar primitives ── */
 
+// Sidebar field wrapper: renders a label above its editable control (children).
 function SbField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -656,6 +681,7 @@ function SbField({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
+// Sidebar read-only info row: label on the left, static value on the right.
 function SbInfo({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-0.5">

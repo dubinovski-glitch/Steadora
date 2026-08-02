@@ -1,7 +1,10 @@
 import { api } from './client'
 import type { Change } from '../types'
 
+// Change-management endpoints: list/fetch/create/update changes, drive CAB approval votes,
+// state transitions, and comments.
 export const changeApi = {
+  // List changes, optionally filtered to a single workflow state.
   getAll: (state?: string) => api.get<Change[]>(`/changes${state ? `?state=${state}` : ''}`),
   getById: (id: number) => api.get<Change>(`/changes/${id}`),
   create: (body: object) => api.post<{ id: number }>('/changes', body),

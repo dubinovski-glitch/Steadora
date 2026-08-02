@@ -6,10 +6,17 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
+/// <summary>
+/// Manages change request records (the ITIL change-management entity): list/detail reads and
+/// create/update/state-transition/CAB-voting writes. Queries are scoped to the current workspace, and
+/// each returned change is enriched with its CAB reviewers and affected service slugs.
+/// </summary>
 public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspace) : IChangeRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(ChangeRepository));
 
+    // Shared SELECT projecting a change plus its decoded lookup/owner/approver/group columns. Callers
+    // append optional filter, workspace scope, and ORDER BY onto the trailing WHERE.
     private const string BaseSelect = """
         SELECT
             c.ChangeId, c.Number, c.Title, c.Description, c.RolloutPlan, c.RollbackPlan, c.ImpactNotes,
@@ -32,8 +39,13 @@ public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspa
         WHERE c.DeletedAt IS NULL
         """;
 
+    /// <summary>
+    /// Returns all changes (newest-updated first), optionally filtered to a single state code, scoped to the
+    /// current workspace and enriched with reviewers and affected services.
+    /// </summary>
     public async Task<IEnumerable<Change>> GetAllAsync(string? stateFilter = null)
     {
+        // Append the optional state filter and the mandatory workspace scope onto the shared SELECT.
         string sql = $"{BaseSelect} {(stateFilter is not null ? "AND cs.Code=@stateFilter" : "")} AND c.WorkspaceId=@wid ORDER BY c.UpdatedAt DESC";
         try
         {
@@ -49,6 +61,10 @@ public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspa
         }
     }
 
+    /// <summary>
+    /// Returns a single change's full detail by id (workspace-scoped), enriched with its reviewers and
+    /// affected services; null if not found.
+    /// </summary>
     public async Task<Change?> GetByIdAsync(long changeId)
     {
         string sql = $"{BaseSelect} AND c.ChangeId=@changeId AND c.WorkspaceId=@wid";
@@ -67,12 +83,18 @@ public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspa
         }
     }
 
+    /// <summary>
+    /// Creates a new change request: resolves type/risk/owner/approver/group references, starts it in the
+    /// 'draft' state, draws the next number from a sequence, and inserts it stamped with the current
+    /// workspace. Returns the new id.
+    /// </summary>
     public async Task<long> CreateAsync(CreateChangeRequest request)
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
+            // Resolve codes/slugs to ids; new changes always start in the 'draft' state.
             sql = "SELECT ChangeTypeId FROM lookup.ChangeType WHERE Code=@c";
             var typeId = await conn.ExecuteScalarAsync<byte>(sql, new { c = request.ChangeTypeCode });
             sql = "SELECT RiskId FROM lookup.Risk WHERE Code=@c";
@@ -84,6 +106,7 @@ public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspa
             var approverId = request.ApproverExtId is null ? (int?)null : await conn.ExecuteScalarAsync<int?>(sql, new { e = request.ApproverExtId });
             sql = "SELECT GroupId FROM core.[Group] WHERE Slug=@s";
             var groupId = request.GroupSlug is null ? (int?)null : await conn.ExecuteScalarAsync<int?>(sql, new { s = request.GroupSlug });
+            // Draw the next change number from the dedicated sequence.
             sql = "SELECT NEXT VALUE FOR itil.ChangeSeq";
             var newId = await conn.ExecuteScalarAsync<long>(sql);
             sql = """
@@ -106,12 +129,17 @@ public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspa
         }
     }
 
+    /// <summary>
+    /// Applies a full field edit to a change request, resolving type/risk/owner/approver/group references
+    /// before updating the row. The state is not changed here (see <see cref="UpdateStateAsync"/>).
+    /// </summary>
     public async Task UpdateAsync(long changeId, UpdateChangeRequest request)
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
+            // Resolve codes/slugs to ids before writing the update.
             sql = "SELECT ChangeTypeId FROM lookup.ChangeType WHERE Code=@c";
             var typeId = await conn.ExecuteScalarAsync<byte>(sql, new { c = request.ChangeTypeCode });
             sql = "SELECT RiskId FROM lookup.Risk WHERE Code=@c";
@@ -139,6 +167,10 @@ public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspa
         }
     }
 
+    /// <summary>
+    /// Transitions a change to a new lifecycle state, stamping CompletedAt when it reaches the 'complete'
+    /// state.
+    /// </summary>
     public async Task UpdateStateAsync(long changeId, string stateCode, int? actorUserId)
     {
         string sql = "SELECT StateId FROM lookup.ChangeState WHERE Code=@stateCode";
@@ -157,6 +189,10 @@ public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspa
         }
     }
 
+    /// <summary>
+    /// Records a CAB reviewer's approval vote (approve/reject) and optional comment on a change via the
+    /// stored proc, which upserts the reviewer's decision. The voter is identified by external id.
+    /// </summary>
     public async Task VoteAsync(long changeId, string userExtId, string voteCode, string? comment)
     {
         string sql = "itil.usp_VoteOnChange";
@@ -175,6 +211,8 @@ public class ChangeRepository(IDbConnectionFactory db, IWorkspaceContext workspa
         }
     }
 
+    // Batch-loads child collections (CAB reviewers + affected service slugs) for all given changes in two
+    // queries and stitches them back onto each change, avoiding an N+1 query per change.
     private static async Task EnrichAsync(System.Data.IDbConnection conn, List<Change> changes)
     {
         if (changes.Count == 0) return;

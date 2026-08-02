@@ -1,6 +1,8 @@
 import { api } from './client'
 import type { SlaStats, Incident, Service, SlaByPriority, TeamLoad, DailyVolume } from '../types'
 
+// Dashboard / SLA reporting endpoints. Each method is a typed GET returning aggregated stats;
+// the `days` params scope the reporting window. Consumed by the dashboard and SLA views.
 export const dashboardApi = {
   getKpis: (days = 7) => api.get<SlaStats>(`/dashboard/kpis?days=${days}`),
   getSlaAtRisk: () => api.get<Incident[]>('/dashboard/sla-at-risk'),

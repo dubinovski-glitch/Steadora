@@ -1,5 +1,9 @@
 namespace ApertureITSM.Core.Models;
 
+/// <summary>
+/// An ITIL problem: the underlying cause of one or more incidents. Tracks root cause analysis,
+/// any documented workaround, and whether it has been confirmed as a known error.
+/// </summary>
 public class Problem
 {
     public long ProblemId { get; init; }
@@ -13,7 +17,7 @@ public class Problem
     public byte StateId { get; init; }
     public string StateCode { get; init; } = string.Empty;
     public string StateName { get; init; } = string.Empty;
-    public bool IsKnownError { get; init; }
+    public bool IsKnownError { get; init; } // root cause identified and a workaround documented
 
     public int? AssigneeUserId { get; init; }
     public string? AssigneeName { get; init; }
@@ -28,5 +32,5 @@ public class Problem
     public DateTime UpdatedAt { get; init; }
 
     public int LinkedIncidentCount { get; init; }
-    public List<string> AffectedServiceSlugs { get; set; } = [];
+    public List<string> AffectedServiceSlugs { get; set; } = []; // services impacted by this problem
 }

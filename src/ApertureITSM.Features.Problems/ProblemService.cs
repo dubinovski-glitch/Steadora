@@ -6,7 +6,7 @@ namespace ApertureITSM.Features.Problems;
 
 public interface IProblemService
 {
-    Task<(IEnumerable<Problem> Items, int Total)> GetAllAsync(bool includeResolved, int[]? groupIds = null, int page = 1, int pageSize = 25);
+    Task<(IEnumerable<Problem> Items, int Total)> GetAllAsync(bool includeResolved, int[]? groupIds = null, int? assigneeUserId = null, int page = 1, int pageSize = 25);
     Task<Problem?> GetDetailAsync(long problemId);
     Task<long> CreateAsync(CreateProblemRequest request);
     Task UpdateAsync(long problemId, UpdateProblemRequest request);
@@ -18,8 +18,8 @@ public class ProblemService(IProblemRepository repository) : IProblemService
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(ProblemService));
 
-    public Task<(IEnumerable<Problem> Items, int Total)> GetAllAsync(bool includeResolved, int[]? groupIds = null, int page = 1, int pageSize = 25)
-        => repository.GetAllAsync(includeResolved, groupIds, page, pageSize);
+    public Task<(IEnumerable<Problem> Items, int Total)> GetAllAsync(bool includeResolved, int[]? groupIds = null, int? assigneeUserId = null, int page = 1, int pageSize = 25)
+        => repository.GetAllAsync(includeResolved, groupIds, assigneeUserId, page, pageSize);
 
     public Task<Problem?> GetDetailAsync(long problemId)
         => repository.GetByIdAsync(problemId);

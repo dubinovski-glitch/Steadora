@@ -12,6 +12,8 @@ const HEALTH_STYLES: Record<string, { dot: string; label: string }> = {
   incident: { dot: 'bg-red-500',    label: 'Incident' },
 }
 
+// Services & Catalogue admin tab: a table of business services (owner, health, open count,
+// SLA tier) with expandable rows revealing each service's category/subcategory tree and modals.
 export function ServicesTab({ addToast }: Props) {
   const [services, setServices]               = useState<AdminService[]>([])
   const [categories, setCategories]           = useState<AdminCategory[]>([])
@@ -27,17 +29,22 @@ export function ServicesTab({ addToast }: Props) {
   const [deletingCat, setDeletingCat]         = useState<number | null>(null)
   const [deletingSub, setDeletingSub]         = useState<number | null>(null)
 
+  // Fetch services plus the lookups needed by the modals (categories, groups, SLA tiers).
   const load = () => {
     setLoading(true)
     Promise.all([adminApi.getServices(), adminApi.getCategories(), adminApi.getGroups(), adminApi.getSlaTiers()])
       .then(([svcs, cats, grps, tiers]) => { setServices(svcs); setCategories(cats); setGroups(grps); setSlaTiers(tiers) })
       .finally(() => setLoading(false))
   }
+  // Load data once on mount.
   useEffect(() => { load() }, [])
 
+  // Expand/collapse a service row's category tree.
   const toggleSvc = (id: number) => setExpandedSvcs(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  // Expand/collapse a category's subcategory list.
   const toggleCat = (id: number) => setExpandedCats(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
+  // Toggle a service's active flag (re-sending its current fields), then reload.
   const handleDeactivate = async (svc: AdminService) => {
     setMenuOpen(null)
     await adminApi.updateService(svc.serviceId, { name: svc.name, owningGroupId: svc.owningGroupId, healthCode: svc.healthCode, slaTierId: svc.slaTierId, isActive: !svc.isActive })
@@ -45,6 +52,7 @@ export function ServicesTab({ addToast }: Props) {
     load()
   }
 
+  // Delete a category (blocked if it has linked tickets) after confirmation, then reload.
   const handleDeleteCategory = async (cat: AdminCategory) => {
     if (cat.ticketCount > 0) { addToast(`Cannot delete "${cat.displayName}" — ${cat.ticketCount} ticket(s) linked`); return }
     if (!confirm(`Delete category "${cat.displayName}" and its subcategories?`)) return
@@ -54,6 +62,7 @@ export function ServicesTab({ addToast }: Props) {
     finally { setDeletingCat(null) }
   }
 
+  // Delete a subcategory after confirmation, then reload.
   const handleDeleteSubCategory = async (sub: AdminSubCategory) => {
     if (!confirm(`Delete subcategory "${sub.displayName}"?`)) return
     setDeletingSub(sub.subCategoryId)
@@ -213,10 +222,13 @@ export function ServicesTab({ addToast }: Props) {
 
 // ServiceModal — no Category field
 interface ServiceModalProps { svc?: AdminService; groups: Group[]; slaTiers: SlaTier[]; onClose: () => void; onSaved: (msg: string) => void }
+// Modal to create or edit a service (name, owning group, health, SLA tier, active flag).
 function ServiceModal({ svc, groups, slaTiers, onClose, onSaved }: ServiceModalProps) {
   const [form, setForm] = useState({ name: svc?.name ?? '', owningGroupId: String(svc?.owningGroupId ?? ''), healthCode: svc?.healthCode ?? 'healthy', slaTierId: String(svc?.slaTierId ?? ''), isActive: svc?.isActive ?? true })
   const [saving, setSaving] = useState(false)
+  // Curried change handler that updates the given form field.
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
+  // Validate the name, then create or update the service via the API.
   const submit = async () => {
     if (!form.name.trim()) return
     setSaving(true)
@@ -283,10 +295,13 @@ function ServiceModal({ svc, groups, slaTiers, onClose, onSaved }: ServiceModalP
 
 // CategoryModal — with Service dropdown
 interface CategoryModalProps { cat?: AdminCategory; defaultServiceId?: number; services: AdminService[]; onClose: () => void; onSaved: (msg: string) => void }
+// Modal to create or edit a category, including the service it belongs to.
 function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: CategoryModalProps) {
   const [form, setForm] = useState({ serviceId: String(cat?.serviceId ?? defaultServiceId ?? ''), displayName: cat?.displayName ?? '' })
   const [saving, setSaving] = useState(false)
+  // Curried change handler that updates the given form field.
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
+  // Validate the name, then create or update the category via the API.
   const submit = async () => {
     if (!form.displayName.trim()) return
     setSaving(true)
@@ -328,10 +343,13 @@ function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: Ca
 
 // SubCategoryModal — category dropdown
 interface SubCategoryModalProps { sub?: AdminSubCategory; defaultCategoryId?: number; categories: AdminCategory[]; onClose: () => void; onSaved: (msg: string) => void }
+// Modal to create or edit a subcategory under a chosen parent category.
 function SubCategoryModal({ sub, defaultCategoryId, categories, onClose, onSaved }: SubCategoryModalProps) {
   const [form, setForm] = useState({ categoryId: String(sub?.categoryId ?? defaultCategoryId ?? categories[0]?.categoryId ?? ''), displayName: sub?.displayName ?? '' })
   const [saving, setSaving] = useState(false)
+  // Curried change handler that updates the given form field.
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
+  // Validate the name and parent, then create or update the subcategory via the API.
   const submit = async () => {
     if (!form.displayName.trim() || !form.categoryId) return
     setSaving(true)

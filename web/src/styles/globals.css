@@ -19,6 +19,7 @@
   --text-secondary: #4a5468;
   --text-tertiary:  #6b7488;
   --text-muted:     #8a93a4;
+  --text-inverse:   #ffffff;
 
   --accent:         #2b5fff;
   --accent-hover:   #1f4fe6;
@@ -74,6 +75,7 @@
   --text-secondary: #8b949e;
   --text-tertiary:  #6e7681;
   --text-muted:     #484f58;
+  --text-inverse:   #0f172a;
 
   --accent:         #58a6ff;
   --accent-hover:   #79b8ff;
@@ -191,6 +193,18 @@ body {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+/* ── Keyboard focus visibility ────────────────────────────────── */
+/* Inputs keep their focus border (below); everything else gets a visible
+   ring when focused via keyboard, so tab navigation is always trackable. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
 
 /* ── Form control borders ─────────────────────────────────────── */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),

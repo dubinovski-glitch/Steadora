@@ -6,6 +6,8 @@ import type { AdminCategory, AdminSubCategory, AdminService } from '../../types'
 
 interface Props { addToast: (msg: string) => void }
 
+// Categories admin tab: shows the incident/request classification tree grouped by service,
+// with expandable categories/subcategories and create/edit/delete modals.
 export function CategoriesTab({ addToast }: Props) {
   const [categories, setCategories] = useState<AdminCategory[]>([])
   const [services, setServices] = useState<AdminService[]>([])
@@ -16,6 +18,7 @@ export function CategoriesTab({ addToast }: Props) {
   const [deletingCat, setDeletingCat] = useState<number | null>(null)
   const [deletingSub, setDeletingSub] = useState<number | null>(null)
 
+  // Fetch categories and services in parallel; expand all categories by default.
   const load = () => {
     setLoading(true)
     Promise.all([adminApi.getCategories(), adminApi.getServices()])
@@ -26,10 +29,13 @@ export function CategoriesTab({ addToast }: Props) {
       })
       .finally(() => setLoading(false))
   }
+  // Load data once on mount.
   useEffect(() => { load() }, [])
 
+  // Expand/collapse a category's subcategory list by id.
   const toggle = (id: number) => setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
+  // Delete a category (blocked if it has linked tickets) after confirmation, then reload.
   const handleDeleteCategory = async (cat: AdminCategory) => {
     if (cat.ticketCount > 0) { addToast(`Cannot delete "${cat.displayName}" — it has ${cat.ticketCount} incident(s)`); return }
     if (!confirm(`Delete category "${cat.displayName}" and all its subcategories?`)) return
@@ -39,6 +45,7 @@ export function CategoriesTab({ addToast }: Props) {
     finally { setDeletingCat(null) }
   }
 
+  // Delete a subcategory after confirmation, then reload.
   const handleDeleteSubCategory = async (sub: AdminSubCategory) => {
     if (!confirm(`Delete subcategory "${sub.displayName}"?`)) return
     setDeletingSub(sub.subCategoryId)
@@ -47,7 +54,7 @@ export function CategoriesTab({ addToast }: Props) {
     finally { setDeletingSub(null) }
   }
 
-  // Group categories by service
+  // Group categories by their owning service, plus a bucket of unassigned ones
   const assignedGroups = services
     .map(s => ({ service: s, cats: categories.filter(c => c.serviceId === s.serviceId) }))
     .filter(g => g.cats.length > 0)
@@ -143,6 +150,8 @@ interface CategoryListProps {
   deletingSub: number | null
 }
 
+// Renders a flat list of categories (with their nested subcategories when expanded) and
+// the per-row add/edit/delete action buttons. Pure presentational; all actions are callbacks.
 function CategoryList({ categories, expanded, onToggle, onEditCategory, onDeleteCategory, onAddSubCategory, onEditSubCategory, onDeleteSubCategory, deletingCat, deletingSub }: CategoryListProps) {
   return (
     <>
@@ -186,10 +195,13 @@ function CategoryList({ categories, expanded, onToggle, onEditCategory, onDelete
 
 // CategoryModal — with Service dropdown
 interface CategoryModalProps { cat?: AdminCategory; defaultServiceId?: number; services: AdminService[]; onClose: () => void; onSaved: (msg: string) => void }
+// Modal to create or edit a category, including the service it belongs to.
 function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: CategoryModalProps) {
   const [form, setForm] = useState({ serviceId: String(cat?.serviceId ?? defaultServiceId ?? ''), displayName: cat?.displayName ?? '' })
   const [saving, setSaving] = useState(false)
+  // Curried change handler that updates the given form field.
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
+  // Validate the name, then create or update the category via the API.
   const submit = async () => {
     if (!form.displayName.trim()) return
     setSaving(true)
@@ -231,10 +243,13 @@ function CategoryModal({ cat, defaultServiceId, services, onClose, onSaved }: Ca
 
 // SubCategoryModal — category dropdown shows "ServiceName › CategoryName"
 interface SubCategoryModalProps { sub?: AdminSubCategory; defaultCategoryId?: number; categories: AdminCategory[]; onClose: () => void; onSaved: (msg: string) => void }
+// Modal to create or edit a subcategory under a chosen parent category.
 function SubCategoryModal({ sub, defaultCategoryId, categories, onClose, onSaved }: SubCategoryModalProps) {
   const [form, setForm] = useState({ categoryId: String(sub?.categoryId ?? defaultCategoryId ?? categories[0]?.categoryId ?? ''), displayName: sub?.displayName ?? '' })
   const [saving, setSaving] = useState(false)
+  // Curried change handler that updates the given form field.
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
+  // Validate the name, then create or update the subcategory via the API.
   const submit = async () => {
     if (!form.displayName.trim()) return
     setSaving(true)

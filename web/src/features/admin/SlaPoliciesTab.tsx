@@ -6,12 +6,14 @@ import type { SlaTier, SlaTierTarget } from '../../types'
 
 interface Props { addToast: (msg: string) => void }
 
+// Render a minute count as a compact human string (e.g. 90 → "2h", 1440 → "1d").
 function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes}m`
   if (minutes < 1440) return `${Math.round(minutes / 60)}h`
   return `${Math.round(minutes / 1440)}d`
 }
 
+// Inverse of formatMinutes: parse a "30m"/"4h"/"2d" string back into a minute count.
 function parseMinutes(value: string): number {
   const v = value.trim().toLowerCase()
   if (v.endsWith('d')) return parseInt(v) * 1440
@@ -26,6 +28,8 @@ const ESCALATION_ROWS = [
   { pct: '100%', action: 'Notify all up to service owner' },
 ]
 
+// SLA policies admin tab: master-detail UI to select a tier, edit its metadata and
+// per-priority response/resolution targets, and view the read-only escalation rules.
 export function SlaPoliciesTab({ addToast }: Props) {
   const [tiers, setTiers] = useState<SlaTier[]>([])
   const [selected, setSelected] = useState<SlaTier | null>(null)
@@ -36,6 +40,7 @@ export function SlaPoliciesTab({ addToast }: Props) {
   const [savingTargets, setSavingTargets] = useState(false)
   const [newTierModal, setNewTierModal] = useState(false)
 
+  // Fetch all SLA tiers; auto-select the first one on initial load.
   const load = () => {
     setLoading(true)
     adminApi.getSlaTiers().then(data => {
@@ -44,14 +49,17 @@ export function SlaPoliciesTab({ addToast }: Props) {
     }).finally(() => setLoading(false))
   }
 
+  // Load tiers once on mount.
   useEffect(() => { load() }, [])
 
+  // Select a tier and copy its meta + targets into editable local state.
   const selectTier = (tier: SlaTier) => {
     setSelected(tier)
     setEditForm({ ...tier })
     setEditTargets(tier.targets.map(t => ({ ...t })))
   }
 
+  // Persist the selected tier's metadata (name, description, flags), then reload.
   const handleSaveMeta = async () => {
     if (!selected) return
     setSavingMeta(true)
@@ -72,6 +80,7 @@ export function SlaPoliciesTab({ addToast }: Props) {
     }
   }
 
+  // Persist the per-priority response/resolution targets for the selected tier, then reload.
   const handleSaveTargets = async () => {
     if (!selected) return
     setSavingTargets(true)
@@ -90,6 +99,7 @@ export function SlaPoliciesTab({ addToast }: Props) {
     }
   }
 
+  // Parse a typed duration string into minutes and update the matching priority's target.
   const setTargetField = (priorityId: number, field: 'responseMinutes' | 'resolutionMinutes', raw: string) => {
     const minutes = parseMinutes(raw)
     setEditTargets(prev => prev.map(t => t.priorityId === priorityId ? { ...t, [field]: minutes } : t))
@@ -295,13 +305,16 @@ export function SlaPoliciesTab({ addToast }: Props) {
   )
 }
 
+// Modal to create a new SLA tier; on success returns the new tier id so the parent can select it.
 function NewTierModal({ onClose, onSaved }: { onClose: () => void; onSaved: (msg: string, id: number) => void }) {
   const [form, setForm] = useState({ name: '', description: '', calculate247: true, autoEscalate: true })
   const [saving, setSaving] = useState(false)
 
+  // Curried change handler that updates the given form field.
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
 
+  // Validate the name, create the tier, and pass back its id for selection.
   const submit = async () => {
     if (!form.name.trim()) return
     setSaving(true)

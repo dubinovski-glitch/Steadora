@@ -1,8 +1,10 @@
 import { api } from './client'
 import type { Incident, Comment, ActivityEvent } from '../types'
 
+// One page of incidents plus paging metadata, as returned by the queue endpoint.
 export interface IncidentPage { items: Incident[]; total: number; page: number; pageSize: number }
 
+// All optional query filters for the incident queue (search, status, scope, sort, paging).
 export interface IncidentFilter {
   search?: string; status?: string; priority?: string
   assigneeUserId?: number; slaAtRisk?: boolean
@@ -12,6 +14,7 @@ export interface IncidentFilter {
   page?: number; pageSize?: number
 }
 
+// Build the query string from a filter, omitting unset fields and defaulting page/pageSize.
 function qs(f: IncidentFilter) {
   const p = new URLSearchParams()
   if (f.search) p.set('search', f.search)
@@ -30,6 +33,8 @@ function qs(f: IncidentFilter) {
   return p.toString()
 }
 
+// Incident CRUD + workflow endpoints (status/assignee/priority transitions, comments, timeline,
+// watchers). Mutating calls take an optional actorUserId so the server can attribute the change.
 export const incidentApi = {
   getQueue: (f: IncidentFilter = {}) => api.get<IncidentPage>(`/incidents?${qs(f)}`),
   getById: (id: number) => api.get<Incident>(`/incidents/${id}`),

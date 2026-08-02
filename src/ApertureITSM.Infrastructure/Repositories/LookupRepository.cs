@@ -6,10 +6,15 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
+/// <summary>
+/// Read-only access to the reference/lookup tables (priorities, statuses, states, categories, etc.)
+/// that populate dropdowns and decode coded values throughout the UI. Lists are returned in SortOrder.
+/// </summary>
 public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(LookupRepository));
 
+    /// <summary>Returns the priority levels in display order.</summary>
     public async Task<IEnumerable<Priority>> GetPrioritiesAsync()
     {
         string sql = "SELECT * FROM lookup.Priority ORDER BY SortOrder";
@@ -17,6 +22,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get priorities", sql, ex); throw; }
     }
 
+    /// <summary>Returns the incident lifecycle statuses in display order.</summary>
     public async Task<IEnumerable<IncidentStatus>> GetIncidentStatusesAsync()
     {
         string sql = "SELECT * FROM lookup.IncidentStatus ORDER BY SortOrder";
@@ -24,6 +30,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get incident statuses", sql, ex); throw; }
     }
 
+    /// <summary>Returns the problem lifecycle states in display order.</summary>
     public async Task<IEnumerable<ProblemState>> GetProblemStatesAsync()
     {
         string sql = "SELECT * FROM lookup.ProblemState ORDER BY SortOrder";
@@ -31,6 +38,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get problem states", sql, ex); throw; }
     }
 
+    /// <summary>Returns the change lifecycle states in display order.</summary>
     public async Task<IEnumerable<ChangeState>> GetChangeStatesAsync()
     {
         string sql = "SELECT * FROM lookup.ChangeState ORDER BY SortOrder";
@@ -38,6 +46,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get change states", sql, ex); throw; }
     }
 
+    /// <summary>Returns the change types (e.g. standard/normal/emergency) in display order.</summary>
     public async Task<IEnumerable<ChangeType>> GetChangeTypesAsync()
     {
         string sql = "SELECT * FROM lookup.ChangeType ORDER BY SortOrder";
@@ -45,6 +54,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get change types", sql, ex); throw; }
     }
 
+    /// <summary>Returns the change risk levels in display order.</summary>
     public async Task<IEnumerable<Risk>> GetRisksAsync()
     {
         string sql = "SELECT * FROM lookup.Risk ORDER BY SortOrder";
@@ -52,6 +62,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get risks", sql, ex); throw; }
     }
 
+    /// <summary>Returns the impact levels (a driver of priority) in display order.</summary>
     public async Task<IEnumerable<Impact>> GetImpactsAsync()
     {
         string sql = "SELECT * FROM lookup.Impact ORDER BY SortOrder";
@@ -59,6 +70,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get impacts", sql, ex); throw; }
     }
 
+    /// <summary>Returns the urgency levels (a driver of priority) in display order.</summary>
     public async Task<IEnumerable<Urgency>> GetUrgenciesAsync()
     {
         string sql = "SELECT * FROM lookup.Urgency ORDER BY SortOrder";
@@ -66,6 +78,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get urgencies", sql, ex); throw; }
     }
 
+    /// <summary>Returns all incident categories (ordered by display name) for category pickers.</summary>
     public async Task<IEnumerable<Category>> GetCategoriesAsync()
     {
         string sql = "SELECT CategoryId, ServiceId, Code, DisplayName FROM lookup.Category ORDER BY DisplayName";
@@ -73,6 +86,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get categories", sql, ex); throw; }
     }
 
+    /// <summary>Returns the subcategories under a given category, for cascading category pickers.</summary>
     public async Task<IEnumerable<SubCategory>> GetSubCategoriesAsync(int categoryId)
     {
         string sql = "SELECT SubCategoryId, CategoryId, Code, DisplayName FROM lookup.SubCategory WHERE CategoryId=@categoryId ORDER BY DisplayName";
@@ -80,6 +94,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, $"Failed to get subcategories for category {categoryId}", sql, ex); throw; }
     }
 
+    /// <summary>Returns the caller contact methods (phone, email, etc.) in display order.</summary>
     public async Task<IEnumerable<ContactMethod>> GetContactMethodsAsync()
     {
         string sql = "SELECT * FROM lookup.ContactMethod ORDER BY SortOrder";
@@ -87,6 +102,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get contact methods", sql, ex); throw; }
     }
 
+    /// <summary>Returns the incident severity levels in display order.</summary>
     public async Task<IEnumerable<Severity>> GetSeveritiesAsync()
     {
         string sql = "SELECT * FROM lookup.Severity ORDER BY SortOrder";
@@ -94,6 +110,7 @@ public class LookupRepository(IDbConnectionFactory db) : ILookupRepository
         catch (Exception ex) { SqlLogger.LogError(log, "Failed to get severities", sql, ex); throw; }
     }
 
+    /// <summary>Returns the incident resolution codes (how a ticket was closed) in display order.</summary>
     public async Task<IEnumerable<ResolutionCode>> GetResolutionCodesAsync()
     {
         string sql = "SELECT * FROM lookup.ResolutionCode ORDER BY SortOrder";

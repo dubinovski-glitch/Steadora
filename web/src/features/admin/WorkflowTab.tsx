@@ -11,16 +11,20 @@ const REQUIRED_FIELDS = [
   { transition: 'Resolved → Closed', fields: ['Resolution code', 'Resolution notes'] },
 ]
 
+// Workflow & states admin tab: read-only visualisation of the incident lifecycle states
+// (with terminal / pauses-SLA badges) and the required-fields-per-transition table.
 export function WorkflowTab({ addToast: _addToast }: Props) {
   const [statuses, setStatuses] = useState<IncidentStatus[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Fetch the incident status lookup once on mount to render the lifecycle flow.
   useEffect(() => {
     api.get<IncidentStatus[]>('/lookups/incident-statuses')
       .then(data => setStatuses(data))
       .finally(() => setLoading(false))
   }, [])
 
+  // Pick the border/text/background colour classes for a status node based on its flags.
   const getStateStyle = (status: IncidentStatus) => {
     if (status.isTerminal && status.code === 'closed') return 'border-green-500 text-green-700 bg-green-50 dark:bg-green-950/30 dark:text-green-400'
     if (status.isTerminal) return 'border-green-400 text-green-600 bg-green-50 dark:bg-green-950/30 dark:text-green-400'

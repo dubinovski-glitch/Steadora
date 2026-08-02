@@ -6,10 +6,17 @@ using log4net;
 
 namespace ApertureITSM.Infrastructure.Repositories;
 
+/// <summary>
+/// Manages problem records (root-cause/known-error entities that group related incidents): list/detail
+/// reads plus create/update/state-change writes. All queries are scoped to the current workspace, and
+/// updates compute their own field-level audit events rather than going through a stored proc.
+/// </summary>
 public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext workspace) : IProblemRepository
 {
     private static readonly ILog log = LogManager.GetLogger(typeof(ProblemRepository));
 
+    // Shared SELECT projecting a problem plus decoded lookup columns and a computed count of linked,
+    // non-deleted incidents. Callers append filter/workspace/ORDER BY onto the trailing WHERE.
     private const string BaseSelect = """
         SELECT
             p.ProblemId, p.Number, p.Title, p.RootCause, p.Workaround,
@@ -28,26 +35,36 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
         WHERE p.DeletedAt IS NULL
         """;
 
-    public async Task<(IEnumerable<Problem> Items, int Total)> GetAllAsync(bool includeResolved = false, int[]? groupIds = null, int page = 1, int pageSize = 25)
+    /// <summary>
+    /// Returns one page of problems plus the total count, optionally hiding terminal states and limiting to
+    /// given groups and/or an assignee, scoped to the current workspace. Each problem is enriched with its
+    /// affected service slugs.
+    /// </summary>
+    public async Task<(IEnumerable<Problem> Items, int Total)> GetAllAsync(bool includeResolved = false, int[]? groupIds = null, int? assigneeUserId = null, int page = 1, int pageSize = 25)
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
             var wid = workspace.WorkspaceId;
+            // Build the dynamic WHERE: hide terminal states unless asked, optional group/assignee filters,
+            // and the mandatory workspace scope (tenant isolation).
             var clauses = new List<string>();
             if (!includeResolved) clauses.Add("st.IsTerminal = 0");
             if (groupIds is { Length: > 0 }) clauses.Add("p.GroupId IN @groupIds");
+            if (assigneeUserId is not null) clauses.Add("p.AssigneeUserId = @assigneeUserId");
             clauses.Add("p.WorkspaceId = @wid");
             var where = "AND " + string.Join(" AND ", clauses);
             var offset = (page - 1) * pageSize;
 
+            // Total count for pagination, then the windowed page itself.
             sql = $"SELECT COUNT(*) FROM itil.Problem p LEFT JOIN lookup.ProblemState st ON st.StateId=p.StateId WHERE p.DeletedAt IS NULL {where}";
-            var total = await conn.ExecuteScalarAsync<int>(sql, new { groupIds, wid });
+            var total = await conn.ExecuteScalarAsync<int>(sql, new { groupIds, assigneeUserId, wid });
 
             sql = $"{BaseSelect} {where} ORDER BY p.OpenedAt DESC OFFSET {offset} ROWS FETCH NEXT {pageSize} ROWS ONLY";
-            var problems = (await conn.QueryAsync<Problem>(sql, new { groupIds, wid })).ToList();
+            var problems = (await conn.QueryAsync<Problem>(sql, new { groupIds, assigneeUserId, wid })).ToList();
 
+            // Batch-load affected service slugs for the whole page in one query (avoids N+1).
             if (problems.Count > 0)
             {
                 var ids = problems.Select(p => p.ProblemId).ToArray();
@@ -65,6 +82,10 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
         }
     }
 
+    /// <summary>
+    /// Returns a single problem's full detail by id (workspace-scoped), with its affected service slugs
+    /// loaded in a follow-up query; null if not found.
+    /// </summary>
     public async Task<Problem?> GetByIdAsync(long problemId)
     {
         string sql = $"{BaseSelect} AND p.ProblemId=@problemId AND p.WorkspaceId=@wid";
@@ -85,12 +106,17 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
         }
     }
 
+    /// <summary>
+    /// Creates a new problem: resolves the priority/initial-state/assignee/group references, draws the next
+    /// number from a sequence, and inserts the row stamped with the current workspace. Returns the new id.
+    /// </summary>
     public async Task<long> CreateAsync(CreateProblemRequest request)
     {
         string sql = "";
         try
         {
             using var conn = db.Create();
+            // Resolve codes/slugs to ids; new problems always start in the 'investigating' state.
             sql = "SELECT PriorityId FROM lookup.Priority WHERE Code=@c";
             var priorityId = await conn.ExecuteScalarAsync<byte>(sql, new { c = request.PriorityCode });
             sql = "SELECT StateId FROM lookup.ProblemState WHERE Code='investigating'";
@@ -99,6 +125,7 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
             var assigneeId = request.AssigneeExtId is null ? (int?)null : await conn.ExecuteScalarAsync<int?>(sql, new { e = request.AssigneeExtId });
             sql = "SELECT GroupId FROM core.[Group] WHERE Slug=@s";
             var groupId = request.GroupSlug is null ? (int?)null : await conn.ExecuteScalarAsync<int?>(sql, new { s = request.GroupSlug });
+            // Draw the next problem number from the dedicated sequence.
             sql = "SELECT NEXT VALUE FOR itil.ProblemSeq";
             var newId = await conn.ExecuteScalarAsync<long>(sql);
             sql = """
@@ -117,10 +144,16 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
         }
     }
 
+    // Snapshot of a problem's "before" values, captured pre-update so UpdateAsync can diff old vs. new
+    // and emit one audit event per changed field.
     private record ProblemSnapshot(
         string Title, string? PriorityCode, string? GroupName,
         string? AssigneeName, bool IsKnownError, string? RootCause, string? Workaround);
 
+    /// <summary>
+    /// Applies a full edit to a problem and writes a per-field audit trail: it snapshots the old values,
+    /// resolves the new references and display names, updates the row, then diffs and records each change.
+    /// </summary>
     public async Task UpdateAsync(long problemId, UpdateProblemRequest request)
     {
         string sql = "";
@@ -177,7 +210,8 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
                 isKnownError = request.IsKnownError
             });
 
-            // Record each field that changed
+            // Record each field that changed (diff old snapshot vs. request; RootCause/Workaround log the
+            // fact of the change without storing the bulky before/after text).
             var changes = new List<(string Field, string? OldVal, string? NewVal)>();
             if (old.Title != request.Title)
                 changes.Add(("Title", old.Title, request.Title));
@@ -209,6 +243,10 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
         }
     }
 
+    /// <summary>
+    /// Transitions a problem to a new state, stamping ResolvedAt when moving to 'closed', and records a
+    /// state-change audit event only when the state actually differs.
+    /// </summary>
     public async Task UpdateStateAsync(long problemId, string stateCode, int? actorUserId)
     {
         string sql = "SELECT StateId FROM lookup.ProblemState WHERE Code=@stateCode";
@@ -217,6 +255,7 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
             using var conn = db.Create();
             var stateId = await conn.ExecuteScalarAsync<byte>(sql, new { stateCode });
 
+            // Capture the current state code so we only log an event on an actual change.
             sql = "SELECT st.Code FROM itil.Problem p JOIN lookup.ProblemState st ON st.StateId=p.StateId WHERE p.ProblemId=@problemId";
             var oldCode = await conn.ExecuteScalarAsync<string?>(sql, new { problemId });
 
@@ -238,6 +277,10 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
         }
     }
 
+    /// <summary>
+    /// Records a generic field change on a problem: bumps UpdatedAt and writes a field-changed audit event.
+    /// Used for fields tracked only for history rather than stored in dedicated columns.
+    /// </summary>
     public async Task UpdateFieldAsync(long problemId, string field, string? value, int? actorUserId)
     {
         string sql = "UPDATE itil.Problem SET UpdatedAt=SYSUTCDATETIME() WHERE ProblemId=@problemId";
@@ -245,6 +288,7 @@ public class ProblemRepository(IDbConnectionFactory db, IWorkspaceContext worksp
         {
             using var conn = db.Create();
             await conn.ExecuteAsync(sql, new { problemId });
+            // Audit-only: persist the change as an activity event.
             sql = "INSERT INTO audit.ActivityEvent (ParentType,ParentId,ActorUserId,Kind,Field,NewValue) VALUES ('PRB',@problemId,@actorUserId,'field_changed',@field,@value)";
             await conn.ExecuteAsync(sql, new { problemId, actorUserId, field, value });
         }

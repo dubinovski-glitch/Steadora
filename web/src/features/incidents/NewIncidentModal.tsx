@@ -4,6 +4,7 @@ import { incidentApi } from '../../api/incidents'
 import { adminApi } from '../../api/admin'
 import { lookupsApi } from '../../api/lookups'
 import { useAppStore } from '../../store/appStore'
+import { modEnter } from '../../utils/platform'
 import type {
   User, Group, Service, AdminCategory, AdminSubCategory,
   Priority, ContactMethod, Severity, ResolutionCode,
@@ -57,6 +58,9 @@ const INITIAL_FORM: FormState = {
   resolutionNotes: '',
 }
 
+// Modal variant of the new-incident form, organised into Details / Resolution / SLA tabs.
+// Loads dropdown data on mount, cascades Service → Category → Subcategory, requires
+// title + service + category + group to submit, then creates the incident and closes.
 export function NewIncidentModal({ addToast }: Props) {
   const { setShowNewIncident } = useAppStore()
   const [tab, setTab] = useState<Tab>('details')
@@ -75,6 +79,8 @@ export function NewIncidentModal({ addToast }: Props) {
   const [priorities, setPriorities] = useState<Priority[]>([])
   const [loadingData, setLoadingData] = useState(true)
 
+  // Load all dropdown data in parallel on mount; each falls back to [] on error.
+  // (The configuration-items result is fetched but intentionally skipped via the gap.)
   useEffect(() => {
     Promise.all([
       adminApi.getServices().catch(() => []),
@@ -98,11 +104,12 @@ export function NewIncidentModal({ addToast }: Props) {
     }).finally(() => setLoadingData(false))
   }, [])
 
-  // Filter categories by selected service
+  // Filter categories by selected service, but always include global categories
+  // (serviceId == null) which apply to every service — otherwise the list empties.
   const filteredCategories = form.serviceSlug
     ? categories.filter(c => {
         const svc = services.find(s => s.slug === form.serviceSlug)
-        return svc ? c.serviceId === svc.serviceId : true
+        return svc ? (c.serviceId === svc.serviceId || c.serviceId == null) : true
       })
     : categories
 
@@ -121,12 +128,15 @@ export function NewIncidentModal({ addToast }: Props) {
 
   const close = () => setShowNewIncident(false)
 
+  // Curried onChange factory: updates the given form field from the input event
   const setField = <K extends keyof FormState>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
 
+  // Minimum required fields before the Create button is enabled
   const canSubmit = !!form.title.trim() && !!form.serviceSlug && !!form.categoryCode && !!form.groupSlug
 
+  // Create the incident from the form, toast the new INC number, and close the modal
   const submit = async () => {
     if (!canSubmit) return
     setSubmitting(true)
@@ -414,7 +424,7 @@ export function NewIncidentModal({ addToast }: Props) {
 
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-border-default bg-subtle shrink-0">
-          <span className="text-xs text-text-muted">⌘+⏎ to submit</span>
+          <span className="text-xs text-text-muted">{modEnter} to submit</span>
           <div className="flex items-center gap-2">
             <button onClick={close} className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-hover rounded-md transition-colors">
               Cancel
@@ -438,6 +448,7 @@ export function NewIncidentModal({ addToast }: Props) {
 const inputCls = 'w-full px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus'
 const selectCls = `${inputCls} bg-surface`
 
+// Labelled form field wrapper with optional required asterisk and grid span override
 function Field({ label, required, children, className }: { label: string; required?: boolean; children: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
@@ -449,10 +460,12 @@ function Field({ label, required, children, className }: { label: string; requir
   )
 }
 
+// Thin horizontal rule between form sections
 function Divider() {
   return <hr className="border-border-default" />
 }
 
+// Read-only card showing an auto-derived SLA target value with an explanatory note
 function SlaReadonlyField({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div className="p-3 rounded-lg border border-border-default bg-subtle">

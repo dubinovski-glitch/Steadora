@@ -14,6 +14,8 @@ async function req<T>(path: string, token: string, init?: RequestInit): Promise<
   return res.json()
 }
 
+// Workspace (tenant) admin endpoints used once the user is logged in: list/create/update,
+// configure per-entity field visibility, manage membership, and delete.
 // Standard API calls (token already in authStore)
 export const workspaceApi = {
   getAll:   ()                                          => api.get<Workspace[]>('/workspaces'),
@@ -30,10 +32,12 @@ export const workspaceApi = {
 }
 
 // Login-time workspace fetch (before token is in the store)
+// List the workspaces the just-authenticated user may enter, so LoginPage can prompt/select one.
 export async function fetchWorkspacesForUser(token: string): Promise<Workspace[]> {
   return req<Workspace[]>('/workspaces/mine', token)
 }
 
+// Fetch a single workspace (with its field config) at login, before it's stored in authStore.
 export async function fetchWorkspace(token: string, id: number): Promise<Workspace> {
   return req<Workspace>(`/workspaces/${id}`, token)
 }

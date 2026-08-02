@@ -5,6 +5,9 @@ import type { SlaStats, SlaByPriority, TeamLoad, DailyVolume } from '../../types
 
 const DAYS_OPTIONS = [7, 14, 30] as const
 
+// SLA & reporting view: renders a day-range selector, a KPI strip, and four
+// charts (incident volume bar chart, SLA-met-by-priority bars, a team load
+// table, and an incidents-by-priority donut). Data is fetched per selected range.
 export function SlaView() {
   const [days, setDays] = useState<7 | 14 | 30>(7)
   const [stats, setStats] = useState<SlaStats | null>(null)
@@ -12,6 +15,8 @@ export function SlaView() {
   const [teamLoad, setTeamLoad] = useState<TeamLoad[]>([])
   const [volume, setVolume] = useState<DailyVolume[]>([])
 
+  // Fetch all dashboard datasets (KPIs, SLA-by-priority, team load, daily
+  // volume) whenever the selected day range changes; errors are logged.
   useEffect(() => {
     dashboardApi.getKpis(days).then(setStats).catch(console.error)
     dashboardApi.getSlaByPriority(days).then(setByPriority).catch(console.error)
@@ -19,6 +24,7 @@ export function SlaView() {
     dashboardApi.getDailyVolume(days).then(setVolume).catch(console.error)
   }, [days])
 
+  // Shape priority breakdown into name/value pairs for the donut chart.
   const pieData = byPriority.map(p => ({ name: p.priority, value: p.totalIncidents }))
   const COLORS = ['#c8252b', '#d97706', '#2563c9', '#5b6473']
 
@@ -73,6 +79,7 @@ export function SlaView() {
           <h3 className="text-sm font-medium text-text-primary mb-3">SLA by priority</h3>
           <div className="flex flex-col gap-3">
             {byPriority.map(p => {
+              // Color the SLA-met bar green/amber/red by how close pctMet is to target.
               const color = p.pctMet >= 95 ? '#1f8a4c' : p.pctMet >= 90 ? '#d97706' : '#c8252b'
               return (
                 <div key={p.priority} className="flex items-center gap-3">

@@ -4,16 +4,20 @@ import { incidentApi } from '../../api/incidents'
 import { lookupsApi } from '../../api/lookups'
 import { api } from '../../api/client'
 import { useAppStore } from '../../store/appStore'
+import { useAuthStore } from '../../store/authStore'
 import { Badge, priorityVariant, statusVariant } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
 import { SlaBar } from '../../components/primitives/SlaBar'
 import { Pagination } from '../../components/primitives/Pagination'
 import { exportIncidentsToCsv } from '../../utils/exportCsv'
+import { priorityLabel, statusLabel } from '../../utils/labels'
 import type { Incident, Priority, Group } from '../../types'
 
 const PAGE_SIZE = 25
 const COL_STORAGE_KEY = 'inc-columns'
 
+// Format an ISO timestamp as a short relative string ("5m ago", "3h ago", "2d ago"),
+// falling back to a locale date once older than 30 days.
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const m = Math.floor(diff / 60_000)
@@ -26,20 +30,19 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  new: 'New', progress: 'In Progress', pending: 'Pending',
-  resolved: 'Resolved', closed: 'Closed',
-}
-
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
   { key: '', label: 'All' },
-  { key: 'progress', label: 'Assigned to me' },
+  { key: 'mine', label: 'Assigned to me' },
+  { key: 'mygroup', label: 'Assigned to my group' },
   { key: 'new', label: 'Unassigned' },
   { key: 'sla', label: 'SLA risk' },
   { key: 'resolved', label: 'Resolved' },
 ]
+
+// The sidebar scope and the tab bar share the same selection for these keys
+const scopeToTab = (s: string) => (s === 'mine' ? 'mine' : s === 'mygroup' ? 'mygroup' : '')
 
 // ── Column definitions ────────────────────────────────────────────────────────
 
@@ -56,12 +59,14 @@ interface ColDef {
   renderCell: (inc: Incident) => React.ReactNode
 }
 
+// Full catalogue of available table columns. Each defines its header class, optional
+// server sort key, and a renderer for the cell. The column picker chooses which appear.
 const ALL_COLUMNS: ColDef[] = [
   {
     key: 'priority', label: 'Priority', thClass: 'w-24', sortKey: 'PriorityId',
     renderCell: inc => (
       <Badge variant={priorityVariant(inc.priorityCode)}>
-        {inc.priorityCode.charAt(0).toUpperCase() + inc.priorityCode.slice(1)}
+        {priorityLabel(inc.priorityCode)}
       </Badge>
     ),
   },
@@ -82,7 +87,7 @@ const ALL_COLUMNS: ColDef[] = [
     key: 'status', label: 'Status', thClass: 'w-28', sortKey: 'StatusId',
     renderCell: inc => (
       <Badge variant={statusVariant(inc.statusCode)}>
-        {STATUS_LABEL[inc.statusCode] ?? inc.statusCode}
+        {statusLabel(inc.statusCode)}
       </Badge>
     ),
   },
@@ -163,6 +168,8 @@ const DEFAULT_VISIBLE: ColKey[] = ['priority', 'title', 'status', 'assignee', 's
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Restore the user's saved visible-column order from localStorage, filtering out any
+// stale keys; falls back to DEFAULT_VISIBLE when missing or invalid.
 function loadSavedColumns(): ColKey[] {
   try {
     const raw = localStorage.getItem(COL_STORAGE_KEY)
@@ -175,6 +182,8 @@ function loadSavedColumns(): ColKey[] {
   }
 }
 
+// Parse the current filter/sort/paging state from the URL query string so the list
+// view is deep-linkable and survives a reload. Mirrored back out by the URL-sync effect.
 function readUrl() {
   const p = new URLSearchParams(window.location.search)
   return {
@@ -192,11 +201,17 @@ function readUrl() {
 
 interface Props { addToast: (t: string) => void }
 
+// Main incident queue. Renders the header (refresh, column picker, CSV export, new
+// incident), a tab bar + search/quick-filters, the sortable/paginated table, and a bulk
+// action bar. Filter/sort/page state is synced to the URL and kept in step with the
+// sidebar scope; data is fetched from the queue API and auto-refreshed every 30s.
 export function IncidentsView({ addToast }: Props) {
-  const { openIncident, setShowNewIncident } = useAppStore()
+  const { openIncident, setShowNewIncident, incidentsScope, setIncidentsScope } = useAppStore()
+  const currentUser = useAuthStore(s => s.user)
 
-  // Filter state — initialised from URL on mount
-  const [tab,           setTabRaw]       = useState(() => readUrl().tab)
+  // Filter state — initialised from the sidebar scope (if set) else the URL
+  const [tab,           setTabRaw]       = useState(() =>
+    incidentsScope === 'mine' || incidentsScope === 'mygroup' ? incidentsScope : readUrl().tab)
   const [searchInput,   setSearchInput]  = useState(() => readUrl().search)
   const [debouncedSearch, setDebounced]  = useState(() => readUrl().search)
   const [page,          setPage]         = useState(() => readUrl().page)
@@ -240,6 +255,9 @@ export function IncidentsView({ addToast }: Props) {
 
   // ── Main fetch ────────────────────────────────────────────────────────────
 
+  // Fetch the incident queue whenever any filter/sort/page input changes. The active
+  // tab is translated into the relevant query flags (status, SLA risk, unassigned,
+  // mine/my-group). `cancelled` guards against out-of-order responses.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -247,12 +265,14 @@ export function IncidentsView({ addToast }: Props) {
       try {
         const res = await incidentApi.getQueue({
           search:         debouncedSearch || undefined,
-          status:         tab && tab !== 'sla' ? tab : undefined,
+          status:         tab === 'new' || tab === 'resolved' ? tab : undefined,
           slaAtRisk:      tab === 'sla',
           unassigned:     tab === 'new',
           includeResolved: tab === 'resolved',
           priority:       filterPriority || undefined,
           groupId:        filterGroupId || undefined,
+          assigneeUserId: tab === 'mine' ? currentUser?.userId : undefined,
+          myGroupsOnly:   tab === 'mygroup' || undefined,
           sortBy,
           sortDesc,
           page,
@@ -268,7 +288,20 @@ export function IncidentsView({ addToast }: Props) {
       }
     })()
     return () => { cancelled = true }
-  }, [tab, debouncedSearch, page, sortBy, sortDesc, filterPriority, filterGroupId, refreshTick])
+  }, [tab, debouncedSearch, page, sortBy, sortDesc, filterPriority, filterGroupId, currentUser?.userId, refreshTick])
+
+  // ── Sync the active tab when the sidebar scope changes (e.g. "Assigned to me") ─
+
+  const skipFirstScope = useRef(true)
+  useEffect(() => {
+    if (skipFirstScope.current) { skipFirstScope.current = false; return }
+    if (incidentsScope === 'mine' || incidentsScope === 'mygroup') {
+      setTabRaw(scopeToTab(incidentsScope)); setPage(1)
+    } else {
+      // scope reset to 'all' — only clear the tab if a scope tab was active
+      setTabRaw(prev => (prev === 'mine' || prev === 'mygroup' ? '' : prev)); setPage(1)
+    }
+  }, [incidentsScope])
 
   // ── Auto-refresh every 30s ────────────────────────────────────────────────
 
@@ -281,7 +314,8 @@ export function IncidentsView({ addToast }: Props) {
 
   useEffect(() => {
     const p = new URLSearchParams()
-    if (tab)            p.set('tab',      tab)
+    // 'mine'/'mygroup' are sidebar-driven and not persisted to the URL
+    if (tab && tab !== 'mine' && tab !== 'mygroup') p.set('tab', tab)
     if (debouncedSearch) p.set('q',       debouncedSearch)
     if (page > 1)       p.set('page',     String(page))
     if (sortBy !== 'UpdatedAt') p.set('sort', sortBy)
@@ -312,16 +346,24 @@ export function IncidentsView({ addToast }: Props) {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const setTab = (t: string) => { setTabRaw(t); setPage(1) }
+  // Switch tab, reset to page 1, and mirror the selection into the sidebar scope
+  const setTab = (t: string) => {
+    setTabRaw(t); setPage(1)
+    // keep the sidebar highlight in sync with the chosen tab
+    setIncidentsScope(t === 'mine' ? 'mine' : t === 'mygroup' ? 'mygroup' : 'all')
+  }
 
+  // Clicking a sortable header toggles direction if already sorted by it, else sorts desc
   const toggleSort = (key: string) => {
     if (sortBy === key) { setSortDesc(d => !d); setPage(1) }
     else { setSortBy(key); setSortDesc(true); setPage(1) }
   }
 
+  // Toggle a single row's selection in the bulk-select set
   const toggleSelect = (id: number) =>
     setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
+  // Bulk-close all selected incidents, then clear the selection and refresh the list
   const bulkClose = async () => {
     await incidentApi.bulkClose([...selected])
     addToast(`Closed ${selected.size} incident${selected.size !== 1 ? 's' : ''}`)
@@ -329,9 +371,11 @@ export function IncidentsView({ addToast }: Props) {
     setRefreshTick(t => t + 1)
   }
 
+  // Clear the quick filters (priority + group) and reset paging
   const clearFilters = () => { setFilterPriority(''); setFilterGroupId(''); setPage(1) }
   const hasActiveFilters = !!(filterPriority || filterGroupId)
 
+  // Column picker mutators: show/hide a column, or reorder it up/down within the visible list
   const showCol = (key: ColKey) => setVisibleOrder(prev => [...prev, key])
   const hideCol = (key: ColKey) => setVisibleOrder(prev => prev.filter(k => k !== key))
   const moveCol = (key: ColKey, dir: -1 | 1) => {
@@ -435,7 +479,7 @@ export function IncidentsView({ addToast }: Props) {
 
           <button
             onClick={() => setShowNewIncident(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-md text-sm font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors"
           >
             <Plus size={14} /> New incident
           </button>
@@ -577,7 +621,7 @@ export function IncidentsView({ addToast }: Props) {
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="bulk-enter fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-inverse text-white px-5 py-3 rounded-xl shadow-lg z-40 text-sm">
+        <div className="bulk-enter fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-inverse text-text-inverse px-5 py-3 rounded-xl shadow-lg z-40 text-sm">
           <span>{selected.size} selected</span>
           <button onClick={bulkClose} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-md transition-colors">
             <Trash2 size={14} /> Close

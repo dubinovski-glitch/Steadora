@@ -6,18 +6,21 @@ import { Avatar } from '../../components/primitives/Avatar'
 import { Pagination } from '../../components/primitives/Pagination'
 import { SkeletonRows } from '../../components/primitives/Skeleton'
 import { useAppStore } from '../../store/appStore'
+import { priorityLabel, humanize } from '../../utils/labels'
 import type { Problem } from '../../types'
 
 const PAGE_SIZE = 25
 
 const STATE_STEPS = ['investigating', 'rca', 'workaround', 'implementing_fix', 'vendor_engaged', 'closed']
 
+// Renders a row of dots marking progress through the problem lifecycle:
+// completed steps green, the current step accent-colored, future steps muted.
 function StateProgress({ stateCode }: { stateCode: string }) {
   const idx = STATE_STEPS.indexOf(stateCode)
   return (
     <div className="flex items-center gap-1">
       {STATE_STEPS.map((s, i) => (
-        <div key={s} className={`w-2 h-2 rounded-full ${i < idx ? 'bg-[#1f8a4c]' : i === idx ? 'bg-accent' : 'bg-border-default'}`} title={s} />
+        <div key={s} className={`w-2 h-2 rounded-full ${i < idx ? 'bg-[#1f8a4c]' : i === idx ? 'bg-accent' : 'bg-border-default'}`} title={humanize(s)} />
       ))}
     </div>
   )
@@ -25,30 +28,46 @@ function StateProgress({ stateCode }: { stateCode: string }) {
 
 interface Props { addToast: (t: string) => void }
 
+// Problem management landing page: KPI summary strip plus paginated lists of active
+// and (optionally) recently-resolved problems, with a button to open the new-problem form.
+// Honors the sidebar scope (all / assigned to me / assigned to my group).
 export function ProblemsView({ addToast: _addToast }: Props) {
-  const { setShowNewProblem, openProblem } = useAppStore()
+  const { setShowNewProblem, openProblem, problemsScope } = useAppStore()
   const [problems, setProblems] = useState<Problem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [includeResolved, setIncludeResolved] = useState(false)
   const [page, setPage] = useState(1)
 
+  // Jump back to the first page whenever the sidebar scope changes.
+  useEffect(() => { setPage(1) }, [problemsScope])
+
+  // Fetch a page of problems whenever the scope, resolved-filter or page number changes.
   useEffect(() => {
     setLoading(true)
-    problemApi.getAll(includeResolved, false, page, PAGE_SIZE)
+    problemApi.getAll(includeResolved, problemsScope === 'mygroup', page, PAGE_SIZE, problemsScope === 'mine')
       .then(res => { setProblems(res.items); setTotal(res.total) })
       .finally(() => setLoading(false))
-  }, [includeResolved, page])
+  }, [includeResolved, page, problemsScope])
 
+  // Toggle the "show resolved" filter and jump back to the first page.
   const resetPage = (checked: boolean) => { setIncludeResolved(checked); setPage(1) }
 
+  // Split the loaded page into active vs. resolved buckets for separate sections.
   const active = problems.filter(p => p.resolvedAt === null)
   const resolved = problems.filter(p => p.resolvedAt !== null)
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-text-primary">Problem management</h1>
+        <h1 className="text-xl font-semibold text-text-primary">
+          Problem management
+          {problemsScope !== 'all' && (
+            <span className="ml-2 text-sm font-normal text-text-muted">
+              · {problemsScope === 'mine' ? 'Assigned to me' : 'Assigned to my group'}
+            </span>
+          )}
+        </h1>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
             <input type="checkbox" checked={includeResolved} onChange={e => resetPage(e.target.checked)} className="rounded" />
@@ -95,6 +114,8 @@ export function ProblemsView({ addToast: _addToast }: Props) {
   )
 }
 
+// Titled, bordered table of problem rows; renders nothing when the group is empty.
+// Each row is clickable to open the problem detail view.
 function ProblemGroup({ title, items, onOpen }: { title: string; items: Problem[]; onOpen: (id: number) => void }) {
   if (items.length === 0) return null
   return (
@@ -107,7 +128,7 @@ function ProblemGroup({ title, items, onOpen }: { title: string; items: Problem[
         <div key={p.problemId} onClick={() => onOpen(p.problemId)} className="grid grid-cols-5 gap-4 px-4 py-3 border-b border-border-default last:border-0 hover:bg-hover transition-colors items-start cursor-pointer">
           <div className="flex items-center gap-2">
             <span className="font-mono text-text-primary">{p.number}</span>
-            <Badge variant={priorityVariant(p.priorityCode)}>{p.priorityCode}</Badge>
+            <Badge variant={priorityVariant(p.priorityCode)}>{priorityLabel(p.priorityCode)}</Badge>
           </div>
           <div className="col-span-2">
             <div className="font-medium text-text-primary">{p.title}</div>

@@ -8,12 +8,13 @@ export default {
       colors: {
         canvas: 'var(--bg-canvas)',
         surface: 'var(--bg-surface)',
+        inverse: 'var(--bg-inverse)',
         subtle: 'var(--bg-subtle)',
         hover: 'var(--bg-hover)',
         active: 'var(--bg-active)',
         accent: { DEFAULT: 'var(--accent)', hover: 'var(--accent-hover)', subtle: 'var(--accent-subtle)', text: 'var(--accent-text)' },
         border: { DEFAULT: 'var(--border-default)', strong: 'var(--border-strong)', focus: 'var(--border-focus)' },
-        text: { primary: 'var(--text-primary)', secondary: 'var(--text-secondary)', tertiary: 'var(--text-tertiary)', muted: 'var(--text-muted)' },
+        text: { primary: 'var(--text-primary)', secondary: 'var(--text-secondary)', tertiary: 'var(--text-tertiary)', muted: 'var(--text-muted)', inverse: 'var(--text-inverse)' },
       },
       fontFamily: {
         sans: ['"Inter Tight"', 'system-ui', 'sans-serif'],

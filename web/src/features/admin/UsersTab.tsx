@@ -2,15 +2,15 @@ import { useState, useEffect } from 'react'
 import { UserPlus, Eye, EyeOff, X } from 'lucide-react'
 import { adminApi } from '../../api/admin'
 import { SkeletonTableRows } from '../../components/primitives/Skeleton'
+import { Badge } from '../../components/primitives/Badge'
+import { Avatar } from '../../components/primitives/Avatar'
 import type { User, Group, Role, AdminService } from '../../types'
 
 interface Props { addToast: (msg: string) => void }
 
-const ROLE_COLORS: Record<string, string> = {
-  admin:     'bg-[#fde8e8] text-[#c8252b]',
-  manager:   'bg-[#e8f0fd] text-[#1d4ed8]',
-  agent:     'bg-[#e8fdf0] text-[#1a7a40]',
-  requester: 'bg-subtle text-text-secondary',
+// Roles and status route through the shared Badge palette (no inline off-palette hex)
+const ROLE_VARIANT: Record<string, 'critical' | 'medium' | 'success' | 'default'> = {
+  admin: 'critical', manager: 'medium', agent: 'success', requester: 'default',
 }
 
 interface FormState {
@@ -26,6 +26,7 @@ interface FormState {
   groupIds: number[]
 }
 
+// Build a blank form for creating a new user (defaults to the first role, active).
 function emptyForm(roles: Role[]): FormState {
   return {
     externalId: '', email: '', username: '', displayName: '', title: '',
@@ -34,6 +35,7 @@ function emptyForm(roles: Role[]): FormState {
   }
 }
 
+// Build a form pre-populated from an existing user (password blank; services/groups loaded separately).
 function fromUser(u: User, roles: Role[]): FormState {
   return {
     externalId: u.externalId,
@@ -49,6 +51,8 @@ function fromUser(u: User, roles: Role[]): FormState {
   }
 }
 
+// Users admin tab: searchable/filterable user list on the left with an inline create/edit
+// panel on the right (role, password, group memberships, service access, active flag).
 export function UsersTab({ addToast }: Props) {
   const [users, setUsers]     = useState<User[]>([])
   const [groups, setGroups]   = useState<Group[]>([])
@@ -66,6 +70,7 @@ export function UsersTab({ addToast }: Props) {
   const [saving, setSaving] = useState(false)
   const [showPw, setShowPw] = useState(false)
 
+  // Fetch users plus the lookups (groups, roles, services) needed by the edit panel.
   const load = () => {
     setLoading(true)
     Promise.all([
@@ -81,14 +86,17 @@ export function UsersTab({ addToast }: Props) {
       .finally(() => setLoading(false))
   }
 
+  // Load data once on mount.
   useEffect(() => { load() }, [])
 
+  // Open the panel in create mode with a blank form.
   const openNew = () => {
     setPanel('new')
     setForm(emptyForm(roles))
     setShowPw(false)
   }
 
+  // Open the panel in edit mode, then async-load the user's service/group assignments.
   const openEdit = async (u: User) => {
     const f = fromUser(u, roles)
     setPanel(u)
@@ -103,11 +111,14 @@ export function UsersTab({ addToast }: Props) {
     } catch { /* non-critical */ }
   }
 
+  // Close the edit/create panel and clear the form.
   const closePanel = () => { setPanel(null); setForm(null) }
 
+  // Update a single field on the current form state.
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm(prev => prev ? { ...prev, [k]: v } : prev)
 
+  // Add/remove a service id from the form's selected services.
   const toggleService = (id: number) =>
     setForm(prev => {
       if (!prev) return prev
@@ -115,6 +126,7 @@ export function UsersTab({ addToast }: Props) {
       return { ...prev, serviceIds: has ? prev.serviceIds.filter(x => x !== id) : [...prev.serviceIds, id] }
     })
 
+  // Add/remove a group id from the form's selected groups.
   const toggleGroup = (id: number) =>
     setForm(prev => {
       if (!prev) return prev
@@ -122,6 +134,8 @@ export function UsersTab({ addToast }: Props) {
       return { ...prev, groupIds: has ? prev.groupIds.filter(x => x !== id) : [...prev.groupIds, id] }
     })
 
+  // Validate required fields, then create or update the user (plus service/group assignments
+  // on edit); on success close and reload, otherwise keep the panel open with an error toast.
   const submit = async () => {
     if (!form) return
     if (!form.displayName.trim()) { addToast('Display name is required'); return }
@@ -163,11 +177,15 @@ export function UsersTab({ addToast }: Props) {
       }
       closePanel()
       load()
+    } catch (e) {
+      // Keep the panel open so the user can correct the input (e.g. a duplicate username/email).
+      addToast(e instanceof Error ? e.message : 'Failed to save user')
     } finally {
       setSaving(false)
     }
   }
 
+  // Apply the search box plus role/status filters to the user list.
   const filtered = users.filter(u => {
     const q = search.toLowerCase()
     const matchSearch = !q || u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.username ?? '').toLowerCase().includes(q)
@@ -176,28 +194,32 @@ export function UsersTab({ addToast }: Props) {
     return matchSearch && matchRole && matchStatus
   })
 
-  const inp = 'w-full px-2.5 py-1.5 border border-border-default rounded-md text-sm bg-surface focus:outline-none focus:border-border-focus disabled:opacity-50'
+  // Resolve a role code to its display name (falls back to the raw code).
+  const roleLabel = (code: string) => roles.find(r => r.code === code)?.displayName ?? code
+
+  const inp = 'w-full px-3 py-2 border-2 border-[#9aa3b2] rounded-md text-[16px] bg-surface focus:outline-none focus:border-accent disabled:opacity-50'
   const sel = inp
-  const lbl = 'block text-xs font-medium text-text-secondary mb-1'
+  const lbl = 'block text-[14px] font-medium text-text-secondary mb-1'
+  const req = <span className="text-[#dc2626]"> *</span>
 
   return (
-    <div className="flex gap-0 h-full -mx-6 -mt-4 overflow-hidden">
+    <div className="flex h-full overflow-hidden bg-surface">
 
       {/* ── LEFT: list ── */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden border-r border-border-default">
 
-        {/* Header */}
-        <div className="px-6 pt-4 pb-3 border-b border-border-default shrink-0 bg-surface">
+        {/* List header */}
+        <div className="px-6 pt-4 pb-3.5 border-b border-border-default shrink-0 bg-surface">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-lg font-semibold text-text-primary">Users</h2>
-              <p className="text-sm text-text-muted">{users.length} users · {users.filter(u => u.isActive).length} active</p>
+              <h2 className="text-[20px] font-semibold text-text-primary leading-tight">Users</h2>
+              <p className="text-[15px] text-text-muted mt-0.5">{users.length} users · {users.filter(u => u.isActive).length} active</p>
             </div>
             <button
               onClick={openNew}
-              className="flex items-center gap-2 px-3 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition-colors"
+              className="flex items-center gap-2 px-3.5 py-2 bg-accent hover:bg-accent-hover text-white text-[16px] font-medium rounded-md transition-colors"
             >
-              <UserPlus size={14} />
+              <UserPlus size={15} />
               Add user
             </button>
           </div>
@@ -206,13 +228,13 @@ export function UsersTab({ addToast }: Props) {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search by name, email or username…"
-              className="flex-1 min-w-0 px-3 py-2 border border-border-default rounded-md text-sm focus:outline-none focus:border-border-focus"
+              className="flex-1 min-w-0 px-3 py-2 border-2 border-[#9aa3b2] rounded-md text-[16px] bg-surface focus:outline-none focus:border-accent"
             />
-            <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="px-3 py-2 border border-border-default rounded-md text-sm bg-surface focus:outline-none">
+            <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="px-3 py-2 border-2 border-[#9aa3b2] rounded-md text-[16px] bg-surface text-text-secondary focus:outline-none focus:border-accent">
               <option value="">All roles</option>
               {roles.map(r => <option key={r.roleId} value={r.code}>{r.displayName}</option>)}
             </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2 border border-border-default rounded-md text-sm bg-surface focus:outline-none">
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2 border-2 border-[#9aa3b2] rounded-md text-[16px] bg-surface text-text-secondary focus:outline-none focus:border-accent">
               <option value="">All statuses</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
@@ -225,11 +247,9 @@ export function UsersTab({ addToast }: Props) {
           <table className="w-full">
             <thead className="sticky top-0 bg-subtle z-10">
               <tr className="border-b border-border-default">
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary">NAME</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary">USERNAME</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary">ROLE</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary">TEAM</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary">STATUS</th>
+                {['Name', 'Username', 'Role', 'Team', 'Status'].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-[13px] font-semibold tracking-[0.6px] text-text-tertiary uppercase">{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -243,30 +263,25 @@ export function UsersTab({ addToast }: Props) {
                   <tr
                     key={u.userId}
                     onClick={() => openEdit(u)}
-                    className={`border-b border-border-default last:border-0 cursor-pointer transition-colors ${isSelected ? 'bg-accent/5 border-l-2 border-l-accent' : 'hover:bg-hover'}`}
+                    className={`border-b border-[#eef0f4] last:border-0 cursor-pointer transition-colors ${isSelected ? '' : 'hover:bg-canvas'}`}
+                    style={isSelected ? { background: 'var(--accent-subtle)', boxShadow: 'inset 2px 0 0 var(--accent)' } : undefined}
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2.5">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-semibold shrink-0">
-                          {u.avatarInitials ?? u.displayName[0]}
-                        </div>
-                        <div>
-                          <div className="font-medium text-text-primary text-sm">{u.displayName}</div>
-                          <div className="text-text-muted text-xs">{u.email}</div>
+                        <Avatar initials={u.avatarInitials} color={u.avatarColor} name={u.displayName} size="md" />
+                        <div className="min-w-0">
+                          <div className="font-medium text-text-primary text-[17px] leading-tight truncate">{u.displayName}</div>
+                          <div className="text-text-muted text-[14px] leading-tight truncate">{u.email}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-text-secondary font-mono">{u.username || <span className="text-text-muted">—</span>}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[u.roleCode] ?? 'bg-subtle text-text-secondary'}`}>
-                        {u.roleCode}
-                      </span>
+                    <td className="px-4 py-2.5 text-[14px] text-text-secondary font-mono">{u.username || <span className="text-text-muted">—</span>}</td>
+                    <td className="px-4 py-2.5">
+                      <Badge variant={ROLE_VARIANT[u.roleCode] ?? 'default'}>{roleLabel(u.roleCode)}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-sm text-text-secondary">{u.groupNames ?? <span className="text-text-muted">—</span>}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${u.isActive ? 'bg-[#d1fae5] text-[#065f46]' : 'bg-subtle text-text-muted'}`}>
-                        {u.isActive ? 'Active' : 'Inactive'}
-                      </span>
+                    <td className="px-4 py-2.5 text-[16px] text-text-secondary">{u.groupNames ?? <span className="text-text-muted">—</span>}</td>
+                    <td className="px-4 py-2.5">
+                      <Badge variant={u.isActive ? 'success' : 'default'}>{u.isActive ? 'Active' : 'Inactive'}</Badge>
                     </td>
                   </tr>
                 )
@@ -278,12 +293,12 @@ export function UsersTab({ addToast }: Props) {
 
       {/* ── RIGHT: inline form panel ── */}
       {panel !== null && form !== null ? (
-        <div className="w-[420px] shrink-0 flex flex-col overflow-hidden bg-surface">
+        <div className="w-[430px] shrink-0 flex flex-col overflow-hidden bg-surface">
 
           {/* Panel header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border-default shrink-0">
-            <h3 className="text-base font-semibold text-text-primary">
-              {panel === 'new' ? 'New User' : (panel as User).displayName}
+          <div className="flex items-center justify-between px-[22px] py-4 border-b border-border-default shrink-0">
+            <h3 className="text-[19px] font-semibold text-text-primary">
+              {panel === 'new' ? 'New user' : (panel as User).displayName}
             </h3>
             <button onClick={closePanel} className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-hover text-text-muted">
               <X size={16} />
@@ -291,12 +306,12 @@ export function UsersTab({ addToast }: Props) {
           </div>
 
           {/* Form body */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+          <div className="flex-1 overflow-y-auto px-[22px] py-[18px] flex flex-col gap-4">
 
             {/* Row 1: Display name + Title */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={lbl}>Display name <span className="text-red-500">*</span></label>
+                <label className={lbl}>Display name{req}</label>
                 <input value={form.displayName} onChange={e => setField('displayName', e.target.value)} className={inp} autoFocus />
               </div>
               <div>
@@ -307,13 +322,13 @@ export function UsersTab({ addToast }: Props) {
 
             {/* Email */}
             <div>
-              <label className={lbl}>Email <span className="text-red-500">*</span></label>
+              <label className={lbl}>Email{req}</label>
               <input value={form.email} onChange={e => setField('email', e.target.value)} type="email" className={inp} />
             </div>
 
             {/* Username */}
             <div>
-              <label className={lbl}>Username <span className="text-red-500">*</span></label>
+              <label className={lbl}>Username{req}</label>
               <input value={form.username} onChange={e => setField('username', e.target.value)} className={inp} placeholder="Login username" />
             </div>
 
@@ -321,7 +336,7 @@ export function UsersTab({ addToast }: Props) {
             <div>
               <label className={lbl}>
                 Password
-                {panel === 'new' && <span className="text-red-500"> *</span>}
+                {panel === 'new' && req}
                 {panel !== 'new' && <span className="text-text-muted font-normal"> (leave blank to keep current)</span>}
               </label>
               <div className="relative">
@@ -361,20 +376,20 @@ export function UsersTab({ addToast }: Props) {
 
             {/* Group memberships */}
             <div>
-              <p className="text-xs font-medium text-text-secondary mb-2">Teams / Groups</p>
+              <p className="text-[14px] font-medium text-text-secondary mb-2">Teams / Groups</p>
               {groups.filter(g => g.isActive).length === 0 ? (
-                <p className="text-xs text-text-muted">No groups available.</p>
+                <p className="text-[14px] text-text-muted">No groups available.</p>
               ) : (
-                <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
+                <div className="flex flex-col gap-1.5 max-h-[150px] overflow-y-auto pr-1">
                   {groups.filter(g => g.isActive).map(g => (
-                    <label key={g.groupId} className="flex items-center gap-2 cursor-pointer select-none group">
+                    <label key={g.groupId} className="flex items-center gap-2 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={form.groupIds.includes(g.groupId)}
                         onChange={() => toggleGroup(g.groupId)}
                         className="w-4 h-4 accent-accent shrink-0"
                       />
-                      <span className="text-sm text-text-primary">{g.name}</span>
+                      <span className="text-[16px] text-text-primary">{g.name}</span>
                     </label>
                   ))}
                 </div>
@@ -390,26 +405,26 @@ export function UsersTab({ addToast }: Props) {
                   onChange={e => setField('isActive', e.target.checked)}
                   className="w-4 h-4 accent-accent"
                 />
-                <span className="text-sm text-text-secondary">Active</span>
+                <span className="text-[16px] text-text-secondary">Active</span>
               </label>
             )}
 
             {/* Services */}
             <div>
-              <p className="text-xs font-medium text-text-secondary mb-2">Services</p>
+              <p className="text-[14px] font-medium text-text-secondary mb-2">Services</p>
               {services.length === 0 ? (
-                <p className="text-xs text-text-muted">No services available.</p>
+                <p className="text-[14px] text-text-muted">No services available.</p>
               ) : (
                 <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
                   {services.filter(s => s.isActive ?? true).map(s => (
-                    <label key={s.serviceId} className="flex items-center gap-2 cursor-pointer select-none group">
+                    <label key={s.serviceId} className="flex items-center gap-2 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={form.serviceIds.includes(s.serviceId)}
                         onChange={() => toggleService(s.serviceId)}
                         className="w-4 h-4 accent-accent shrink-0"
                       />
-                      <span className="text-sm text-text-primary group-hover:text-text-primary">{s.name}</span>
+                      <span className="text-[16px] text-text-primary">{s.name}</span>
                     </label>
                   ))}
                 </div>
@@ -419,14 +434,14 @@ export function UsersTab({ addToast }: Props) {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border-default shrink-0 bg-subtle">
-            <button onClick={closePanel} className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-hover rounded-md transition-colors">
+          <div className="flex items-center justify-end gap-2 px-[22px] py-3.5 border-t border-border-default shrink-0 bg-canvas">
+            <button onClick={closePanel} className="px-4 py-2 text-[16px] text-text-secondary hover:text-text-primary hover:bg-hover rounded-md transition-colors">
               Cancel
             </button>
             <button
               onClick={submit}
               disabled={saving}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
+              className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-[16px] font-medium rounded-md transition-colors"
             >
               {saving ? 'Saving…' : panel === 'new' ? 'Create user' : 'Save changes'}
             </button>
@@ -434,10 +449,10 @@ export function UsersTab({ addToast }: Props) {
 
         </div>
       ) : (
-        <div className="w-[420px] shrink-0 flex items-center justify-center bg-surface border-l border-border-default">
+        <div className="w-[430px] shrink-0 flex items-center justify-center bg-surface border-l border-border-default">
           <div className="text-center text-text-muted px-8">
-            <UserPlus size={32} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Select a user to edit, or click <strong>Add user</strong> to create one.</p>
+            <UserPlus size={34} className="mx-auto mb-3 opacity-[0.35]" />
+            <p className="text-[16px]">Select a user to edit, or click <strong>Add user</strong> to create one.</p>
           </div>
         </div>
       )}

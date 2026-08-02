@@ -8,10 +8,13 @@ import { useAuthStore } from '../../store/authStore'
 import { Badge } from '../../components/primitives/Badge'
 import { Avatar } from '../../components/primitives/Avatar'
 import { SkeletonDetail } from '../../components/primitives/Skeleton'
+import { modKey, modEnter } from '../../utils/platform'
 import type { Change, Comment, User, Group, ChangeType, Risk, ChangeState } from '../../types'
 
 const CHANGE_STEPS = ['draft', 'in_review', 'pending_approval', 'approved', 'scheduled', 'implementing', 'complete']
+// Map a risk code to a Badge color variant (high→critical, medium→high, else low).
 const riskVariant = (code: string) => code === 'high' ? 'critical' : code === 'medium' ? 'high' : 'low'
+// Map a change-type code to a Badge color variant (emergency→critical, normal→medium, else low).
 const typeVariant = (code: string) => code === 'emergency' ? 'critical' : code === 'normal' ? 'medium' : 'low'
 
 interface EditState {
@@ -32,7 +35,10 @@ interface EditState {
   downtimeEstimate: string
 }
 
+// Maps a Change record into editable form state. Owner/approver/group slugs start empty and are
+// seeded later once lookups load; scheduled timestamps are converted to local datetime-input strings.
 function toEdit(c: Change): EditState {
+  // Convert an ISO timestamp to a `YYYY-MM-DDTHH:mm` string for <input type="datetime-local">.
   const toLocal = (iso?: string) => {
     if (!iso) return ''
     const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z')
@@ -63,6 +69,9 @@ interface Props {
   addToast: (t: string) => void
 }
 
+// Full-page detail/edit view for a single change request: editable description and rollout/rollback/
+// impact plans, workflow progress header, reviewer voting, notes, and a properties sidebar.
+// Renders a skeleton until loaded and locks editing once the change reaches a terminal state.
 export function ChangeDetailView({ changeId, addToast }: Props) {
   const { closeChange } = useAppStore()
   const { user: authUser } = useAuthStore()
@@ -80,6 +89,7 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
   const [risks, setRisks] = useState<Risk[]>([])
   const [changeStates, setChangeStates] = useState<ChangeState[]>([])
 
+  // Initial load: fetch the change plus comments and all lookup lists (users, groups, types, risks, states) in parallel.
   useEffect(() => {
     Promise.all([
       changeApi.getById(changeId),
@@ -116,6 +126,7 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
     })
   }, [change, users])
 
+  // Seed the assignment-group slug once groups load by matching the change's group name.
   useEffect(() => {
     if (!change || !groups.length) return
     setEdit(prev => {
@@ -137,12 +148,15 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
     return () => window.removeEventListener('keydown', handle)
   }, [edit, change])
 
+  // Curried change handler: updates one EditState field and marks the form dirty.
   const sf = <K extends keyof EditState>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       setEdit(prev => prev ? { ...prev, [k]: e.target.value } : prev)
       setIsDirty(true)
     }
 
+  // Persist edits: update fields, push a separate state transition if it changed,
+  // then re-fetch the change and its comments to refresh the view and clear the dirty flag.
   const save = async () => {
     if (!edit || !change) return
     setSaving(true)
@@ -174,6 +188,7 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
     } finally { setSaving(false) }
   }
 
+  // Post the note textarea as an internal comment, clear the input, then refresh the comment list.
   const submitNote = async () => {
     if (!noteBody.trim()) return
     await changeApi.postComment(changeId, authUser?.externalId ?? '', noteBody, true)
@@ -182,6 +197,7 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
     setComments(await changeApi.getComments(changeId).catch(() => []) as Comment[])
   }
 
+  // Record the current user's approve/reject vote, then refresh the change to reflect the new state.
   const vote = async (voteCode: string) => {
     await changeApi.vote(changeId, authUser?.externalId ?? 'me', voteCode)
     addToast(`Vote "${voteCode}" recorded`)
@@ -191,14 +207,17 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
 
   if (!change || !edit) return <SkeletonDetail />
 
+  // Terminal changes (complete/rejected) are read-only; `dis` also disables inputs while saving.
   const isTerminal = change.stateCode === 'complete' || change.stateCode === 'rejected'
   const dis = isTerminal || saving
+  // Workflow position and rejection flag drive the progress-step styling.
   const currentStep = CHANGE_STEPS.indexOf(change.stateCode)
   const isRejected = change.stateCode === 'rejected'
 
   const sel = `w-full text-sm font-medium text-text-primary bg-surface border border-border-default rounded px-2 py-1.5 focus:outline-none focus:border-border-focus disabled:opacity-50 disabled:cursor-not-allowed`
   const inp = `w-full text-sm font-medium text-text-primary bg-surface border border-border-default rounded px-2 py-1.5 focus:outline-none focus:border-border-focus disabled:opacity-50 disabled:cursor-not-allowed`
 
+  // Formats an ISO timestamp as a short relative "x ago" string (assumes UTC when no tz suffix).
   const relative = (iso: string) => {
     const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
     const m = Math.floor((Date.now() - new Date(utc).getTime()) / 60000)
@@ -209,6 +228,7 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
     return `${Math.floor(h / 24)}d ago`
   }
 
+  // Formats an ISO timestamp as an absolute "Mon D, h:mm AM/PM" date for the sidebar info rows.
   const formatDate = (iso: string) => {
     const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
     const d = new Date(utc)
@@ -365,7 +385,7 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
                 className="w-full px-3 py-2 text-sm text-text-primary bg-surface resize-none focus:outline-none"
               />
               <div className="flex items-center justify-between px-3 py-2 bg-subtle">
-                <span className="text-xs text-text-muted">⌘+⏎ to add</span>
+                <span className="text-xs text-text-muted">{modEnter} to add</span>
                 <button
                   onClick={submitNote}
                   disabled={isTerminal}
@@ -415,7 +435,7 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
                   ? 'bg-accent hover:bg-accent-hover ring-2 ring-accent/30'
                   : 'bg-accent hover:bg-accent-hover opacity-80'
               }`}
-              title={isDirty ? 'You have unsaved changes (⌘S)' : 'Save (⌘S)'}
+              title={isDirty ? `You have unsaved changes (${modKey}S)` : `Save (${modKey}S)`}
             >
               {saving ? 'Saving…' : isDirty ? 'Save Changes ●' : 'Save Changes'}
             </button>
@@ -506,6 +526,7 @@ export function ChangeDetailView({ changeId, addToast }: Props) {
   )
 }
 
+// Sidebar field wrapper: renders a label above its editable control (children).
 function SbField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -515,6 +536,7 @@ function SbField({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
+// Sidebar read-only info row: label on the left, static value on the right.
 function SbInfo({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-0.5">
