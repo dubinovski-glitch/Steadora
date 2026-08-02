@@ -211,28 +211,6 @@
 <div class="ep"><div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/changes/{id}/comments</span></div></div>
 </section>
 
-<!-- ──────────────────────── Knowledge ──────────────────────────── -->
-<section id="knowledge-controller" class="section-anchor">
-<h2>KnowledgeController <code class="since">[Route("api/knowledge")]</code></h2>
-<div class="ep">
-  <div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/knowledge/articles</span><span class="ep-desc">Search articles</span></div>
-  <div class="ep-params">
-    <span class="ph">Parameter</span><span class="ph">Type</span><span class="ph">Description</span>
-    <span class="ep-pname">q</span><span class="ep-ptype">string?</span><span class="ep-pdesc">Search text</span>
-    <span class="ep-pname">categoryId</span><span class="ep-ptype">int?</span><span class="ep-pdesc">Filter by category</span>
-  </div>
-</div>
-<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/knowledge/articles/{id}</span><span class="ep-desc">Article detail (auto-increments view count)</span></div></div>
-<div class="ep"><div class="ep-head"><span class="tag t-get">GET</span><span class="ep-path">/api/knowledge/categories</span><span class="ep-desc">All KB categories with article counts</span></div></div>
-<div class="ep">
-  <div class="ep-head"><span class="tag t-post">POST</span><span class="ep-path">/api/knowledge/articles/{id}/vote</span><span class="ep-desc">Helpful / not-helpful vote</span></div>
-  <div class="ep-params">
-    <span class="ph">Body field</span><span class="ph">Type</span><span class="ph">Description</span>
-    <span class="ep-pname">helpful</span><span class="ep-ptype">bool</span><span class="ep-pdesc">true = helpful, false = not helpful</span>
-  </div>
-</div>
-</section>
-
 <!-- ──────────────────────── Dashboard ──────────────────────────── -->
 <section id="dashboard-controller" class="section-anchor">
 <h2>DashboardController <code class="since">[Route("api/dashboard")]</code></h2>

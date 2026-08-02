@@ -60,7 +60,6 @@
 │   ├── incidents.ts
 │   ├── problems.ts
 │   ├── changes.ts
-│   ├── knowledge.ts
 │   ├── dashboard.ts
 │   └── admin.ts
 ├── hooks/
@@ -80,7 +79,6 @@
     ├── incidents/        IncidentsView.tsx · IncidentDetailView.tsx · NewIncidentModal.tsx
     ├── problems/         ProblemsView.tsx
     ├── changes/          ChangesView.tsx
-    ├── knowledge/        KnowledgeView.tsx
     ├── sla/              SlaView.tsx
     └── admin/            AdminView.tsx + 10 tab components</code></pre>
 
@@ -101,7 +99,6 @@
 {view === <span class="cs-str">'incidents'</span>  &amp;&amp; &lt;IncidentsView  addToast={addToast} /&gt;}
 {view === <span class="cs-str">'problems'</span>   &amp;&amp; &lt;ProblemsView   addToast={addToast} /&gt;}
 {view === <span class="cs-str">'changes'</span>    &amp;&amp; &lt;ChangesView    addToast={addToast} /&gt;}
-{view === <span class="cs-str">'knowledge'</span>  &amp;&amp; &lt;KnowledgeView  addToast={addToast} /&gt;}
 {view === <span class="cs-str">'sla'</span>        &amp;&amp; &lt;SlaView        addToast={addToast} /&gt;}
 {view === <span class="cs-str">'admin'</span>      &amp;&amp; &lt;AdminView      addToast={addToast} /&gt;}
 {openIncidentId &amp;&amp; &lt;IncidentDetailView id={openIncidentId} ... /&gt;}</code></pre>
@@ -118,7 +115,6 @@
   <tr><td><code>Incident</code></td><td>Full incident with SLA fields</td></tr>
   <tr><td><code>Problem</code></td><td>Problem with linked incident count</td></tr>
   <tr><td><code>Change</code>, <code>ChangeReviewer</code></td><td>Change with reviewer votes</td></tr>
-  <tr><td><code>KbArticle</code>, <code>KbCategory</code></td><td>Knowledge Base types</td></tr>
   <tr><td><code>SlaStats</code>, <code>SlaByPriority</code>, <code>TeamLoad</code>, <code>DailyVolume</code></td><td>SLA analytics DTOs</td></tr>
   <tr><td><code>User</code>, <code>Group</code></td><td>People types</td></tr>
   <tr><td><code>AdminCategory</code>, <code>AdminSubCategory</code></td><td>Admin category tree</td></tr>
@@ -195,10 +191,6 @@
     <td><code>getAll(state?)</code>, <code>getById</code>, <code>create</code>, <code>setState</code>, <code>vote</code>, <code>getComments</code>, <code>postComment</code></td>
   </tr>
   <tr>
-    <td><code>knowledge.ts</code></td><td><code>kbApi</code></td>
-    <td><code>search(q?, categoryId?)</code>, <code>getById</code>, <code>getCategories</code>, <code>vote(id, helpful)</code></td>
-  </tr>
-  <tr>
     <td><code>dashboard.ts</code></td><td><code>dashboardApi</code></td>
     <td><code>getKpis(days)</code>, <code>getSlaAtRisk()</code>, <code>getServices()</code>, <code>getSlaByPriority(days)</code>, <code>getTeamLoad()</code>, <code>getDailyVolume(days)</code></td>
   </tr>
@@ -232,7 +224,6 @@
   <tr><td><code>g</code> then <code>i</code></td><td>Navigate to Incidents</td></tr>
   <tr><td><code>g</code> then <code>p</code></td><td>Navigate to Problems</td></tr>
   <tr><td><code>g</code> then <code>c</code></td><td>Navigate to Changes</td></tr>
-  <tr><td><code>g</code> then <code>k</code></td><td>Navigate to Knowledge Base</td></tr>
   <tr><td><code>g</code> then <code>s</code></td><td>Navigate to SLA &amp; Reporting</td></tr>
 </table></div>
 </section>
@@ -243,12 +234,11 @@
 
 <h3>layout/Sidebar.tsx</h3>
 <p>Fixed left navigation bar.  Renders the branded logo ("A" + "Aperture ITSM"),
-   a search/command-palette trigger, and five navigation groups:</p>
+   a search/command-palette trigger, and four navigation groups:</p>
 <div class="tbl-wrap"><table>
   <tr><th>Group</th><th>Links</th></tr>
   <tr><td>Overview</td><td>Dashboard</td></tr>
   <tr><td>ITIL</td><td>Incidents (with badge count), Problems, Changes</td></tr>
-  <tr><td>Knowledge</td><td>Knowledge Base</td></tr>
   <tr><td>Operations</td><td>SLA &amp; Reporting</td></tr>
   <tr><td>System</td><td>Administration</td></tr>
 </table></div>
@@ -344,10 +334,6 @@
 <h3>ChangesView</h3>
 <p>Change management list.  State tabs: Draft / Under Review / Approved / In Progress / Completed.
    Reviewer vote interface shows per-user vote chips with approve/reject/abstain actions.</p>
-
-<h3>KnowledgeView</h3>
-<p>KB article search with category sidebar.  Article list shows title, snippet, tag chips,
-   view count, and helpful %.  Clicking an article shows the full body and a vote widget.</p>
 
 <h3>SlaView</h3>
 <p>SLA &amp; Reporting dashboard.  Four panels:</p>

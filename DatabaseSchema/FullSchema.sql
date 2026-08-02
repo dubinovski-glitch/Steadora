@@ -9,15 +9,14 @@
      3. Lookup tables + reference data
      4. Core tables (Users, Groups, Services, CIs)
      5. Ticket tables (Incidents, Problems, Changes)
-     6. Knowledge base
-     7. Activity / Comments / Watchers / Notifications
-     8. Indexes
-     9. Foreign keys
-    10. Views
-    11. Functions
-    12. Stored procedures
-    13. Triggers
-    14. Seed data (mirrors prototype mock data)
+     6. Activity / Comments / Watchers / Notifications
+     7. Indexes
+     8. Foreign keys
+     9. Views
+    10. Functions
+    11. Stored procedures
+    12. Triggers
+    13. Seed data (mirrors prototype mock data)
    ============================================================================ */
 
 SET NOCOUNT ON;
@@ -57,8 +56,6 @@ CREATE SCHEMA core      AUTHORIZATION dbo;       -- users, groups, services, CIs
 GO
 CREATE SCHEMA itil      AUTHORIZATION dbo;       -- incidents, problems, changes
 GO
-CREATE SCHEMA kb        AUTHORIZATION dbo;       -- knowledge base
-GO
 CREATE SCHEMA audit     AUTHORIZATION dbo;       -- activity log, comments, notifications
 GO
 CREATE SCHEMA lookup    AUTHORIZATION dbo;       -- enum-style reference tables
@@ -74,7 +71,6 @@ GO
 CREATE SEQUENCE itil.IncidentSeq AS BIGINT START WITH 104822 INCREMENT BY 1 NO CACHE;
 CREATE SEQUENCE itil.ChangeSeq   AS BIGINT START WITH   3222 INCREMENT BY 1 NO CACHE;
 CREATE SEQUENCE itil.ProblemSeq  AS BIGINT START WITH    422 INCREMENT BY 1 NO CACHE;
-CREATE SEQUENCE kb.ArticleSeq    AS BIGINT START WITH    143 INCREMENT BY 1 NO CACHE;
 GO
 
 /* ----------------------------------------------------------------------------
@@ -424,12 +420,10 @@ CREATE TABLE itil.Incident (
 
     -- Relationships
     RelatedChangeId         BIGINT          NULL,
-    RelatedKbArticleId      BIGINT          NULL,
 
     -- Resolution / Quality metrics
     CsatScore               TINYINT         NULL,
     IsFirstCallResolution   BIT             NULL,
-    IsKbArticleCreated      BIT             NOT NULL DEFAULT 0,
 
     RowVersion      ROWVERSION      NOT NULL
 );
@@ -525,50 +519,7 @@ CREATE TABLE itil.IncidentLink (
 GO
 
 /* ----------------------------------------------------------------------------
-   6. KNOWLEDGE BASE
-   ---------------------------------------------------------------------------- */
-CREATE TABLE kb.Category (
-    KbCategoryId    INT             NOT NULL IDENTITY(1,1) PRIMARY KEY,
-    Slug            VARCHAR(32)     NOT NULL UNIQUE,
-    DisplayName     NVARCHAR(64)    NOT NULL,
-    Icon            VARCHAR(32)     NULL,
-    SortOrder       INT             NOT NULL DEFAULT 100
-);
-
-CREATE TABLE kb.Article (
-    ArticleId       BIGINT          NOT NULL PRIMARY KEY,
-    Number          AS ('KB-' + RIGHT('0000' + CAST(ArticleId AS VARCHAR(20)), 4)) PERSISTED,
-    Title           NVARCHAR(256)   NOT NULL,
-    Snippet         NVARCHAR(1024)  NULL,
-    Body            NVARCHAR(MAX)   NULL,                    -- markdown
-    KbCategoryId    INT             NOT NULL,
-    AuthorUserId    INT             NULL,
-    Status          VARCHAR(16)     NOT NULL DEFAULT 'published',  -- draft / published / archived
-    Pinned          BIT             NOT NULL DEFAULT 0,
-    Views           INT             NOT NULL DEFAULT 0,
-    HelpfulCount    INT             NOT NULL DEFAULT 0,
-    NotHelpfulCount INT             NOT NULL DEFAULT 0,
-    CreatedAt       DATETIME2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
-    UpdatedAt       DATETIME2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
-    DeletedAt       DATETIME2(3)    NULL,
-    RowVersion      ROWVERSION      NOT NULL
-);
-
-CREATE TABLE kb.Tag (
-    TagId           INT             NOT NULL IDENTITY(1,1) PRIMARY KEY,
-    Slug            VARCHAR(64)     NOT NULL UNIQUE,
-    DisplayName     NVARCHAR(64)    NOT NULL
-);
-
-CREATE TABLE kb.ArticleTag (
-    ArticleId       BIGINT          NOT NULL,
-    TagId           INT             NOT NULL,
-    PRIMARY KEY (ArticleId, TagId)
-);
-GO
-
-/* ----------------------------------------------------------------------------
-   7. ACTIVITY / COMMENTS / WATCHERS / NOTIFICATIONS
+   6. ACTIVITY / COMMENTS / WATCHERS / NOTIFICATIONS
    ---------------------------------------------------------------------------- */
 CREATE TABLE audit.Comment (
     CommentId       BIGINT          NOT NULL IDENTITY(1,1) PRIMARY KEY,
@@ -617,7 +568,7 @@ CREATE TABLE audit.Notification (
 GO
 
 /* ----------------------------------------------------------------------------
-   8. INDEXES
+   7. INDEXES
    ---------------------------------------------------------------------------- */
 -- Incident: hot-path queue and SLA indexes
 CREATE INDEX IX_Incident_Status_Priority      ON itil.Incident (StatusId, PriorityId)            INCLUDE (Title, AssigneeUserId, GroupId, OpenedAt) WHERE DeletedAt IS NULL;
@@ -646,15 +597,13 @@ CREATE INDEX IX_Comment_Parent                ON audit.Comment       (ParentType
 CREATE INDEX IX_Notification_User_Unread      ON audit.Notification (UserId, CreatedAt DESC) WHERE ReadAt IS NULL;
 
 -- KB
-CREATE INDEX IX_Article_Category              ON kb.Article (KbCategoryId) WHERE DeletedAt IS NULL;
-CREATE INDEX IX_Article_Pinned                ON kb.Article (Pinned) WHERE Pinned = 1 AND DeletedAt IS NULL;
 
 -- Configuration items
 CREATE INDEX IX_CI_Owner                      ON core.ConfigurationItem (OwnerUserId);
 GO
 
 /* ----------------------------------------------------------------------------
-   9. FOREIGN KEYS
+   8. FOREIGN KEYS
    ---------------------------------------------------------------------------- */
 -- core
 ALTER TABLE core.[User]               ADD CONSTRAINT FK_User_Role            FOREIGN KEY (RoleId)         REFERENCES lookup.Role(RoleId);
@@ -685,7 +634,6 @@ ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_SubCategory      FOR
 ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_Severity         FOREIGN KEY (SeverityId)          REFERENCES lookup.Severity(SeverityId);
 ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_ResolutionCode   FOREIGN KEY (ResolutionCodeId)    REFERENCES lookup.ResolutionCode(ResolutionCodeId);
 ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_RelatedChange    FOREIGN KEY (RelatedChangeId)     REFERENCES itil.[Change](ChangeId);
-ALTER TABLE itil.Incident             ADD CONSTRAINT FK_Inc_RelatedKbArticle FOREIGN KEY (RelatedKbArticleId)  REFERENCES kb.Article(ArticleId);
 
 -- itil.Problem
 ALTER TABLE itil.Problem              ADD CONSTRAINT FK_Prb_Priority         FOREIGN KEY (PriorityId)     REFERENCES lookup.Priority(PriorityId);
@@ -712,10 +660,6 @@ ALTER TABLE itil.ChangeReviewer       ADD CONSTRAINT FK_ChgRev_Vote          FOR
 ALTER TABLE itil.IncidentLink         ADD CONSTRAINT FK_IncLink_Incident     FOREIGN KEY (IncidentId)     REFERENCES itil.Incident(IncidentId) ON DELETE CASCADE;
 
 -- kb
-ALTER TABLE kb.Article                ADD CONSTRAINT FK_Article_Category     FOREIGN KEY (KbCategoryId)   REFERENCES kb.Category(KbCategoryId);
-ALTER TABLE kb.Article                ADD CONSTRAINT FK_Article_Author       FOREIGN KEY (AuthorUserId)   REFERENCES core.[User](UserId);
-ALTER TABLE kb.ArticleTag             ADD CONSTRAINT FK_ArticleTag_Article   FOREIGN KEY (ArticleId)      REFERENCES kb.Article(ArticleId) ON DELETE CASCADE;
-ALTER TABLE kb.ArticleTag             ADD CONSTRAINT FK_ArticleTag_Tag       FOREIGN KEY (TagId)          REFERENCES kb.Tag(TagId);
 
 -- audit
 ALTER TABLE audit.Comment             ADD CONSTRAINT FK_Comment_Author       FOREIGN KEY (AuthorUserId)   REFERENCES core.[User](UserId);
@@ -725,7 +669,7 @@ ALTER TABLE audit.Notification        ADD CONSTRAINT FK_Notif_User           FOR
 GO
 
 /* ----------------------------------------------------------------------------
-   10. VIEWS
+   9. VIEWS
    ---------------------------------------------------------------------------- */
 GO
 CREATE OR ALTER VIEW reporting.vIncidentDetail AS
@@ -846,7 +790,7 @@ WHERE c.DeletedAt IS NULL;
 GO
 
 /* ----------------------------------------------------------------------------
-   11. FUNCTIONS
+   10. FUNCTIONS
    ---------------------------------------------------------------------------- */
 GO
 CREATE OR ALTER FUNCTION dbo.fn_SlaPercent
@@ -884,7 +828,7 @@ END
 GO
 
 /* ----------------------------------------------------------------------------
-   12. STORED PROCEDURES
+   11. STORED PROCEDURES
    ---------------------------------------------------------------------------- */
 GO
 CREATE OR ALTER PROCEDURE itil.usp_CreateIncident
@@ -1356,7 +1300,7 @@ END
 GO
 
 /* ----------------------------------------------------------------------------
-   13. TRIGGERS
+   12. TRIGGERS
    ---------------------------------------------------------------------------- */
 GO
 CREATE OR ALTER TRIGGER itil.trg_Incident_UpdatedAt
@@ -1405,10 +1349,10 @@ END
 GO
 
 /* ----------------------------------------------------------------------------
-   14. SEED DATA
+   13. SEED DATA
    ---------------------------------------------------------------------------- */
 
--- 14a. lookups
+-- 13a. lookups
 INSERT INTO lookup.Priority (PriorityId, Code, DisplayName, SortOrder, DefaultResponseMin, DefaultResolutionMin) VALUES
     (1,'critical','Critical',1, 15,   60),
     (2,'high',    'High',    2, 30,  240),
@@ -1488,7 +1432,7 @@ INSERT INTO lookup.Category (Code, DisplayName, SortOrder) VALUES
     ('devops',         'DevOps',          90);
 GO
 
--- 14b. groups
+-- 13b. groups
 INSERT INTO core.[Group] (Slug, Name) VALUES
     ('productivity-apps','Productivity Apps'),
     ('network',          'Network'),
@@ -1501,21 +1445,31 @@ INSERT INTO core.[Group] (Slug, Name) VALUES
     ('change-mgmt',      'Change Management');
 GO
 
--- 14c. users (matches the prototype's USERS array)
-INSERT INTO core.[User] (ExternalId, Email, DisplayName, Title, AvatarInitials, AvatarColor, RoleId)
+-- 13c. users (matches the prototype's USERS array)
+-- Username is required (NOT NULL UNIQUE) and is seeded from ExternalId.
+-- 'me' (Alex Carter) is seeded with the admin role (RoleId 4) so the app is
+-- usable out of the box; every other seed user is an agent/manager.
+INSERT INTO core.[User] (ExternalId, Username, Email, DisplayName, Title, AvatarInitials, AvatarColor, RoleId)
 VALUES
-    ('u1','mchen@acme.com',   N'Maya Chen',     N'Service Desk Lead',   N'MC','blue',  3),
-    ('u2','dalvarez@acme.com',N'Diego Alvarez', N'Network Engineer',    N'DA','green', 2),
-    ('u3','praman@acme.com',  N'Priya Raman',   N'L2 Support',          N'PR','purple',2),
-    ('u4','twalsh@acme.com',  N'Tom Walsh',     N'Sysadmin',            N'TW','amber', 2),
-    ('u5','hvoss@acme.com',   N'Hannah Voss',   N'Security',            N'HV','pink',  2),
-    ('u6','ksato@acme.com',   N'Kenji Sato',    N'Cloud Ops',           N'KS','teal',  2),
-    ('u7','opark@acme.com',   N'Olivia Park',   N'Change Manager',      N'OP','blue',  3),
-    ('u8','mwebb@acme.com',   N'Marcus Webb',   N'Database Admin',      N'MW','green', 2),
-    ('me','acarter@acme.com', N'Alex Carter',   N'Service Desk Agent',  N'AC','blue',  2);
+    ('u1','u1','mchen@acme.com',   N'Maya Chen',     N'Service Desk Lead',   N'MC','blue',  3),
+    ('u2','u2','dalvarez@acme.com',N'Diego Alvarez', N'Network Engineer',    N'DA','green', 2),
+    ('u3','u3','praman@acme.com',  N'Priya Raman',   N'L2 Support',          N'PR','purple',2),
+    ('u4','u4','twalsh@acme.com',  N'Tom Walsh',     N'Sysadmin',            N'TW','amber', 2),
+    ('u5','u5','hvoss@acme.com',   N'Hannah Voss',   N'Security',            N'HV','pink',  2),
+    ('u6','u6','ksato@acme.com',   N'Kenji Sato',    N'Cloud Ops',           N'KS','teal',  2),
+    ('u7','u7','opark@acme.com',   N'Olivia Park',   N'Change Manager',      N'OP','blue',  3),
+    ('u8','u8','mwebb@acme.com',   N'Marcus Webb',   N'Database Admin',      N'MW','green', 2),
+    ('me','me','acarter@acme.com', N'Alex Carter',   N'Service Desk Agent',  N'AC','blue',  4);
 GO
 
--- 14c-ii. initial group memberships
+-- Seed a known demo password for every user so a fresh build can be logged into
+-- immediately. Hash = PBKDF2-SHA256 (100,000 iterations) of 'Test1234!'.
+-- CHANGE OR CLEAR THESE BEFORE ANY NON-DEV DEPLOYMENT.
+UPDATE core.[User]
+SET PasswordHash = 'iN/GX+/KVUR6bIqFB2izjg==:JNjcc0W/rt+VVsRz3DIKB+/9bm498+SrkpwsI2AmJnM=';
+GO
+
+-- 13c-ii. initial group memberships
 INSERT INTO core.UserGroup (UserId, GroupId)
 SELECT u.UserId, g.GroupId
 FROM (VALUES
@@ -1533,7 +1487,7 @@ JOIN core.[User]  u ON u.ExternalId = v.ExtId
 JOIN core.[Group] g ON g.Slug       = v.GrpSlug;
 GO
 
--- 14d. services (CategoryId removed from core.Service in Alter_20260503_ServiceCategoryHierarchy)
+-- 13d. services (CategoryId removed from core.Service in Alter_20260503_ServiceCategoryHierarchy)
 INSERT INTO core.Service (Slug, Name, OwningGroupId, HealthId)
 SELECT s.Slug, s.Name, g.GroupId, h.HealthId
 FROM (VALUES
@@ -1556,7 +1510,7 @@ LEFT JOIN core.[Group]          g ON g.Slug = s.GrpSlug
 LEFT JOIN lookup.ServiceHealth  h ON h.Code = s.HealthCode;
 GO
 
--- 14e. configuration items (CIs)
+-- 13e. configuration items (CIs)
 INSERT INTO core.ConfigurationItem (AssetTag, Name, Type, Environment, Region, OwnerUserId)
 SELECT v.AssetTag, v.Name, v.Type, v.Env, v.Region, u.UserId
 FROM (VALUES
@@ -1577,13 +1531,13 @@ FROM (VALUES
 LEFT JOIN core.[User] u ON u.ExternalId = v.ExtId;
 GO
 
--- 14f. SLA policies (defaults, derived from priority)
+-- 13f. SLA policies (defaults, derived from priority)
 INSERT INTO core.SlaPolicy (Name, PriorityId, ResponseMinutes, ResolutionMinutes)
 SELECT CONCAT('Default — ', p.DisplayName), p.PriorityId, p.DefaultResponseMin, p.DefaultResolutionMin
 FROM lookup.Priority p;
 GO
 
--- 14g. helper variables for incident seeding
+-- 13g. helper variables for incident seeding
 DECLARE @StatusNew      TINYINT = (SELECT StatusId FROM lookup.IncidentStatus WHERE Code='new');
 DECLARE @StatusProgress TINYINT = (SELECT StatusId FROM lookup.IncidentStatus WHERE Code='progress');
 DECLARE @StatusPending  TINYINT = (SELECT StatusId FROM lookup.IncidentStatus WHERE Code='pending');
@@ -1596,7 +1550,7 @@ DECLARE @UrgMed     TINYINT = (SELECT UrgencyId FROM lookup.Urgency WHERE Code='
 DECLARE @UrgLow     TINYINT = (SELECT UrgencyId FROM lookup.Urgency WHERE Code='low');
 DECLARE @Now        DATETIME2(3) = SYSUTCDATETIME();
 
--- 14h. incidents (mirroring the prototype's INCIDENTS array)
+-- 13h. incidents (mirroring the prototype's INCIDENTS array)
 ;WITH src(IncId,Title,PriCode,StatusId,AssExt,Reporter,CatCode,SvcSlug,SlaTarget,SlaElapsed,Breached,GrpSlug,Imp,Urg,CiTag,OpenedAgoMin,ResolvedAgoMin) AS (
     SELECT * FROM (VALUES
     (104821,N'Office 365 mailbox sync failing for Sales team (EMEA)',          'critical',@StatusProgress,'u2',N'Pavel Novak', 'email',         'microsoft-365',  60,  53, 0, 'productivity-apps', @ImpactHigh,@UrgHigh,'EXCH-NL-01',     72,  NULL),
@@ -1651,7 +1605,7 @@ LEFT JOIN core.[User]             u   ON u.ExternalId = s.AssExt
 LEFT JOIN core.[Group]            g   ON g.Slug   = s.GrpSlug;
 GO
 
--- 14i. problems
+-- 13i. problems
 DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
 ;WITH src(PrbId,Title,PriCode,StateCode,AssExt,Rca,Workaround,IsKnown,GrpSlug,OpenedAgoDays,Resolved) AS (
     SELECT * FROM (VALUES
@@ -1683,7 +1637,7 @@ LEFT JOIN core.[User]         u  ON u.ExternalId = s.AssExt
 LEFT JOIN core.[Group]        g  ON g.Slug = s.GrpSlug;
 GO
 
--- 14j. problem ↔ service links
+-- 13j. problem ↔ service links
 INSERT INTO itil.ProblemService (ProblemId, ServiceId)
 SELECT 421, ServiceId FROM core.Service WHERE Slug='corporate-vpn'
 UNION ALL SELECT 420, ServiceId FROM core.Service WHERE Slug IN ('salesforce','okta')
@@ -1693,7 +1647,7 @@ UNION ALL SELECT 417, ServiceId FROM core.Service WHERE Slug='slack'
 UNION ALL SELECT 416, ServiceId FROM core.Service WHERE Slug='corporate-wifi';
 GO
 
--- 14k. link incidents to their parent problems (matches "related": PRB-0419 etc.)
+-- 13k. link incidents to their parent problems (matches "related": PRB-0419 etc.)
 UPDATE itil.Incident SET ParentProblemId = 419 WHERE IncidentId = 104821;
 UPDATE itil.Incident SET ParentProblemId = 421 WHERE IncidentId = 104820;
 UPDATE itil.Incident SET ParentProblemId = 420 WHERE IncidentId = 104819;
@@ -1701,7 +1655,7 @@ UPDATE itil.Incident SET ParentProblemId = 416 WHERE IncidentId = 104815;
 UPDATE itil.Incident SET ParentProblemId = 419 WHERE IncidentId = 104813;
 GO
 
--- 14l. changes
+-- 13l. changes
 DECLARE @CtNormal TINYINT = (SELECT ChangeTypeId FROM lookup.ChangeType WHERE Code='normal');
 DECLARE @CtStd    TINYINT = (SELECT ChangeTypeId FROM lookup.ChangeType WHERE Code='standard');
 DECLARE @CtEmer   TINYINT = (SELECT ChangeTypeId FROM lookup.ChangeType WHERE Code='emergency');
@@ -1766,82 +1720,7 @@ SELECT 3217, u.UserId,
 FROM core.[User] u WHERE u.ExternalId IN ('u4','u7','u1');
 GO
 
--- 14m. KB categories
-INSERT INTO kb.Category (Slug, DisplayName, Icon, SortOrder) VALUES
-    ('all',      N'All articles',       'Book',     10),
-    ('starred',  N'Starred',            'Star',     20),
-    ('drafts',   N'Drafts',             'FileText', 30),
-    ('network',  N'Network',            NULL,       40),
-    ('endpoint', N'Endpoint & Devices', NULL,       50),
-    ('saas',     N'SaaS apps',          NULL,       60),
-    ('identity', N'Identity & Access',  NULL,       70),
-    ('email',    N'Email & Calendar',   NULL,       80),
-    ('security', N'Security',           NULL,       90);
-GO
-
--- KB tags
-INSERT INTO kb.Tag (Slug, DisplayName)
-VALUES ('vpn',N'VPN'),('setup',N'Setup'),('windows',N'Windows'),('macos',N'macOS'),
-       ('password',N'Password'),('mfa',N'MFA'),('okta',N'Okta'),
-       ('email',N'Email'),('spam',N'Spam'),('quarantine',N'Quarantine'),
-       ('hardware',N'Hardware'),('laptop',N'Laptop'),
-       ('salesforce',N'Salesforce'),('provisioning',N'Provisioning'),
-       ('wifi',N'WiFi'),('802-1x',N'802.1X'),
-       ('calendar',N'Calendar'),('sharing',N'Sharing'),
-       ('encryption',N'Encryption'),('compliance',N'Compliance'),
-       ('ad',N'AD'),('access',N'Access'),
-       ('o365',N'O365'),('known-error',N'Known Error'),('emea',N'EMEA'),
-       ('phishing',N'Phishing'),('security',N'Security'),
-       ('remote',N'Remote');
-GO
-
--- KB articles
-INSERT INTO kb.Article (ArticleId, Title, Snippet, KbCategoryId, AuthorUserId, [Status], Pinned, Views, HelpfulCount)
-SELECT v.Id, v.Title, v.Snippet, c.KbCategoryId, u.UserId, 'published', v.Pinned, v.Views,
-       CAST(v.HelpfulPct * v.Views / 100.0 AS INT)
-FROM (VALUES
-    (142,N'Connecting to the corporate VPN on Windows, macOS and mobile',
-        N'Step-by-step setup for the GlobalProtect VPN client on all supported platforms, including troubleshooting common authentication errors and split tunneling.',
-        'network','u2',12420,94,0),
-    (141,N'Resetting your password and enrolling in MFA',
-        N'How to reset your Acme account password through the self-service portal, plus how to enroll a new device for multi-factor authentication.',
-        'identity','u5',28940,97,0),
-    (140,N'Why am I missing emails from external senders?',
-        N'If you''re not receiving expected mail from an outside organisation, this article walks through quarantine review and allowlist procedures.',
-        'email','u1',8120,89,0),
-    (139,N'Requesting a hardware refresh — 3-year laptop cycle',
-        N'Eligibility, model options, and the request process for the standard 3-year laptop refresh program. Includes peripheral entitlements.',
-        'endpoint','u4',5460,92,0),
-    (138,N'Granting Salesforce access to a new contractor',
-        N'The approved workflow for managers to provision time-limited Salesforce licenses for contractors, including profile selection and renewal cadence.',
-        'saas','u1',3240,91,0),
-    (137,N'Wi-Fi authentication: 802.1X cert vs SSO methods',
-        N'An overview of the two enterprise Wi-Fi authentication paths supported across our offices, with guidance on which to choose.',
-        'network','u2',2010,88,0),
-    (136,N'Sharing a calendar with external collaborators',
-        N'How to safely share availability or full calendars with people outside Acme without exposing private details. Covers Outlook and Google.',
-        'email','u3',4910,95,0),
-    (135,N'Encrypting an external drive before storing customer data',
-        N'Required encryption procedure for all external storage media that may contain customer or PII data, with FileVault and BitLocker steps.',
-        'endpoint','u5',1240,90,0),
-    (134,N'Joining a new security group — manager approval flow',
-        N'How to request access to additional security groups in Active Directory, what your manager will see, and typical turnaround times.',
-        'identity','u1',1820,86,0),
-    (133,N'Office 365 mailbox sync issues — known workaround for EMEA',
-        N'Active workaround steps for the EMEA mailbox sync delays related to PRB-0419. Will be retired once the throttling policy is corrected.',
-        'saas','u3',980,82,1),
-    (132,N'Reporting a suspected phishing email',
-        N'Use the Report button in Outlook or forward to phishing@acme.com. Do not click links or open attachments. The security team will respond within 1h.',
-        'security','u5',6730,96,0),
-    (131,N'Working remotely from a hotel or shared Wi-Fi',
-        N'Recommended settings and behaviors when joining untrusted networks, including how to verify your VPN tunnel is active before sending sensitive data.',
-        'network','u2',3110,93,0)
-) v(Id,Title,Snippet,CatSlug,AuthorExt,Views,HelpfulPct,Pinned)
-LEFT JOIN kb.Category c ON c.Slug = v.CatSlug
-LEFT JOIN core.[User] u ON u.ExternalId = v.AuthorExt;
-GO
-
--- 14n. timeline for the showcased ticket (INC-104821)
+-- 13m. timeline for the showcased ticket (INC-104821)
 DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
 INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, OldValue, NewValue, OccurredAt)
 SELECT 'INC',104821, u.UserId, kind, oldv, newv, occ
@@ -1866,12 +1745,12 @@ FROM (VALUES
 LEFT JOIN core.[User] u ON u.ExternalId = v.ext;
 GO
 
--- 14o. watchers (just enough to hit the prototype's "watchers: N" counts roughly)
+-- 13n. watchers (just enough to hit the prototype's "watchers: N" counts roughly)
 INSERT INTO audit.Watcher (ParentType, ParentId, UserId)
 SELECT 'INC', 104821, UserId FROM core.[User] WHERE ExternalId IN ('u1','u2','u3','u5','u7','me');
 GO
 
--- 14p. Admin seed data
+-- 13o. Admin seed data
 -- SLA Tiers
 INSERT INTO admin.SlaTier (Name, Description, IsActive, Calculate247, AutoEscalate, SortOrder)
 VALUES
@@ -1970,11 +1849,360 @@ VALUES
      0, 0);
 GO
 
+/* ============================================================================
+   2026-05-31 batch — folded into the full build:
+     • Workspaces + per-workspace field config (AddWorkspaces)
+     • Workspace data-isolation columns/SPs (AddWorkspaceIsolation)
+     • Removal of the deprecated Priority Matrix and Category SortOrder
+   ============================================================================ */
+
+-- ── Workspaces ─────────────────────────────────────────────────────────────────
+-- Workspaces: per-workspace field visibility and mandatory configuration
+
+CREATE TABLE core.Workspace (
+    WorkspaceId   INT           IDENTITY(1,1) NOT NULL,
+    Name          NVARCHAR(100) NOT NULL,
+    Slug          NVARCHAR(60)  NOT NULL,
+    Description   NVARCHAR(500) NULL,
+    IsDefault     BIT           NOT NULL CONSTRAINT DF_Workspace_IsDefault DEFAULT 0,
+    IsActive      BIT           NOT NULL CONSTRAINT DF_Workspace_IsActive  DEFAULT 1,
+    CreatedAt     DATETIME2(3)  NOT NULL CONSTRAINT DF_Workspace_CreatedAt DEFAULT SYSUTCDATETIME(),
+    UpdatedAt     DATETIME2(3)  NOT NULL CONSTRAINT DF_Workspace_UpdatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT PK_Workspace     PRIMARY KEY (WorkspaceId),
+    CONSTRAINT UQ_Workspace_Slug UNIQUE (Slug)
+);
+
+CREATE TABLE core.WorkspaceField (
+    WorkspaceFieldId INT          IDENTITY(1,1) NOT NULL,
+    WorkspaceId      INT          NOT NULL,
+    EntityType       NVARCHAR(20) NOT NULL,   -- 'incident' | 'change' | 'problem'
+    FieldKey         NVARCHAR(50) NOT NULL,
+    IsVisible        BIT          NOT NULL CONSTRAINT DF_WorkspaceField_IsVisible    DEFAULT 1,
+    IsMandatory      BIT          NOT NULL CONSTRAINT DF_WorkspaceField_IsMandatory  DEFAULT 0,
+    CONSTRAINT PK_WorkspaceField    PRIMARY KEY (WorkspaceFieldId),
+    CONSTRAINT UQ_WorkspaceField    UNIQUE (WorkspaceId, EntityType, FieldKey),
+    CONSTRAINT FK_WorkspaceField_Ws FOREIGN KEY (WorkspaceId)
+        REFERENCES core.Workspace(WorkspaceId) ON DELETE CASCADE
+);
+
+CREATE TABLE core.WorkspaceUser (
+    WorkspaceId INT NOT NULL,
+    UserId      INT NOT NULL,
+    CONSTRAINT PK_WorkspaceUser    PRIMARY KEY (WorkspaceId, UserId),
+    CONSTRAINT FK_WorkspaceUser_Ws FOREIGN KEY (WorkspaceId)
+        REFERENCES core.Workspace(WorkspaceId) ON DELETE CASCADE,
+    CONSTRAINT FK_WorkspaceUser_U  FOREIGN KEY (UserId)
+        REFERENCES core.[User](UserId)
+);
+
+-- ── Default workspace ──────────────────────────────────────────────────────────
+INSERT INTO core.Workspace (Name, Slug, Description, IsDefault, IsActive)
+VALUES (N'Default Workspace', N'default',
+        N'Default workspace with all fields enabled', 1, 1);
+
+DECLARE @DefId INT = SCOPE_IDENTITY();
+
+-- Incident fields
+INSERT INTO core.WorkspaceField (WorkspaceId, EntityType, FieldKey, IsVisible, IsMandatory) VALUES
+(@DefId, 'incident', 'caller',          1, 1),
+(@DefId, 'incident', 'contactMethod',   1, 0),
+(@DefId, 'incident', 'location',        1, 0),
+(@DefId, 'incident', 'service',         1, 1),
+(@DefId, 'incident', 'category',        1, 1),
+(@DefId, 'incident', 'subCategory',     1, 0),
+(@DefId, 'incident', 'ciAssetTag',      1, 0),
+(@DefId, 'incident', 'description',     1, 0),
+(@DefId, 'incident', 'priority',        1, 0),
+(@DefId, 'incident', 'severity',        1, 0),
+(@DefId, 'incident', 'isMajorIncident', 1, 0),
+(@DefId, 'incident', 'group',           1, 1),
+(@DefId, 'incident', 'assignee',        1, 0),
+(@DefId, 'incident', 'resolutionCode',  1, 0),
+(@DefId, 'incident', 'resolutionNotes', 1, 0);
+
+-- Change fields
+INSERT INTO core.WorkspaceField (WorkspaceId, EntityType, FieldKey, IsVisible, IsMandatory) VALUES
+(@DefId, 'change', 'description',      1, 0),
+(@DefId, 'change', 'rolloutPlan',      1, 0),
+(@DefId, 'change', 'rollbackPlan',     1, 0),
+(@DefId, 'change', 'impactNotes',      1, 0),
+(@DefId, 'change', 'changeType',       1, 0),
+(@DefId, 'change', 'risk',             1, 0),
+(@DefId, 'change', 'owner',            1, 0),
+(@DefId, 'change', 'approver',         1, 0),
+(@DefId, 'change', 'group',            1, 0),
+(@DefId, 'change', 'cabName',          1, 0),
+(@DefId, 'change', 'scheduledStart',   1, 0),
+(@DefId, 'change', 'scheduledEnd',     1, 0),
+(@DefId, 'change', 'downtimeEstimate', 1, 0);
+
+-- Problem fields
+INSERT INTO core.WorkspaceField (WorkspaceId, EntityType, FieldKey, IsVisible, IsMandatory) VALUES
+(@DefId, 'problem', 'description', 1, 0),
+(@DefId, 'problem', 'rootCause',   1, 0),
+(@DefId, 'problem', 'workaround',  1, 0),
+(@DefId, 'problem', 'priority',    1, 0),
+(@DefId, 'problem', 'group',       1, 0),
+(@DefId, 'problem', 'assignee',    1, 0);
+GO
+
+-- Map every existing user to the default workspace (so logins resolve a workspace)
+INSERT INTO core.WorkspaceUser (WorkspaceId, UserId)
+SELECT w.WorkspaceId, u.UserId
+FROM core.Workspace w
+CROSS JOIN core.[User] u
+WHERE w.IsDefault = 1
+  AND NOT EXISTS (SELECT 1 FROM core.WorkspaceUser wu
+                  WHERE wu.WorkspaceId = w.WorkspaceId AND wu.UserId = u.UserId);
+GO
+
+-- ── Workspace isolation (WorkspaceId on ITIL tables + workspace-aware SPs) ─────
+-- Workspace isolation: add WorkspaceId to all ITIL entity tables.
+-- Existing records are assigned to workspace 1 (Default Workspace).
+
+ALTER TABLE itil.Incident  ADD WorkspaceId INT NOT NULL CONSTRAINT DF_Incident_WS  DEFAULT 1;
+ALTER TABLE itil.Problem   ADD WorkspaceId INT NOT NULL CONSTRAINT DF_Problem_WS   DEFAULT 1;
+ALTER TABLE itil.[Change]  ADD WorkspaceId INT NOT NULL CONSTRAINT DF_Change_WS    DEFAULT 1;
+
+ALTER TABLE itil.Incident  ADD CONSTRAINT FK_Incident_Workspace FOREIGN KEY (WorkspaceId) REFERENCES core.Workspace(WorkspaceId);
+ALTER TABLE itil.Problem   ADD CONSTRAINT FK_Problem_Workspace  FOREIGN KEY (WorkspaceId) REFERENCES core.Workspace(WorkspaceId);
+ALTER TABLE itil.[Change]  ADD CONSTRAINT FK_Change_Workspace   FOREIGN KEY (WorkspaceId) REFERENCES core.Workspace(WorkspaceId);
+
+-- Performance indexes
+CREATE INDEX IX_Incident_Workspace ON itil.Incident(WorkspaceId) WHERE DeletedAt IS NULL;
+CREATE INDEX IX_Problem_Workspace  ON itil.Problem(WorkspaceId)  WHERE DeletedAt IS NULL;
+CREATE INDEX IX_Change_Workspace   ON itil.[Change](WorkspaceId) WHERE DeletedAt IS NULL;
+GO
+
+-- ── Alter usp_CreateIncident to stamp WorkspaceId ────────────────────────────
+ALTER PROCEDURE itil.usp_CreateIncident
+    @Title                   NVARCHAR(256),
+    @Description             NVARCHAR(MAX)  = NULL,
+    @PriorityCode            VARCHAR(16),
+    @CategoryCode            VARCHAR(32)    = NULL,
+    @SubCategoryCode         VARCHAR(32)    = NULL,
+    @ServiceSlug             VARCHAR(64)    = NULL,
+    @CiAssetTag              VARCHAR(64)    = NULL,
+    @ReporterExtId           VARCHAR(64)    = NULL,
+    @ReporterDisplay         NVARCHAR(128)  = NULL,
+    @CallerExtId             VARCHAR(64)    = NULL,
+    @ContactMethodCode       VARCHAR(32)    = NULL,
+    @Location                NVARCHAR(128)  = NULL,
+    @AssigneeExtId           VARCHAR(64)    = NULL,
+    @GroupSlug               VARCHAR(64)    = NULL,
+    @ImpactCode              VARCHAR(16)    = NULL,
+    @UrgencyCode             VARCHAR(16)    = NULL,
+    @SeverityCode            VARCHAR(32)    = NULL,
+    @IsMajorIncident         BIT            = 0,
+    @ResolutionCodeCode      VARCHAR(32)    = NULL,
+    @ResolutionNotes         NVARCHAR(MAX)  = NULL,
+    @CreatedByExtId          VARCHAR(64)    = NULL,
+    @WorkspaceId             INT            = 1,
+    @NewIncidentId           BIGINT         OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @PriorityId        TINYINT = (SELECT PriorityId       FROM lookup.Priority         WHERE Code = @PriorityCode);
+    DECLARE @StatusId          TINYINT = (SELECT StatusId FROM lookup.IncidentStatus WHERE Code =
+        CASE WHEN @AssigneeExtId IS NOT NULL AND @AssigneeExtId <> '' THEN 'open' ELSE 'new' END);
+    DECLARE @CategoryId        INT     = (SELECT CategoryId       FROM lookup.Category         WHERE Code = @CategoryCode);
+    DECLARE @SubCategoryId     INT     = (SELECT SubCategoryId    FROM lookup.SubCategory      WHERE Code = @SubCategoryCode);
+    DECLARE @ServiceId         INT     = (SELECT ServiceId        FROM core.Service            WHERE Slug = @ServiceSlug);
+    DECLARE @CiId              INT     = (SELECT CiId             FROM core.ConfigurationItem  WHERE AssetTag = @CiAssetTag);
+    DECLARE @ImpactId          TINYINT = (SELECT ImpactId         FROM lookup.Impact           WHERE Code = @ImpactCode);
+    DECLARE @UrgencyId         TINYINT = (SELECT UrgencyId        FROM lookup.Urgency          WHERE Code = @UrgencyCode);
+    DECLARE @SeverityId        TINYINT = (SELECT SeverityId       FROM lookup.Severity         WHERE Code = @SeverityCode);
+    DECLARE @GroupId           INT     = (SELECT GroupId          FROM core.[Group]            WHERE Slug = @GroupSlug);
+    DECLARE @ContactMethodId   TINYINT = (SELECT ContactMethodId  FROM lookup.ContactMethod    WHERE Code = @ContactMethodCode);
+    DECLARE @ResolutionCodeId  TINYINT = (SELECT ResolutionCodeId FROM lookup.ResolutionCode   WHERE Code = @ResolutionCodeCode);
+
+    DECLARE @ReporterUserId INT = (SELECT UserId FROM core.[User] WHERE ExternalId = @ReporterExtId);
+    DECLARE @CallerUserId   INT = (SELECT UserId FROM core.[User] WHERE ExternalId = ISNULL(@CallerExtId, @ReporterExtId));
+    DECLARE @AssigneeUserId INT = (SELECT UserId FROM core.[User] WHERE ExternalId = @AssigneeExtId);
+    DECLARE @CreatedById    INT = (SELECT UserId FROM core.[User] WHERE ExternalId = @CreatedByExtId);
+
+    IF @PriorityId IS NULL
+        THROW 50001, 'Invalid priority code', 1;
+
+    DECLARE @SlaPolicyId INT, @SlaResolutionTarget INT, @SlaResponseTarget INT;
+    SELECT TOP (1)
+        @SlaPolicyId         = SlaPolicyId,
+        @SlaResolutionTarget = ResolutionMinutes,
+        @SlaResponseTarget   = ResponseMinutes
+    FROM core.SlaPolicy
+    WHERE IsActive = 1
+      AND PriorityId = @PriorityId
+      AND (CategoryId = @CategoryId OR CategoryId IS NULL)
+    ORDER BY CASE WHEN CategoryId = @CategoryId THEN 0 ELSE 1 END;
+
+    IF @SlaResolutionTarget IS NULL
+        SELECT @SlaResolutionTarget = DefaultResolutionMin, @SlaResponseTarget = DefaultResponseMin
+        FROM lookup.Priority WHERE PriorityId = @PriorityId;
+
+    DECLARE @Now DATETIME2(3) = SYSUTCDATETIME();
+    SET @NewIncidentId = NEXT VALUE FOR itil.IncidentSeq;
+
+    BEGIN TRAN;
+        INSERT INTO itil.Incident (
+            IncidentId, Title, Description,
+            PriorityId, StatusId, ImpactId, UrgencyId, SeverityId, CategoryId, SubCategoryId,
+            ServiceId, CiId,
+            ReporterUserId, ReporterDisplay, CallerUserId, AssigneeUserId, GroupId,
+            ContactMethodId, Location, IsMajorIncident,
+            ResolutionCodeId, ResolutionNotes,
+            SlaPolicyId, SlaTargetMinutes, SlaResponseTargetMinutes, SlaStartedAt,
+            WorkspaceId,
+            OpenedAt, CreatedBy, CreatedAt, UpdatedAt
+        ) VALUES (
+            @NewIncidentId, @Title, @Description,
+            @PriorityId, @StatusId, @ImpactId, @UrgencyId, @SeverityId, @CategoryId, @SubCategoryId,
+            @ServiceId, @CiId,
+            @ReporterUserId, @ReporterDisplay, @CallerUserId, @AssigneeUserId, @GroupId,
+            @ContactMethodId, @Location, @IsMajorIncident,
+            @ResolutionCodeId, @ResolutionNotes,
+            @SlaPolicyId, @SlaResolutionTarget, @SlaResponseTarget, @Now,
+            @WorkspaceId,
+            @Now, @CreatedById, @Now, @Now
+        );
+
+        INSERT INTO audit.ActivityEvent (ParentType, ParentId, ActorUserId, Kind, NewValue, OccurredAt)
+        VALUES ('INC', @NewIncidentId, @CreatedById, 'created', @Title, @Now);
+    COMMIT;
+END
+GO
+
+-- ── Alter usp_DashboardKpis to filter by workspace ───────────────────────────
+ALTER PROCEDURE reporting.usp_DashboardKpis
+    @WorkspaceId INT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        (SELECT COUNT(*) FROM itil.Incident i
+            JOIN lookup.IncidentStatus s ON s.StatusId = i.StatusId
+            WHERE s.IsTerminal = 0 AND i.DeletedAt IS NULL
+              AND i.WorkspaceId = @WorkspaceId)                                            AS OpenIncidents,
+        (SELECT COUNT(*) FROM reporting.vSlaBreaching v
+            JOIN itil.Incident i ON i.IncidentId = v.IncidentId
+            WHERE i.WorkspaceId = @WorkspaceId)                                            AS SlaAtRisk,
+        (SELECT COUNT(*) FROM itil.[Change] c
+            JOIN lookup.ChangeState cs ON cs.StateId = c.StateId
+            WHERE cs.Code IN ('scheduled','implementing')
+              AND c.ScheduledStart >= DATEADD(DAY, -7, SYSUTCDATETIME())
+              AND c.WorkspaceId = @WorkspaceId)                                            AS ChangesThisWeek,
+        (SELECT AVG(CAST(DATEDIFF(MINUTE, OpenedAt, ResolvedAt) AS BIGINT))
+         FROM itil.Incident
+         WHERE ResolvedAt IS NOT NULL
+           AND OpenedAt >= DATEADD(DAY, -7, SYSUTCDATETIME())
+           AND WorkspaceId = @WorkspaceId)                                                 AS AvgResolutionMinutes;
+END
+GO
+
+-- ── Remove deprecated features (Priority Matrix, Category/SubCategory SortOrder) ─
+DROP TABLE IF EXISTS lookup.PriorityMatrix;
+GO
+
+DECLARE @df NVARCHAR(256);
+
+SELECT @df = dc.name
+FROM sys.default_constraints dc
+JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+WHERE dc.parent_object_id = OBJECT_ID('lookup.Category') AND c.name = 'SortOrder';
+IF @df IS NOT NULL EXEC('ALTER TABLE lookup.Category DROP CONSTRAINT [' + @df + ']');
+IF COL_LENGTH('lookup.Category', 'SortOrder') IS NOT NULL
+    ALTER TABLE lookup.Category DROP COLUMN SortOrder;
+
+SET @df = NULL;
+SELECT @df = dc.name
+FROM sys.default_constraints dc
+JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
+WHERE dc.parent_object_id = OBJECT_ID('lookup.SubCategory') AND c.name = 'SortOrder';
+IF @df IS NOT NULL EXEC('ALTER TABLE lookup.SubCategory DROP CONSTRAINT [' + @df + ']');
+IF COL_LENGTH('lookup.SubCategory', 'SortOrder') IS NOT NULL
+    ALTER TABLE lookup.SubCategory DROP COLUMN SortOrder;
+GO
+
+/* ============================================================================
+   Tasks — per-type counter + task records (identifiers INCTASK-/PRBTASK-/
+   CHGTASK-/GENTASK- + 8-digit zero-padded, per-type, gap-free sequence).
+   ============================================================================ */
+IF OBJECT_ID('itil.TaskCounter', 'U') IS NULL
+BEGIN
+    CREATE TABLE itil.TaskCounter (
+        TaskType VARCHAR(16) NOT NULL CONSTRAINT PK_TaskCounter PRIMARY KEY,
+        LastSeq  INT          NOT NULL CONSTRAINT DF_TaskCounter_LastSeq DEFAULT 0
+    );
+    INSERT INTO itil.TaskCounter (TaskType, LastSeq)
+    VALUES ('incident', 0), ('problem', 0), ('change', 0), ('general', 0);
+END
+GO
+
+IF OBJECT_ID('itil.Task', 'U') IS NULL
+BEGIN
+    CREATE TABLE itil.Task (
+        TaskId          BIGINT        IDENTITY(1,1) NOT NULL CONSTRAINT PK_Task PRIMARY KEY,
+        TaskType        VARCHAR(16)   NOT NULL,
+        Seq             INT           NOT NULL,
+        Number          AS (CASE TaskType
+                              WHEN 'incident' THEN 'INCTASK-'
+                              WHEN 'problem'  THEN 'PRBTASK-'
+                              WHEN 'change'   THEN 'CHGTASK-'
+                              ELSE 'GENTASK-' END
+                            + RIGHT('00000000' + CAST(Seq AS VARCHAR(8)), 8)) PERSISTED,
+        Title           NVARCHAR(256) NOT NULL,
+        ReferenceNumber VARCHAR(32)   NULL,
+        PriorityId      TINYINT       NOT NULL,
+        StatusCode      VARCHAR(16)   NOT NULL CONSTRAINT DF_Task_Status DEFAULT 'open',
+        DueDate         DATE          NULL,
+        AssigneeUserId  INT           NULL,
+        GroupId         INT           NULL,
+        Description     NVARCHAR(MAX) NULL,
+        Subtype         VARCHAR(32)   NULL,          -- per-type category (activity/problem/change task type)
+        PlannedStart    DATE          NULL,          -- scheduled window (mainly change tasks)
+        PlannedEnd      DATE          NULL,
+        OnHoldReason    NVARCHAR(256) NULL,          -- set when StatusCode = 'onhold'
+        WorkspaceId     INT           NOT NULL CONSTRAINT DF_Task_WS DEFAULT 1,
+        CreatedAt       DATETIME2(3)  NOT NULL CONSTRAINT DF_Task_Created DEFAULT SYSUTCDATETIME(),
+        UpdatedAt       DATETIME2(3)  NOT NULL CONSTRAINT DF_Task_Updated DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT UQ_Task_TypeSeq   UNIQUE (TaskType, Seq),
+        CONSTRAINT CK_Task_Type      CHECK (TaskType IN ('incident', 'problem', 'change', 'general')),
+        CONSTRAINT CK_Task_Status    CHECK (StatusCode IN ('open', 'progress', 'onhold', 'done')),
+        CONSTRAINT FK_Task_Priority  FOREIGN KEY (PriorityId)     REFERENCES lookup.Priority(PriorityId),
+        CONSTRAINT FK_Task_Assignee  FOREIGN KEY (AssigneeUserId) REFERENCES core.[User](UserId),
+        CONSTRAINT FK_Task_Group     FOREIGN KEY (GroupId)        REFERENCES core.[Group](GroupId),
+        CONSTRAINT FK_Task_Workspace FOREIGN KEY (WorkspaceId)    REFERENCES core.Workspace(WorkspaceId)
+    );
+    CREATE INDEX IX_Task_Type_Workspace ON itil.Task (TaskType, WorkspaceId);
+    CREATE INDEX IX_Task_Assignee       ON itil.Task (AssigneeUserId);
+    CREATE INDEX IX_Task_Group          ON itil.Task (GroupId);
+END
+GO
+
+-- Demo tasks (mirrors the prototype's sample data)
+INSERT INTO itil.Task (TaskType, Seq, Title, ReferenceNumber, PriorityId, StatusCode, DueDate, AssigneeUserId, GroupId, Subtype, PlannedStart, PlannedEnd)
+SELECT v.TaskType, v.Seq, v.Title, v.Ref, v.PriorityId, v.Status, v.Due,
+       (SELECT UserId FROM core.[User] WHERE ExternalId = v.AssExt),
+       (SELECT GroupId FROM core.[Group] WHERE Slug = v.GrpSlug),
+       v.Subtype, v.PStart, v.PEnd
+FROM (VALUES
+    ('incident', 1, N'Collect diagnostic logs from affected hosts',  'INC-104815', CAST(2 AS TINYINT), 'open',     DATEADD(DAY,  2, CAST(SYSUTCDATETIME() AS DATE)), 'u2', 'network',  'investigation', CAST(NULL AS DATE), CAST(NULL AS DATE)),
+    ('incident', 2, N'Verify Wi-Fi controller firmware version',     'INC-104815', CAST(3 AS TINYINT), 'progress', DATEADD(DAY, -1, CAST(SYSUTCDATETIME() AS DATE)), 'me', 'network',  'remediation',   NULL, NULL),
+    ('problem',  1, N'Document root-cause hypothesis',               'PRB-0420',   CAST(2 AS TINYINT), 'open',     DATEADD(DAY,  3, CAST(SYSUTCDATETIME() AS DATE)), 'u5', 'identity', 'analysis',      NULL, NULL),
+    ('change',   1, N'Prepare and review rollback script',           'CHG-3215',   CAST(3 AS TINYINT), 'open',     DATEADD(DAY,  5, CAST(SYSUTCDATETIME() AS DATE)), 'u2', 'network',  'implementation', DATEADD(DAY, 4, CAST(SYSUTCDATETIME() AS DATE)), DATEADD(DAY, 6, CAST(SYSUTCDATETIME() AS DATE))),
+    ('general',  1, N'Quarterly access review for privileged users', NULL,         CAST(2 AS TINYINT), 'open',     DATEADD(DAY,  7, CAST(SYSUTCDATETIME() AS DATE)), 'me', 'identity', NULL,            NULL, NULL)
+) v(TaskType, Seq, Title, Ref, PriorityId, Status, Due, AssExt, GrpSlug, Subtype, PStart, PEnd);
+GO
+
+UPDATE itil.TaskCounter
+SET LastSeq = (SELECT ISNULL(MAX(t.Seq), 0) FROM itil.Task t WHERE t.TaskType = TaskCounter.TaskType);
+GO
+
 DECLARE @cUsers      INT = (SELECT COUNT(*) FROM core.[User]);
 DECLARE @cIncidents  INT = (SELECT COUNT(*) FROM itil.Incident);
 DECLARE @cProblems   INT = (SELECT COUNT(*) FROM itil.Problem);
 DECLARE @cChanges    INT = (SELECT COUNT(*) FROM itil.[Change]);
-DECLARE @cArticles   INT = (SELECT COUNT(*) FROM kb.Article);
 DECLARE @cIndexes    INT = (SELECT COUNT(*) FROM sys.indexes
                             WHERE object_id IN (SELECT object_id FROM sys.tables)
                               AND index_id > 0);
@@ -1988,7 +2216,6 @@ PRINT '   Users         : ' + CAST(@cUsers     AS VARCHAR);
 PRINT '   Incidents     : ' + CAST(@cIncidents AS VARCHAR);
 PRINT '   Problems      : ' + CAST(@cProblems  AS VARCHAR);
 PRINT '   Changes       : ' + CAST(@cChanges   AS VARCHAR);
-PRINT '   KB articles   : ' + CAST(@cArticles  AS VARCHAR);
 PRINT '   Indexes       : ' + CAST(@cIndexes   AS VARCHAR);
 PRINT '   Procedures    : ' + CAST(@cProcs     AS VARCHAR);
 PRINT '   Views         : ' + CAST(@cViews     AS VARCHAR);

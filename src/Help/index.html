@@ -41,7 +41,7 @@
 <p class="subtitle">
   A full-stack IT Service Management platform built on <strong>.NET 8 / ASP.NET Core</strong> (backend) and
   <strong>React 18 / TypeScript</strong> (frontend), following clean-architecture principles with ITIL-aligned
-  modules for Incidents, Problems, Changes, Knowledge Base, and SLA management.
+  modules for Incidents, Problems, Changes, and SLA management.
 </p>
 
 <h2>Layer Architecture</h2>
@@ -69,7 +69,6 @@
     <span class="arch-box">Features.Incidents</span>
     <span class="arch-box">Features.Problems</span>
     <span class="arch-box">Features.Changes</span>
-    <span class="arch-box">Features.KnowledgeBase</span>
     <span class="arch-box">Features.Notifications</span>
     <span class="arch-box">Features.Sla</span>
   </div>
@@ -79,7 +78,6 @@
     <span class="arch-box">IncidentRepository</span>
     <span class="arch-box">ProblemRepository</span>
     <span class="arch-box">ChangeRepository</span>
-    <span class="arch-box">KbRepository</span>
     <span class="arch-box">ActivityRepository</span>
     <span class="arch-box">UserRepository</span>
     <span class="arch-box">LookupRepository</span>
@@ -98,7 +96,6 @@
     <span class="arch-lbl">Database — SQL Server</span>
     <span class="arch-box">schema: core</span>
     <span class="arch-box">schema: itil</span>
-    <span class="arch-box">schema: kb</span>
     <span class="arch-box">schema: lookup</span>
     <span class="arch-box">schema: audit</span>
     <span class="arch-box">schema: reporting</span>
@@ -120,8 +117,6 @@
       <td>Problem management service (<code>IProblemService</code>).</td></tr>
   <tr><td><code>ApertureITSM.Features.Changes</code></td><td><span class="tag t-feat">Feature</span></td>
       <td>Change management service (<code>IChangeService</code>).</td></tr>
-  <tr><td><code>ApertureITSM.Features.KnowledgeBase</code></td><td><span class="tag t-feat">Feature</span></td>
-      <td>KB article search, view tracking, and helpfulness voting (<code>IKnowledgeService</code>).</td></tr>
   <tr><td><code>ApertureITSM.Features.Notifications</code></td><td><span class="tag t-feat">Feature</span></td>
       <td>Comments, activity timeline, watchers, in-app notifications (<code>INotificationService</code>).</td></tr>
   <tr><td><code>ApertureITSM.Features.Sla</code></td><td><span class="tag t-feat">Feature</span></td>
@@ -139,7 +134,6 @@
   "Incidents": true,
   "Problems":  true,
   "Changes":   true,
-  "KnowledgeBase": true,
   "Notifications": true,
   "Sla":       true
 }</code></pre>

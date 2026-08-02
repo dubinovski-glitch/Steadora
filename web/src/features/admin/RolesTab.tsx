@@ -14,12 +14,11 @@ const ROLE_ICON_COLOR: Record<string, string> = {
 }
 
 // Static permission matrix — reflects enforced application logic
-const AREAS = ['Incidents', 'Problems', 'Changes', 'Knowledge base', 'User management', 'SLA policies', 'System configuration']
+const AREAS = ['Incidents', 'Problems', 'Changes', 'User management', 'SLA policies', 'System configuration']
 const MATRIX: Record<string, string[]> = {
   'Incidents':            ['All',  'All',  'Group', 'Own'],
   'Problems':             ['All',  'All',  'Group', '—'],
   'Changes':              ['All',  'All',  'Read',  '—'],
-  'Knowledge base':       ['All',  'Edit', 'Read',  'Read'],
   'User management':      ['All',  'View', '—',     '—'],
   'SLA policies':         ['All',  'View', '—',     '—'],
   'System configuration': ['All',  '—',    '—',     '—'],
@@ -37,12 +36,15 @@ const VALUE_COLOR: Record<string, string> = {
   '—':     'text-text-muted',
 }
 
+// Roles & permissions admin tab: lists roles as cards (with user counts) and renders a
+// static capability matrix per area. Editing a role opens RoleModal.
 export function RolesTab({ addToast }: Props) {
   const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Role | null>(null)
 
+  // Fetch roles from the admin API, capturing any error for the retry UI.
   const load = () => {
     setLoading(true)
     setError(null)
@@ -52,6 +54,7 @@ export function RolesTab({ addToast }: Props) {
       .finally(() => setLoading(false))
   }
 
+  // Load roles once on mount.
   useEffect(() => { load() }, [])
 
   // Sorted for matrix columns: admin → manager → agent → requester
@@ -162,13 +165,16 @@ export function RolesTab({ addToast }: Props) {
   )
 }
 
+// Modal for editing a role's display name and description (the internal code is fixed/read-only).
 function RoleModal({ role, onClose, onSaved }: { role: Role; onClose: () => void; onSaved: (msg: string) => void }) {
   const [form, setForm] = useState({ displayName: role.displayName, description: role.description ?? '' })
   const [saving, setSaving] = useState(false)
 
+  // Curried change handler that updates the given form field.
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
 
+  // Validate, persist the role update, and notify the parent on success.
   const submit = async () => {
     if (!form.displayName.trim()) return
     setSaving(true)

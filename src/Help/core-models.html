@@ -172,45 +172,6 @@
 </table></div>
 </section>
 
-<!-- ═══════════════════════════════════════════════════════════════ Knowledge Base -->
-<h2 id="kb">Knowledge Base</h2>
-
-<section id="kb-article" class="section-anchor">
-<h3>KbArticle &amp; KbCategory <span class="since">· Models/KbArticle.cs</span></h3>
-<p>Knowledge Base articles with rich metadata.  Supports tagging, view tracking, and
-   helpfulness voting.  Stored in the <code>kb</code> schema.</p>
-<div class="tbl-wrap"><table>
-  <tr><th>Property</th><th>Type</th><th>Nullable</th><th>Description</th></tr>
-  <tr><td><code>ArticleId</code></td><td>int</td><td></td><td>Primary key</td></tr>
-  <tr><td><code>Number</code></td><td>string</td><td></td><td>e.g. <code>KB0001</code></td></tr>
-  <tr><td><code>Title</code></td><td>string</td><td></td><td>Article title</td></tr>
-  <tr><td><code>Snippet</code></td><td>string</td><td>✓</td><td>Short excerpt for search results</td></tr>
-  <tr><td><code>Body</code></td><td>string</td><td>✓</td><td>Full article body (markdown/HTML)</td></tr>
-  <tr><td><code>KbCategorySlug</code></td><td>string</td><td></td><td>Category slug (URL-safe)</td></tr>
-  <tr><td><code>KbCategoryName</code></td><td>string</td><td></td><td>Category display name</td></tr>
-  <tr><td><code>AuthorName</code></td><td>string</td><td>✓</td><td>Author full name</td></tr>
-  <tr><td><code>Status</code></td><td>string</td><td></td><td><code>draft|published|archived</code></td></tr>
-  <tr><td><code>Pinned</code></td><td>bool</td><td></td><td>Pinned articles appear first in category</td></tr>
-  <tr><td><code>Views</code></td><td>int</td><td></td><td>Total view count</td></tr>
-  <tr><td><code>HelpfulCount</code></td><td>int</td><td></td><td>"Yes this helped" votes</td></tr>
-  <tr><td><code>NotHelpfulCount</code></td><td>int</td><td></td><td>"No, didn't help" votes</td></tr>
-  <tr><td><code>HelpfulPercent</code></td><td>float</td><td></td><td>Calculated helpfulness %</td></tr>
-  <tr><td><code>Tags</code></td><td>string[]</td><td></td><td>Tag slugs enriched by repository</td></tr>
-  <tr><td><code>CreatedAt</code> / <code>UpdatedAt</code></td><td>string</td><td></td><td>ISO-8601 UTC timestamps</td></tr>
-</table></div>
-
-<h4>KbCategory</h4>
-<div class="tbl-wrap"><table>
-  <tr><th>Property</th><th>Type</th><th>Description</th></tr>
-  <tr><td><code>KbCategoryId</code></td><td>int</td><td>Primary key</td></tr>
-  <tr><td><code>Slug</code></td><td>string</td><td>URL-safe identifier</td></tr>
-  <tr><td><code>DisplayName</code></td><td>string</td><td>Category label</td></tr>
-  <tr><td><code>Icon</code></td><td>string?</td><td>Emoji or icon identifier</td></tr>
-  <tr><td><code>SortOrder</code></td><td>int</td><td>Display ordering</td></tr>
-  <tr><td><code>ArticleCount</code></td><td>int</td><td>Published articles in this category</td></tr>
-</table></div>
-</section>
-
 <!-- ═══════════════════════════════════════════════════════════════ People -->
 <h2 id="people">People &amp; Infrastructure</h2>
 

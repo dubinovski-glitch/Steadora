@@ -19,7 +19,6 @@
     <ProjectReference Include="..\ApertureITSM.Features.Incidents\ApertureITSM.Features.Incidents.csproj" />
     <ProjectReference Include="..\ApertureITSM.Features.Problems\ApertureITSM.Features.Problems.csproj" />
     <ProjectReference Include="..\ApertureITSM.Features.Changes\ApertureITSM.Features.Changes.csproj" />
-    <ProjectReference Include="..\ApertureITSM.Features.KnowledgeBase\ApertureITSM.Features.KnowledgeBase.csproj" />
     <ProjectReference Include="..\ApertureITSM.Features.Sla\ApertureITSM.Features.Sla.csproj" />
     <ProjectReference Include="..\ApertureITSM.Features.Notifications\ApertureITSM.Features.Notifications.csproj" />
   </ItemGroup>

@@ -1,3 +1,13 @@
+// Shared domain types mirroring the API's JSON shapes. Code/Id pairs are common: *Id is the DB
+// key, *Code is the stable string enum the UI switches on, *Name is the human label. Date/time
+// fields are ISO-8601 strings. Most optional fields are server-computed or workflow-dependent.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Core ITSM records: Incident, Problem, Change (+ reviewer)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// A support incident with its full detail: workflow (status/priority), SLA tracking, assignment,
+// resolution, and roll-up counts. The queue and detail views render subsets of this.
 export interface Incident {
   incidentId: number
   number: string
@@ -47,15 +57,15 @@ export interface Incident {
   parentProblemId?: number
   parentProblemNumber?: string
   relatedChangeId?: number
-  relatedKbArticleId?: number  // BIGINT — safe as JS number up to 2^53
   csatScore?: number
   isFirstCallResolution?: boolean
-  isKbArticleCreated: boolean
   commentCount: number
   linkedCount: number
   updatedAt: string
 }
 
+// A problem record (root-cause analysis behind one or more incidents). isKnownError marks it as
+// a documented known error with a workaround.
 export interface Problem {
   problemId: number
   number: string
@@ -77,6 +87,7 @@ export interface Problem {
   updatedAt: string
 }
 
+// A change request moving through the CAB workflow (rollout/rollback plans, scheduling, reviewers).
 export interface Change {
   changeId: number
   number: string
@@ -106,6 +117,7 @@ export interface Change {
   updatedAt: string
 }
 
+// One CAB member's vote on a change (voteCode = approve/reject/abstain etc.).
 export interface ChangeReviewer {
   userId: number
   userName: string
@@ -116,37 +128,11 @@ export interface ChangeReviewer {
   votedAt?: string
 }
 
-export interface KbArticle {
-  articleId: number
-  number: string
-  title: string
-  snippet?: string
-  body?: string
-  kbCategorySlug: string
-  kbCategoryName: string
-  authorName?: string
-  authorInitials?: string
-  authorColor?: string
-  status: string
-  pinned: boolean
-  views: number
-  helpfulCount: number
-  notHelpfulCount: number
-  helpfulPercent: number
-  tags: string[]
-  createdAt: string
-  updatedAt: string
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard / SLA reporting aggregates (read-only, returned by dashboardApi)
+// ─────────────────────────────────────────────────────────────────────────────
 
-export interface KbCategory {
-  kbCategoryId: number
-  slug: string
-  displayName: string
-  icon?: string
-  sortOrder: number
-  articleCount: number
-}
-
+// Headline KPI tiles for the dashboard.
 export interface SlaStats {
   openIncidents: number
   slaAtRisk: number
@@ -180,6 +166,11 @@ export interface DailyVolume {
   sameDayResolved: number
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin configuration entities (managed under the Admin view via adminApi)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Full user record as seen in admin (vs. the slimmer CurrentUser for the signed-in session).
 export interface User {
   userId: number
   externalId: string
@@ -250,6 +241,7 @@ export interface AdminService {
   isActive: boolean
 }
 
+// Per-priority response/resolution targets (minutes) within an SLA tier.
 export interface SlaTierTarget {
   targetId: number
   slaTierId: number
@@ -260,6 +252,7 @@ export interface SlaTierTarget {
   resolutionMinutes: number
 }
 
+// An SLA policy tier; calculate247 = clock runs 24/7 vs. business hours, autoEscalate = on breach.
 export interface SlaTier {
   slaTierId: number
   name: string
@@ -271,6 +264,7 @@ export interface SlaTier {
   targets: SlaTierTarget[]
 }
 
+// Working hours for one weekday in a calendar (dayOfWeek 0=Sun..6=Sat; times null = closed).
 export interface BusinessDay {
   dayId: number
   calendarId: number
@@ -295,6 +289,7 @@ export interface BusinessCalendar {
   holidays: BusinessHoliday[]
 }
 
+// A when/then automation rule; runCount30d is a rolling 30-day execution counter.
 export interface Automation {
   automationId: number
   name: string
@@ -304,6 +299,11 @@ export interface Automation {
   runCount30d: number
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared sub-records: comments and activity/audit events on records
+// ─────────────────────────────────────────────────────────────────────────────
+
+// A comment on a record; internal=true means staff-only (not shown to the requester).
 export interface Comment {
   commentId: number
   authorName?: string
@@ -316,6 +316,8 @@ export interface Comment {
   editedAt?: string
 }
 
+// A single timeline/audit entry; for field-change events kind names the change and old/newValue
+// capture the transition.
 export interface ActivityEvent {
   activityId: number
   actorName?: string
@@ -328,6 +330,11 @@ export interface ActivityEvent {
   occurredAt: string
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-tenancy: workspaces and their per-field visibility/requirement config
+// ─────────────────────────────────────────────────────────────────────────────
+
+// A tenant. fields drive form field visibility/requirement; userIds is its membership.
 export interface Workspace {
   workspaceId: number
   name: string
@@ -341,6 +348,7 @@ export interface Workspace {
   userIds: number[]
 }
 
+// One field override for a workspace: (entityType, fieldKey) -> visible/mandatory. Read by useWorkspaceFields.
 export interface WorkspaceField {
   workspaceFieldId: number
   workspaceId: number
@@ -350,9 +358,53 @@ export interface WorkspaceField {
   isMandatory: boolean
 }
 
-export type View = 'dashboard' | 'incidents' | 'problems' | 'changes' | 'knowledge' | 'sla' | 'admin'
+// ─────────────────────────────────────────────────────────────────────────────
+// UI navigation enums and the Task model
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Top-level screens, used as appStore.view (App's pseudo-router key).
+export type View = 'dashboard' | 'incidents' | 'problems' | 'changes' | 'sla' | 'admin' | 'tasks'
+
+export type TaskType = 'incident' | 'problem' | 'change' | 'general'
+export type TaskScope = 'mine' | 'mygroup'
+// Tasks view sub-mode: list mine, list my group's, or show the new-task form.
+export type TaskMode = 'mine' | 'mygroup' | 'new'
+
+// A unit of work, optionally linked to a parent record via referenceNumber. Comment fields note
+// the encoded number format, status codes, and that subtype is a per-type sub-category.
+export interface Task {
+  taskId: number
+  number: string            // e.g. INCTASK-00000013
+  taskType: TaskType
+  title: string
+  referenceNumber: string | null
+  priorityId: number
+  priorityCode: string
+  statusCode: string        // open | progress | onhold | done
+  onHoldReason?: string | null
+  dueDate: string | null
+  subtype?: string | null   // per-type category
+  plannedStart?: string | null
+  plannedEnd?: string | null
+  assigneeUserId?: number
+  assigneeName?: string
+  assigneeInitials?: string
+  assigneeColor?: string
+  groupId?: number
+  groupName?: string
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+// Sections within the Admin view (appStore.adminSection).
 export type AdminSection = 'users' | 'teams' | 'categories' | 'roles' | 'services' | 'sla-policies' | 'business-hours' | 'workflow' | 'automations' | 'workspaces'
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Lookup / reference types (loaded via lookupsApi to populate form dropdowns).
+// All follow the same id/code/displayName/sortOrder shape.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// isTerminal = a closed/done status; pausesSla = SLA clock stops while in this status.
 export interface IncidentStatus {
   statusId: number
   code: string
@@ -422,6 +474,7 @@ export interface CategoryLookup {
   sortOrder: number
 }
 
+// The signed-in user's session profile (stored in authStore). serviceIds scope their visible data.
 export interface CurrentUser {
   userId: number
   externalId: string
@@ -457,5 +510,6 @@ export interface ChangeState {
   sortOrder: number
 }
 
+// Stable string enums for incident priority and status (the *Code values switched on in the UI).
 export type PriorityCode = 'critical' | 'high' | 'medium' | 'low'
 export type StatusCode = 'new' | 'progress' | 'pending' | 'resolved' | 'closed'

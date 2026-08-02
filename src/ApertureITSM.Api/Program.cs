@@ -4,7 +4,6 @@ using ApertureITSM.Api.Services;
 using ApertureITSM.Core.Interfaces;
 using ApertureITSM.Features.Changes;
 using ApertureITSM.Features.Incidents;
-using ApertureITSM.Features.KnowledgeBase;
 using ApertureITSM.Features.Notifications;
 using ApertureITSM.Features.Sla;
 using ApertureITSM.Features.Problems;
@@ -19,6 +18,9 @@ using Microsoft.IdentityModel.Tokens;
 using System.Reflection;
 using System.Text;
 
+// Application entry point: configures logging, JWT auth, dependency injection (feature-gated
+// services + repositories), CORS, SignalR and the HTTP pipeline, then runs the Aperture ITSM API.
+
 // Bootstrap log4net
 var logRepo = LogManager.GetRepository(Assembly.GetEntryAssembly()!);
 XmlConfigurator.Configure(logRepo, new FileInfo("log4net.config"));
@@ -32,10 +34,11 @@ var features = config.GetSection("Features");
 
 startupLog.Info("ApertureITSM API starting up");
 
+// Fail fast at startup if the database connection string is missing
 var connStr = config.GetConnectionString("ApertureITSM")
     ?? throw new InvalidOperationException("Connection string 'ApertureITSM' is not configured.");
 
-// JWT authentication
+// JWT authentication: validate issuer/audience/lifetime/signature using the configured secret
 var jwtSection = config.GetSection("Jwt");
 var jwtSecret = jwtSection["Secret"]
     ?? throw new InvalidOperationException("Jwt:Secret is not configured.");
@@ -67,7 +70,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Infrastructure
+// Infrastructure: shared connection factory plus scoped repositories and per-request context services
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IDbConnectionFactory>(_ => new SqlConnectionFactory(connStr));
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
@@ -75,15 +78,18 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IIncidentRepository, IncidentRepository>();
 builder.Services.AddScoped<IProblemRepository, ProblemRepository>();
 builder.Services.AddScoped<IChangeRepository, ChangeRepository>();
-builder.Services.AddScoped<IKbRepository, KbRepository>();
 builder.Services.AddScoped<IActivityRepository, ActivityRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ILookupRepository, LookupRepository>();
 builder.Services.AddScoped<ISlaRepository, SlaRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
+builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
 builder.Services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
 builder.Services.AddScoped<IWorkspaceContext, WorkspaceContext>();
+
+// Feature toggles: each domain service is only registered when its "Features" flag is enabled,
+// which is why controllers receive these services as nullable and return 503 when absent.
 
 // Feature: Incidents
 if (features.GetValue<bool>("Incidents"))
@@ -97,10 +103,6 @@ if (features.GetValue<bool>("Problems"))
 if (features.GetValue<bool>("Changes"))
     builder.Services.AddScoped<IChangeService, ChangeService>();
 
-// Feature: KnowledgeBase
-if (features.GetValue<bool>("KnowledgeBase"))
-    builder.Services.AddScoped<IKnowledgeService, KnowledgeService>();
-
 // Feature: Notifications
 if (features.GetValue<bool>("Notifications"))
     builder.Services.AddScoped<INotificationService, NotificationService>();
@@ -112,6 +114,7 @@ if (features.GetValue<bool>("Sla"))
     builder.Services.AddHostedService<SlaBackgroundService>();
 }
 
+// In development, run the Vite dev server for the SPA frontend alongside the API
 if (builder.Environment.IsDevelopment())
     builder.Services.AddHostedService<ViteDevServerService>();
 
@@ -124,6 +127,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "Aperture ITSM API", Version = "v1" }));
 
+// CORS: restrict to configured origins but allow credentials (cookies/Authorization) for the SPA
 var allowedOrigins = config.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .WithOrigins(allowedOrigins)
@@ -133,16 +137,19 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
 
 var app = builder.Build();
 
+// Expose Swagger UI only in development
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+// Middleware order matters: CORS, then authentication, then authorization, before endpoints
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+// Real-time notifications hub (JWT supplied via access_token query string for WebSockets)
 app.MapHub<NotificationHub>("/hubs/notifications");
 
 startupLog.Info("ApertureITSM API ready");

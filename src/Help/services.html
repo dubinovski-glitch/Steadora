@@ -76,12 +76,6 @@
     <td><code>Features:Changes</code></td>
   </tr>
   <tr>
-    <td><code>Features.KnowledgeBase</code></td>
-    <td><a href="core-interfaces.html#i-kb-svc">IKnowledgeService</a></td>
-    <td><code>KnowledgeService</code></td>
-    <td><code>Features:KnowledgeBase</code></td>
-  </tr>
-  <tr>
     <td><code>Features.Notifications</code></td>
     <td><a href="core-interfaces.html#i-notification-svc">INotificationService</a></td>
     <td><code>NotificationService</code></td>
@@ -135,16 +129,6 @@
    The <strong>VoteAsync</strong> method logs <code>"User {extId} voted {voteCode} on change #{id}"</code>
    at INFO — useful for change approval auditing in log files.
    Logs to <code>logs/Changes.log</code>.</p>
-</section>
-
-<!-- KnowledgeService -->
-<section id="kb-svc" class="section-anchor">
-<h2>KnowledgeService <span class="since">· Features.KnowledgeBase/KnowledgeService.cs</span></h2>
-<p>Wraps <a href="repositories.html#kb-repo">KbRepository</a> with one notable behaviour:
-   <strong>GetArticleAsync</strong> fetches the article and then calls
-   <code>TrackViewAsync</code> in the same request.  This is fire-and-continue
-   (the view increment does not affect the returned article data).
-   Logs to <code>logs/KnowledgeBase.log</code>.</p>
 </section>
 
 <!-- NotificationService -->

@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, AlertCircle, AlertTriangle, BookOpen } from 'lucide-react'
+import { Search, AlertCircle, AlertTriangle } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { searchApi, type SearchResult } from '../api/search'
 import { Badge, priorityVariant, statusVariant } from './primitives/Badge'
 
+// Global search overlay (Cmd/Ctrl-K style). Debounce-searches incidents and problems,
+// lets the user navigate results with the keyboard, and opens the picked record.
 export function CommandPalette() {
-  const { showCommandPalette, setShowCommandPalette, openIncident, openProblem, setView } = useAppStore()
+  const { showCommandPalette, setShowCommandPalette, openIncident, openProblem } = useAppStore()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -13,6 +15,7 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // When the palette opens, reset query/results/selection and focus the input.
   useEffect(() => {
     if (showCommandPalette) {
       setQuery('')
@@ -22,6 +25,7 @@ export function CommandPalette() {
     }
   }, [showCommandPalette])
 
+  // Run the actual API search (skipping queries under 2 chars), updating results/loading.
   const doSearch = useCallback((q: string) => {
     if (q.trim().length < 2) { setResults([]); setLoading(false); return }
     setLoading(true)
@@ -30,6 +34,7 @@ export function CommandPalette() {
       .catch(() => { setResults([]); setLoading(false) })
   }, [])
 
+  // Input change handler: updates query, resets selection, and debounces the search 250ms.
   const handleChange = (q: string) => {
     setQuery(q)
     setSelected(0)
@@ -37,13 +42,14 @@ export function CommandPalette() {
     debounceRef.current = setTimeout(() => doSearch(q), 250)
   }
 
+  // Navigate to the chosen result: close the palette and open the matching detail/view.
   const open = (r: SearchResult) => {
     setShowCommandPalette(false)
     if (r.type === 'incident') { openIncident(r.id) }
-    else if (r.type === 'problem') { openProblem(r.id) }
-    else { setView('knowledge') }
+    else { openProblem(r.id) }
   }
 
+  // While open, bind global keyboard nav: Esc closes, arrows move selection, Enter opens.
   useEffect(() => {
     if (!showCommandPalette) return
     const handle = (e: KeyboardEvent) => {
@@ -58,10 +64,10 @@ export function CommandPalette() {
 
   if (!showCommandPalette) return null
 
+  // Picks the lucide icon for a result row based on its type (incident/problem).
   const typeIcon = (type: string) => {
     if (type === 'incident') return <AlertCircle size={14} className="text-text-muted shrink-0" />
-    if (type === 'problem') return <AlertTriangle size={14} className="text-text-muted shrink-0" />
-    return <BookOpen size={14} className="text-text-muted shrink-0" />
+    return <AlertTriangle size={14} className="text-text-muted shrink-0" />
   }
 
   return (
@@ -78,7 +84,7 @@ export function CommandPalette() {
             ref={inputRef}
             value={query}
             onChange={e => handleChange(e.target.value)}
-            placeholder="Search incidents, problems, knowledge base…"
+            placeholder="Search incidents, problems…"
             className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
           />
           {loading && <span className="text-xs text-text-muted animate-pulse">Searching…</span>}

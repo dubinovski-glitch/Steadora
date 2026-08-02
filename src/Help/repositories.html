@@ -150,25 +150,6 @@
 </ul>
 </section>
 
-<!-- KbRepository -->
-<section id="kb-repo" class="section-anchor">
-<h2>KbRepository</h2>
-<p>Implements <a href="core-interfaces.html#i-kb">IKbRepository</a>.</p>
-
-<h4>Tables touched</h4>
-<p><code>kb.Article</code>, <code>kb.Category</code>, <code>core.User</code> (author),
-   <code>kb.ArticleTag</code>, <code>kb.Tag</code>.</p>
-
-<h4>Key notes</h4>
-<ul>
-  <li><strong>SearchAsync</strong> uses <code>LIKE '%@q%'</code> on Title and Snippet.  For production
-    consider upgrading to SQL Server Full-Text Search (<code>CONTAINS</code>).</li>
-  <li><strong>GetByIdAsync</strong> loads the full body then calls <code>EnrichTagsAsync</code> which
-    queries <code>kb.ArticleTag JOIN kb.Tag</code> and populates <code>article.Tags</code>.</li>
-  <li><strong>IncrementViewsAsync</strong> runs a single <code>UPDATE kb.Article SET Views = Views + 1</code> — atomic at row level.</li>
-</ul>
-</section>
-
 <!-- ActivityRepository -->
 <section id="activity-repo" class="section-anchor">
 <h2>ActivityRepository</h2>

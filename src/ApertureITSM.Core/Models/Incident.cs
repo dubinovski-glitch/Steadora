@@ -1,5 +1,11 @@
 namespace ApertureITSM.Core.Models;
 
+/// <summary>
+/// An ITIL incident: a reported disruption or degradation of a service. Aggregates its
+/// classification (priority/impact/urgency/severity/category), the people and group involved
+/// (reporter, caller, assignee), SLA tracking, resolution details, and related records
+/// (parent problem, change).
+/// </summary>
 public class Incident
 {
     public long IncidentId { get; init; }
@@ -52,6 +58,8 @@ public class Incident
     public string? ResolutionCodeName { get; init; }
     public string? ResolutionNotes { get; init; }
 
+    // SLA tracking: target/response budgets, when the clock started, accumulated paused time,
+    // and breach/warning timestamps used to compute remaining time and breach status.
     public int? SlaPolicyId { get; init; }
     public int? SlaTargetMinutes { get; init; }
     public int? SlaResponseTargetMinutes { get; init; }
@@ -70,11 +78,9 @@ public class Incident
     public long? ParentProblemId { get; init; }
     public string? ParentProblemNumber { get; init; }
     public long? RelatedChangeId { get; init; }
-    public long? RelatedKbArticleId { get; init; }
 
-    public byte? CsatScore { get; init; }
-    public bool? IsFirstCallResolution { get; init; }
-    public bool IsKbArticleCreated { get; init; }
+    public byte? CsatScore { get; init; } // customer satisfaction rating after resolution
+    public bool? IsFirstCallResolution { get; init; } // resolved on first contact, no reassignment
 
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
@@ -82,6 +88,8 @@ public class Incident
     public int CommentCount { get; init; }
     public int LinkedCount { get; init; }
 
+    // Derived: percentage of the SLA resolution budget elapsed so far (paused time excluded);
+    // null when there is no target or the SLA clock has not started.
     public decimal? SlaPercent =>
         SlaTargetMinutes is null or 0 || SlaStartedAt is null
             ? null

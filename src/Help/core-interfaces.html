@@ -135,19 +135,6 @@
 </ul>
 </section>
 
-<!-- IKbRepository -->
-<section id="i-kb" class="section-anchor">
-<h3>IKbRepository <span class="since">· Interfaces/IKbRepository.cs</span></h3>
-<p>Implemented by <a href="repositories.html#kb-repo">KbRepository</a>.</p>
-<ul class="mlist">
-  <li><span class="m-sig">SearchAsync(query, categoryId)</span><span class="m-arrow">→</span><span class="m-desc">Full-text search over article titles and snippets.  Filters by category if provided.</span></li>
-  <li><span class="m-sig">GetByIdAsync(articleId)</span><span class="m-arrow">→</span><span class="m-desc">Returns a single article with full body and enriched tags.</span></li>
-  <li><span class="m-sig">GetCategoriesAsync()</span><span class="m-arrow">→</span><span class="m-desc">Returns all KB categories with article counts.</span></li>
-  <li><span class="m-sig">IncrementViewsAsync(articleId)</span><span class="m-arrow">→ void</span><span class="m-desc">Atomically increments the view counter.</span></li>
-  <li><span class="m-sig">VoteHelpfulAsync(articleId, helpful)</span><span class="m-arrow">→ void</span><span class="m-desc">Increments HelpfulCount or NotHelpfulCount depending on the <code>helpful</code> boolean.</span></li>
-</ul>
-</section>
-
 <!-- IActivityRepository -->
 <section id="i-activity" class="section-anchor">
 <h3>IActivityRepository <span class="since">· Interfaces/IActivityRepository.cs</span></h3>
@@ -303,17 +290,6 @@
   <li><span class="m-sig">CreateAsync(request)</span><span class="m-arrow">→ int</span><span class="m-desc"></span></li>
   <li><span class="m-sig">SetStateAsync(id, stateCode, actorUserId)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
   <li><span class="m-sig">VoteAsync(id, userExtId, voteCode, comment)</span><span class="m-arrow">→ void</span><span class="m-desc">Logs vote at INFO level.</span></li>
-</ul>
-</section>
-
-<section id="i-kb-svc" class="section-anchor">
-<h3>IKnowledgeService <span class="since">· Features.KnowledgeBase/KnowledgeService.cs</span></h3>
-<ul class="mlist">
-  <li><span class="m-sig">SearchAsync(query, categoryId)</span><span class="m-arrow">→</span><span class="m-desc"></span></li>
-  <li><span class="m-sig">GetArticleAsync(id)</span><span class="m-arrow">→ KbArticle?</span><span class="m-desc">Auto-increments view count via <code>TrackViewAsync</code>.</span></li>
-  <li><span class="m-sig">GetCategoriesAsync()</span><span class="m-arrow">→</span><span class="m-desc"></span></li>
-  <li><span class="m-sig">TrackViewAsync(id)</span><span class="m-arrow">→ void</span><span class="m-desc">Fires atomically after returning article data.</span></li>
-  <li><span class="m-sig">VoteAsync(id, helpful)</span><span class="m-arrow">→ void</span><span class="m-desc"></span></li>
 </ul>
 </section>
 

@@ -60,7 +60,6 @@
   <tr><th>Schema</th><th>Purpose</th><th>Key tables</th></tr>
   <tr><td><span class="tag t-db">core</span></td><td>People and infrastructure</td><td>User, Group, Service, ConfigurationItem</td></tr>
   <tr><td><span class="tag t-db">itil</span></td><td>ITIL ticket types</td><td>Incident, Problem, Change, ChangeReviewer</td></tr>
-  <tr><td><span class="tag t-db">kb</span></td><td>Knowledge Base</td><td>Article, Category, Tag, ArticleTag</td></tr>
   <tr><td><span class="tag t-db">lookup</span></td><td>Reference / lookup data</td><td>Priority, IncidentStatus, Role, Category, PriorityMatrix, …</td></tr>
   <tr><td><span class="tag t-db">audit</span></td><td>Audit trail &amp; notifications</td><td>ActivityEvent, Comment, Watcher, Notification</td></tr>
   <tr><td><span class="tag t-db">reporting</span></td><td>Stored procedures only</td><td>usp_DashboardKpis, usp_EvaluateSlaBreaches</td></tr>
@@ -204,18 +203,6 @@
   <li><code>itil.usp_AddComment</code> — inserts a <code>audit.Comment</code> row, writes an ActivityEvent,
       and creates Notification rows for all watchers of the parent ticket in a single transaction.</li>
 </ul>
-</section>
-
-<!-- ─────────────────── kb schema ─────────────────── -->
-<section id="schema-kb" class="section-anchor">
-<h2>kb schema</h2>
-<div class="tbl-wrap"><table>
-  <tr><th>Table</th><th>Key Columns</th></tr>
-  <tr><td><code>kb.Category</code></td><td><code>KbCategoryId</code>, <code>Slug</code>, <code>DisplayName</code>, <code>Icon</code>, <code>SortOrder</code></td></tr>
-  <tr><td><code>kb.Article</code></td><td><code>ArticleId</code>, <code>Number</code>, <code>Title</code>, <code>Snippet</code>, <code>Body</code>, <code>KbCategoryId</code> (FK), <code>AuthorUserId</code> (FK), <code>Status</code>, <code>Pinned</code>, <code>Views</code>, <code>HelpfulCount</code>, <code>NotHelpfulCount</code>, <code>CreatedAt</code>, <code>UpdatedAt</code></td></tr>
-  <tr><td><code>kb.Tag</code></td><td><code>TagId</code>, <code>Slug</code>, <code>DisplayName</code></td></tr>
-  <tr><td><code>kb.ArticleTag</code></td><td><code>ArticleId</code> (FK), <code>TagId</code> (FK) — composite PK</td></tr>
-</table></div>
 </section>
 
 <!-- ─────────────────── lookup schema ─────────────────── -->

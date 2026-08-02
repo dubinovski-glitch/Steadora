@@ -1,10 +1,12 @@
 // Reusable skeleton components — use animate-pulse on muted bg blocks.
 
+// Single pulsing placeholder block; width/height passed as Tailwind classes.
 function Bar({ w, h = 'h-4' }: { w: string; h?: string }) {
   return <div className={`${w} ${h} bg-border-default rounded animate-pulse`} />
 }
 
 // ── Generic rows (div-based, for most list views and admin tabs) ──────────────
+// Loading placeholder for div-based list rows; one shimmer bar per column width.
 export function SkeletonRows({ rows = 5, cols }: {
   rows?: number
   cols?: string[]   // Tailwind width classes for each column
@@ -27,6 +29,7 @@ export function SkeletonRows({ rows = 5, cols }: {
 }
 
 // ── Table rows (tr-based, for views with <tbody>) ─────────────────────────────
+// Loading placeholder for real <table> bodies; emits <tr>/<td> shimmer cells.
 export function SkeletonTableRows({ rows = 5, cols = 5 }: { rows?: number; cols?: number }) {
   return (
     <>
@@ -45,7 +48,8 @@ export function SkeletonTableRows({ rows = 5, cols = 5 }: { rows?: number; cols?
   )
 }
 
-// ── Card list (for Changes, Knowledge, Problems cards) ────────────────────────
+// ── Card list (for Changes, Problems cards) ───────────────────────────────────
+// Loading placeholder for card lists (Changes/Problems): header strip + column body.
 export function SkeletonCards({ cards = 4, cols = 3 }: { cards?: number; cols?: number }) {
   return (
     <div className="flex flex-col gap-3">
@@ -74,26 +78,9 @@ export function SkeletonCards({ cards = 4, cols = 3 }: { cards?: number; cols?: 
   )
 }
 
-// ── Knowledge article grid ────────────────────────────────────────────────────
-export function SkeletonArticleGrid({ cards = 6 }: { cards?: number }) {
-  return (
-    <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-      {Array.from({ length: cards }).map((_, i) => (
-        <div key={i} className="bg-surface rounded-lg border border-border-default p-4 flex flex-col gap-3">
-          <Bar w="w-3/4" h="h-4" />
-          <Bar w="w-full" h="h-3" />
-          <Bar w="w-5/6" h="h-3" />
-          <div className="flex gap-2 mt-1">
-            <Bar w="w-12" h="h-3" />
-            <Bar w="w-16" h="h-3" />
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 // ── Full detail view (incident / change / problem detail) ─────────────────────
+// Full-page loading placeholder mirroring the incident/change/problem detail layout
+// (left content with header + body, right metadata sidebar).
 export function SkeletonDetail() {
   return (
     <div className="flex h-full -mx-6 -mt-4 overflow-hidden">
@@ -142,6 +129,7 @@ export function SkeletonDetail() {
 }
 
 // ── Simple centred spinner for small inline uses ──────────────────────────────
+// Small inline loading placeholder of alternating-width bars for compact areas.
 export function SkeletonInline({ rows = 3 }: { rows?: number }) {
   return (
     <div className="py-4 flex flex-col gap-3 px-4">
